@@ -98,12 +98,15 @@ DS2API 当前的核心思路，不是把客户端传来的 `messages`、`tools`�
 - `prompt` 才是对话上下文主载体。
 - `ref_file_ids` 只承载文件引用，不承载普通文本消息。
 - `tools` 不会作为“原生工具 schema”直接下发给下游，而是被改写进 `prompt`。
+- 对外返回给客户端的 `prompt_tokens` / `input_tokens` / `promptTokenCount` 不再按“最后一条消息”或字符粗估近似返回，而是基于**完整上下文 prompt**做 tokenizer 计数；为了避免上下文实际超限但客户端误以为还能塞下，请求侧上下文 token 会额外保守上浮一点，宁可略大也不低估。
 - 当前 `/v1/chat/completions` 业务路径仍是“每次请求新建一个远端 `chat_session_id`，并默认发送 `parent_message_id: null`”；因此 DS2API 对外默认表现为“新会话 + prompt 拼历史”，而不是复用 DeepSeek 原生会话树。
 - 但 DeepSeek 远端本身支持同一 `chat_session_id` 的跨轮次持续对话。2026-04-27 已用项目内现有 DeepSeek client 做过一次不改业务代码的双轮实测：同一 `chat_session_id` 下，第 1 轮返回 `request_message_id=1` / `response_message_id=2` / 文本 `SESSION_TEST_ONE`；第 2 轮重新获取一次 PoW，并发送 `parent_message_id=2` 后，成功返回 `request_message_id=3` / `response_message_id=4` / 文本 `SESSION_TEST_TWO`。这说明“同远端会话持续聊天”能力存在，且每轮需要携带正确的 parent/message 链接信息，同时重新获取对应轮次可用的 PoW。
 - OpenAI Chat / Responses 原生走统一 OpenAI 标准化与 DeepSeek payload 组装；Claude / Gemini 会尽量复用 OpenAI prompt/tool 语义，其中 Gemini 直接复用 `promptcompat.BuildOpenAIPromptForAdapter`，Claude 消息接口在可代理场景会转换为 OpenAI chat 形态再执行。
 - 客户端传入的 thinking / reasoning 开关会被归一到下游 `thinking_enabled`。Gemini `generationConfig.thinkingConfig.thinkingBudget` 会翻译成同一套 thinking 开关；关闭时即使上游返回 `response/thinking_content`，兼容层也不会把它当作可见正文输出。若最终解析出的模型名带 `-nothinking` 后缀，则会无条件强制关闭 thinking，优先级高于请求体中的 `thinking` / `reasoning` / `reasoning_effort`。Claude surface 在流式请求且未显式声明 `thinking` 时，仍按 Anthropic 语义默认关闭；但在非流式代理场景，兼容层会内部开启一次下游 thinking，用于捕获“正文为空、工具调用落在 thinking 里”的情况，随后在回包前剥离用户不可见的 thinking block。
-- 对 OpenAI Chat / Responses 的非流式收尾，如果最终可见正文为空，兼容层会优先尝试把思维链中的独立 DSML / XML 工具块当作真实工具调用解析出来。流式链路也会在收尾阶段做同样的 fallback 检测，但不会因为思维链内容去中途拦截或改写流式输出；thinking / reasoning 增量仍按原样先发，只有在结束收尾时才可能补发最终工具调用结果。补发结果会作为本轮 assistant 的结构化 `tool_calls` / `function_call` 输出返回，而不是塞进 `content` 文本；如果客户端没有开启 thinking / reasoning，思维链只用于检测，不会作为 `reasoning_content` 或可见正文暴露。只有正文为空且思维链里也没有可执行工具调用时，才继续按空回复错误处理。
+- 对 OpenAI Chat / Responses 的非流式收尾，如果最终可见正文为空，兼容层会优先尝试把思维链中的独立 DSML / XML 工具块当作真实工具调用解析出来。流式链路也会在收尾阶段做同样的 fallback 检测，但不会因为思维链内容去中途拦截或改写流式输出；真正的工具识别始终基于原始上游文本，而不是基于“已经做过可见输出清洗”的版本，因此即使最终可见层会剥离完整 leaked DSML / XML `tool_calls` wrapper、并抑制全空参数或无效 wrapper 块，也不会影响真实工具调用转成结构化 `tool_calls` / `function_call`。补发结果会作为本轮 assistant 的结构化 `tool_calls` / `function_call` 输出返回，而不是塞进 `content` 文本；如果客户端没有开启 thinking / reasoning，思维链只用于检测，不会作为 `reasoning_content` 或可见正文暴露。只有正文为空且思维链里也没有可执行工具调用时，才继续按空回复错误处理。
 - OpenAI Chat / Responses 的空回复错误处理之前会默认做一次内部补偿重试：第一次上游完整结束后，如果最终可见正文为空、没有解析到工具调用、也没有已经向客户端流式发出工具调用，并且终止原因不是 `content_filter`，兼容层会复用同一个 `chat_session_id`、账号、token 与工具策略，把原始 completion `prompt` 追加固定后缀 `Previous reply had no visible output. Please regenerate the visible final answer or tool call now.` 后重新提交一次。重试遵循 DeepSeek 多轮对话协议：从第一次上游 SSE 流中提取 `response_message_id`，并在重试 payload 中设置 `parent_message_id` 为该值，使重试成为同一会话的后续轮次而非断裂的根消息；同时重新获取一次 PoW（若 PoW 获取失败则回退到原始 PoW）。该重试不会重新标准化消息、不会新建 session、不会切换账号，也不会向流式客户端插入重试标记；第二次 thinking / reasoning 会按正常增量直接接到第一次之后，并继续使用 overlap trim 去重。若第二次仍为空，终端错误码仍保持现有 `upstream_empty_output`；若任一尝试触发空 `content_filter`，不做补偿重试并保持 `content_filter` 错误。JS Vercel 运行时同样设置 `parent_message_id`，但因无法直接调用 PoW API 而复用原始 PoW。
+
+- OpenAI Chat / Responses 在最终可见正文渲染阶段，会把 DeepSeek 搜索返回中的 `[citation:N]` / `[reference:N]` 标记替换成对应 Markdown 链接。`citation` 标记按一基序号解析；`reference` 标记只有在同一段正文中出现 `[reference:0]`（允许冒号后有空格）时才按零基序号映射，并且不会影响同段正文里的 `citation` 标记。
 
 ## 5. prompt 是怎么拼出来的
 
@@ -244,9 +247,10 @@ OpenAI 文件相关实现：
 
 兼容层现在只保留 `current_input_file` 这一种拆分方式；旧的 `history_split` 已废弃，只保留为兼容旧配置的字段，不再参与请求处理。
 
-- `current_input_file` 默认开启；它用于把“完整上下文”合并进隐藏上下文文件。当最新 user turn 的纯文本长度达到 `current_input_file.min_chars`（默认 `0`）时，兼容层会上传一个文件名为 `IGNORE.txt` 的上下文文件，并在 live prompt 中只保留一个中性的 user 消息要求模型直接回答最新请求，不再暴露文件名或要求模型读取本地文件。
+- `current_input_file` 默认开启；它用于把“完整上下文”合并进 `history.txt` 上下文文件。当最新 user turn 的纯文本长度达到 `current_input_file.min_chars`（默认 `0`）时，兼容层会上传一个文件名为 `history.txt` 的上下文文件，并在 live prompt 中只保留一个中性的 user 消息要求模型直接回答最新请求，不再暴露文件名或要求模型读取本地文件。
 - 如果 `current_input_file.enabled=false`，请求会直接透传，不上传任何拆分上下文文件。
 - 旧的 `history_split.enabled` / `history_split.trigger_after_turns` 会被读取进配置对象以保持兼容，但不会触发拆分上传，也不会影响 `current_input_file` 的默认开启。
+- 即使触发 `current_input_file` 后 live prompt 被缩短，对客户端回包里的上下文 token 统计，仍会沿用**拆分前的完整 prompt 语义**做计数，而不是按缩短后的占位 prompt 计算；否则会把真实上下文显著算小。
 
 相关实现：
 
@@ -257,16 +261,11 @@ OpenAI 文件相关实现：
 - 旧历史拆分兼容壳：
   [internal/httpapi/openai/history/history_split.go](../internal/httpapi/openai/history/history_split.go)
 
-当前输入转文件启用并触发时，上传文件的真实文件名是 `IGNORE.txt`，文件内容是完整 `messages` 上下文；它仍会先用 OpenAI 消息标准化和 DeepSeek 角色标记序列化，再包进 `IGNORE` 文件边界里：
+当前输入转文件启用并触发时，上传文件的真实文件名是 `history.txt`，文件内容是完整 `messages` 上下文；它仍会先用 OpenAI 消息标准化和 DeepSeek 角色标记序列化，并直接作为 `history.txt` 的纯文本内容上传（不再注入文件边界标签）：
 
 ```text
-[uploaded filename]: IGNORE.txt
-[file content end]
-
+[uploaded filename]: history.txt
 <｜begin▁of▁sentence｜><｜System｜>...<｜User｜>...<｜Assistant｜>...<｜Tool｜>...<｜User｜>...
-
-[file name]: IGNORE
-[file content begin]
 ```
 
 开启后，请求的 live prompt 不再直接内联完整上下文，而是保留一个 user role 的短提示，提示模型基于已提供上下文直接回答最新请求；上传后的 `file_id` 会进入 `ref_file_ids`。
@@ -333,7 +332,7 @@ OpenAI 文件相关实现：
 
 - 大部分结构化语义被压进 `prompt`
 - 文件保持文件
-- 需要时把完整上下文拆进隐藏上下文文件
+- 需要时把完整上下文拆进 `history.txt` 上下文文件
 
 ## 12. 修改时必须同步本文档的场景
 
@@ -346,7 +345,7 @@ OpenAI 文件相关实现：
 - tool result 注入方式变更
 - tool prompt 模板或 tool_choice 约束变更
 - inline 文件上传 / 文件引用收集规则变更
-- current input file 触发条件、上传格式、`IGNORE` 包装格式变更
+- current input file 触发条件、上传格式、`history.txt` 包装格式变更
 - 旧 `history_split` 兼容逻辑的读取、忽略或退化行为变更
 - completion payload 字段语义变更
 - Claude / Gemini 对这套统一语义的复用关系变更

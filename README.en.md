@@ -128,6 +128,8 @@ For the full module-by-module architecture and directory responsibilities, see [
 | WebUI Admin Panel | SPA at `/admin` (bilingual Chinese/English, dark mode, with server-side conversation history) |
 | Health Probes | `GET /healthz` (liveness), `GET /readyz` (readiness) |
 
+OpenAI `/v1/*` routes remain canonical, and DS2API also accepts root shortcuts such as `/models`, `/chat/completions`, `/responses`, `/embeddings`, and `/files` for clients configured with the bare service URL.
+
 ## Platform Compatibility Matrix
 
 | Tier | Platform | Status |
@@ -150,9 +152,9 @@ For the full module-by-module architecture and directory responsibilities, see [
 | default | `deepseek-v4-flash-search` | enabled by default, request-controlled | ✅ |
 | expert | `deepseek-v4-pro-search` | enabled by default, request-controlled | ✅ |
 | vision | `deepseek-v4-vision` | enabled by default, request-controlled | ❌ |
-| vision | `deepseek-v4-vision-search` | enabled by default, request-controlled | ✅ |
 
 Besides native IDs, DS2API also accepts common aliases as input (for example `gpt-4.1`, `gpt-5`, `gpt-5-codex`, `o3`, `claude-*`, `gemini-*`), but `/v1/models` returns normalized DeepSeek native model IDs. The complete alias behavior is documented in [API.en.md](API.en.md#model-alias-resolution) and `config.example.json`.
+Current upstream vision support exposes only the `vision` lane and does not provide a separate search-enabled vision variant.
 
 ### Claude Endpoint (`GET /anthropic/v1/models`)
 
@@ -233,6 +235,7 @@ docker-compose up -d
 ```
 
 The default `docker-compose.yml` uses `ghcr.io/cjackhwang/ds2api:latest` and maps host port `6011` to container port `5001`. If you want `5001` exposed directly, set `DS2API_HOST_PORT=5001` (or adjust the `ports` mapping).
+It also mounts `./config.json` to `/data/config.json` and sets `DS2API_CONFIG_PATH=/data/config.json` by default, which avoids runtime token persistence failures caused by read-only `/app`.
 
 Rebuild after updates: `docker-compose up -d --build`
 
@@ -303,7 +306,7 @@ Common fields:
 - `runtime`: account concurrency, queueing, and token refresh behavior, hot-reloadable via Admin Settings.
 - `auto_delete.mode`: remote session cleanup after each request, supporting `none` / `single` / `all`.
 - `history_split`: legacy multi-turn history split field, now ignored and kept only for backward-compatible config loading.
-- `current_input_file`: the only active split mode; it is enabled by default and uploads the full context as a hidden context file once the character threshold is reached.
+- `current_input_file`: the only active split mode; it is enabled by default and uploads the full context as a `history.txt` context file once the character threshold is reached.
 - If you turn off `current_input_file`, requests pass through directly without uploading any split context file.
 
 For the full environment variable list, see [docs/DEPLOY.en.md](docs/DEPLOY.en.md). For auth behavior, see [API.en.md](API.en.md#authentication).

@@ -227,6 +227,20 @@ test('vercel stream exhausts DeepSeek continue before synthetic retry', async ()
   assert.equal(fetchBodies.some((body) => String(body.prompt || '').includes('Previous reply had no visible output')), false);
 });
 
+
+
+test('vercel stream usage completion_tokens does not double-count visible output', async () => {
+  const sample = 'abcdefghijklmnopqrst';
+  const { frames } = await runMockVercelStream([
+    `data: ${JSON.stringify({ p: 'response/content', v: sample })}\n\n`,
+    'data: [DONE]\n\n',
+  ]);
+  const parsed = frames.filter((frame) => frame !== '[DONE]').map((frame) => JSON.parse(frame));
+  const terminal = parsed.find((item) => Array.isArray(item.choices) && item.choices[0] && item.choices[0].finish_reason);
+  assert.ok(terminal);
+  assert.equal(terminal.usage.completion_tokens, 5);
+});
+
 test('vercel stream reuses prior PoW when refresh fails', async () => {
   const originalFetch = global.fetch;
   const fetchURLs = [];
@@ -523,6 +537,12 @@ test('parseChunkForContent supports wrapped response.fragments object shape', ()
   const parsed = parseChunkForContent(chunk, false, 'text');
   assert.equal(parsed.finished, false);
   assert.equal(parsed.parts.map((p) => p.text).join(''), 'AB');
+});
+
+test('parseChunkForContent reads object-shaped response/content payloads (Go parity)', () => {
+  const parsed = parseChunkForContent({ p: 'response/content', v: { text: 'vision text' } }, false, 'text', true);
+  assert.equal(parsed.parsed, true);
+  assert.deepEqual(parsed.parts, [{ text: 'vision text', type: 'text' }]);
 });
 
 test('parseChunkForContent preserves space-only content tokens', () => {

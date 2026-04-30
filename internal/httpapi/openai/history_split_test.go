@@ -14,6 +14,7 @@ import (
 	"ds2api/internal/auth"
 	dsclient "ds2api/internal/deepseek/client"
 	"ds2api/internal/promptcompat"
+	"ds2api/internal/util"
 )
 
 func historySplitTestMessages() []any {
@@ -64,8 +65,8 @@ func TestBuildOpenAICurrentInputContextTranscriptUsesInjectedFileWrapper(t *test
 	_, historyMessages := splitOpenAIHistoryMessages(historySplitTestMessages(), 1)
 	transcript := buildOpenAICurrentInputContextTranscript(historyMessages)
 
-	if !strings.HasPrefix(transcript, "[file content end]\n\n") {
-		t.Fatalf("expected injected file wrapper prefix, got %q", transcript)
+	if strings.Contains(transcript, "[file content end]") || strings.Contains(transcript, "[file content begin]") || strings.Contains(transcript, "[file name]:") {
+		t.Fatalf("expected plain transcript without file wrapper tags, got %q", transcript)
 	}
 	if !strings.Contains(transcript, "<｜begin▁of▁sentence｜>") {
 		t.Fatalf("expected serialized conversation markers, got %q", transcript)
@@ -79,9 +80,7 @@ func TestBuildOpenAICurrentInputContextTranscriptUsesInjectedFileWrapper(t *test
 	if !strings.Contains(transcript, "<|DSML|tool_calls>") {
 		t.Fatalf("expected tool calls preserved, got %q", transcript)
 	}
-	if !strings.HasSuffix(transcript, "\n[file name]: IGNORE\n[file content begin]\n") {
-		t.Fatalf("expected injected file wrapper suffix, got %q", transcript)
-	}
+
 }
 
 func TestSplitOpenAIHistoryMessagesUsesLatestUserTurn(t *testing.T) {
@@ -274,12 +273,12 @@ func TestApplyCurrentInputFileUploadsFirstTurnWithInjectedWrapper(t *testing.T) 
 		t.Fatalf("expected 1 current input upload, got %d", len(ds.uploadCalls))
 	}
 	upload := ds.uploadCalls[0]
-	if upload.Filename != "IGNORE.txt" {
+	if upload.Filename != "history.txt" {
 		t.Fatalf("unexpected upload filename: %q", upload.Filename)
 	}
 	uploadedText := string(upload.Data)
-	if !strings.HasPrefix(uploadedText, "[file content end]\n\n") {
-		t.Fatalf("expected injected file wrapper prefix, got %q", uploadedText)
+	if strings.Contains(uploadedText, "[file content end]") || strings.Contains(uploadedText, "[file content begin]") || strings.Contains(uploadedText, "[file name]:") {
+		t.Fatalf("expected uploaded transcript without file wrapper tags, got %q", uploadedText)
 	}
 	if !strings.Contains(uploadedText, "<｜begin▁of▁sentence｜><｜User｜>first turn content that is long enough") {
 		t.Fatalf("expected serialized current user turn markers, got %q", uploadedText)
@@ -287,13 +286,11 @@ func TestApplyCurrentInputFileUploadsFirstTurnWithInjectedWrapper(t *testing.T) 
 	if !strings.Contains(uploadedText, promptcompat.ThinkingInjectionMarker) {
 		t.Fatalf("expected thinking injection in current input file, got %q", uploadedText)
 	}
-	if !strings.HasSuffix(uploadedText, "\n[file name]: IGNORE\n[file content begin]\n") {
-		t.Fatalf("expected injected file wrapper suffix, got %q", uploadedText)
-	}
+
 	if strings.Contains(out.FinalPrompt, "first turn content that is long enough") {
 		t.Fatalf("expected current input text to be replaced in live prompt, got %s", out.FinalPrompt)
 	}
-	if strings.Contains(out.FinalPrompt, "CURRENT_USER_INPUT.txt") || strings.Contains(out.FinalPrompt, "IGNORE.txt") || strings.Contains(out.FinalPrompt, "Read that file") {
+	if strings.Contains(out.FinalPrompt, "CURRENT_USER_INPUT.txt") || strings.Contains(out.FinalPrompt, "history.txt") || strings.Contains(out.FinalPrompt, "Read that file") {
 		t.Fatalf("expected live prompt not to instruct file reads, got %s", out.FinalPrompt)
 	}
 	if !strings.Contains(out.FinalPrompt, "Answer the latest user request directly.") {
@@ -301,6 +298,52 @@ func TestApplyCurrentInputFileUploadsFirstTurnWithInjectedWrapper(t *testing.T) 
 	}
 	if len(out.RefFileIDs) != 1 || out.RefFileIDs[0] != "file-inline-1" {
 		t.Fatalf("expected current input file id in ref_file_ids, got %#v", out.RefFileIDs)
+	}
+	if !strings.Contains(out.PromptTokenText, "first turn content that is long enough") {
+		t.Fatalf("expected prompt token text to preserve original full context, got %q", out.PromptTokenText)
+	}
+}
+
+func TestApplyCurrentInputFilePreservesFullContextPromptForTokenCounting(t *testing.T) {
+	ds := &inlineUploadDSStub{}
+	h := &openAITestSurface{
+		Store: mockOpenAIConfig{
+			wideInput:           true,
+			currentInputEnabled: true,
+			currentInputMin:     0,
+			thinkingInjection:   boolPtr(true),
+		},
+		DS: ds,
+	}
+	req := map[string]any{
+		"model":    "deepseek-v4-flash",
+		"messages": historySplitTestMessages(),
+	}
+	stdReq, err := promptcompat.NormalizeOpenAIChatRequest(h.Store, req, "")
+	if err != nil {
+		t.Fatalf("normalize failed: %v", err)
+	}
+
+	out, err := h.applyCurrentInputFile(context.Background(), &auth.RequestAuth{DeepSeekToken: "token"}, stdReq)
+	if err != nil {
+		t.Fatalf("apply current input file failed: %v", err)
+	}
+	if out.FinalPrompt == stdReq.FinalPrompt {
+		t.Fatalf("expected live prompt to be rewritten after current input file")
+	}
+	// PromptTokenText must include the uploaded file content (which contains the full context)
+	// plus the neutral live prompt — reflecting the actual downstream token cost.
+	if !strings.Contains(out.PromptTokenText, "first user turn") || !strings.Contains(out.PromptTokenText, "latest user turn") {
+		t.Fatalf("expected prompt token text to contain file context with full conversation, got %q", out.PromptTokenText)
+	}
+	if strings.Contains(out.PromptTokenText, "[file content end]") || strings.Contains(out.PromptTokenText, "[file name]:") {
+		t.Fatalf("expected prompt token text to use raw transcript without wrapper tags, got %q", out.PromptTokenText)
+	}
+	if !strings.Contains(out.PromptTokenText, "Answer the latest user request directly.") {
+		t.Fatalf("expected prompt token text to also include neutral live prompt, got %q", out.PromptTokenText)
+	}
+	if strings.Contains(out.FinalPrompt, "first user turn") || strings.Contains(out.FinalPrompt, "latest user turn") {
+		t.Fatalf("expected live prompt to hide original turns, got %q", out.FinalPrompt)
 	}
 }
 
@@ -335,8 +378,8 @@ func TestApplyCurrentInputFileUploadsFullContextFile(t *testing.T) {
 		t.Fatalf("expected one current input upload, got %d", len(ds.uploadCalls))
 	}
 	upload := ds.uploadCalls[0]
-	if upload.Filename != "IGNORE.txt" {
-		t.Fatalf("expected IGNORE.txt upload, got %q", upload.Filename)
+	if upload.Filename != "history.txt" {
+		t.Fatalf("expected history.txt upload, got %q", upload.Filename)
 	}
 	uploadedText := string(upload.Data)
 	for _, want := range []string{"system instructions", "first user turn", "hidden reasoning", "tool result", "latest user turn", promptcompat.ThinkingInjectionMarker} {
@@ -344,7 +387,7 @@ func TestApplyCurrentInputFileUploadsFullContextFile(t *testing.T) {
 			t.Fatalf("expected full context file to contain %q, got %q", want, uploadedText)
 		}
 	}
-	if strings.Contains(out.FinalPrompt, "first user turn") || strings.Contains(out.FinalPrompt, "latest user turn") || strings.Contains(out.FinalPrompt, "CURRENT_USER_INPUT.txt") || strings.Contains(out.FinalPrompt, "IGNORE.txt") || strings.Contains(out.FinalPrompt, "Read that file") {
+	if strings.Contains(out.FinalPrompt, "first user turn") || strings.Contains(out.FinalPrompt, "latest user turn") || strings.Contains(out.FinalPrompt, "CURRENT_USER_INPUT.txt") || strings.Contains(out.FinalPrompt, "history.txt") || strings.Contains(out.FinalPrompt, "Read that file") {
 		t.Fatalf("expected live prompt to use only a neutral continuation instruction, got %s", out.FinalPrompt)
 	}
 	if !strings.Contains(out.FinalPrompt, "Answer the latest user request directly.") {
@@ -411,15 +454,15 @@ func TestChatCompletionsCurrentInputFileUploadsContextAndKeepsNeutralPrompt(t *t
 		t.Fatalf("expected 1 upload call, got %d", len(ds.uploadCalls))
 	}
 	upload := ds.uploadCalls[0]
-	if upload.Filename != "IGNORE.txt" {
+	if upload.Filename != "history.txt" {
 		t.Fatalf("unexpected upload filename: %q", upload.Filename)
 	}
 	if upload.Purpose != "assistants" {
 		t.Fatalf("unexpected purpose: %q", upload.Purpose)
 	}
 	historyText := string(upload.Data)
-	if !strings.Contains(historyText, "[file content end]") || !strings.Contains(historyText, "[file name]: IGNORE") {
-		t.Fatalf("expected injected IGNORE wrapper, got %s", historyText)
+	if strings.Contains(historyText, "[file content end]") || strings.Contains(historyText, "[file content begin]") || strings.Contains(historyText, "[file name]:") {
+		t.Fatalf("expected plain history transcript without wrapper tags, got %s", historyText)
 	}
 	if !strings.Contains(historyText, "latest user turn") {
 		t.Fatalf("expected full context to include latest turn, got %s", historyText)
@@ -437,6 +480,16 @@ func TestChatCompletionsCurrentInputFileUploadsContextAndKeepsNeutralPrompt(t *t
 	refIDs, _ := ds.completionReq["ref_file_ids"].([]any)
 	if len(refIDs) == 0 || refIDs[0] != "file-inline-1" {
 		t.Fatalf("expected uploaded current input file to be first ref_file_id, got %#v", ds.completionReq["ref_file_ids"])
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response failed: %v", err)
+	}
+	usage, _ := body["usage"].(map[string]any)
+	promptTokens := int(usage["prompt_tokens"].(float64))
+	neutralCount := util.CountPromptTokens(promptText, "deepseek-v4-flash")
+	if promptTokens <= neutralCount {
+		t.Fatalf("expected prompt_tokens to exceed neutral live prompt count (includes file context), got=%d neutral=%d", promptTokens, neutralCount)
 	}
 }
 
@@ -479,6 +532,16 @@ func TestResponsesCurrentInputFileUploadsContextAndKeepsNeutralPrompt(t *testing
 	}
 	if strings.Contains(promptText, "first user turn") || strings.Contains(promptText, "latest user turn") {
 		t.Fatalf("expected prompt to hide original turns, got %s", promptText)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response failed: %v", err)
+	}
+	usage, _ := body["usage"].(map[string]any)
+	inputTokens := int(usage["input_tokens"].(float64))
+	neutralCount := util.CountPromptTokens(promptText, "deepseek-v4-flash")
+	if inputTokens <= neutralCount {
+		t.Fatalf("expected input_tokens to exceed neutral live prompt count (includes file context), got=%d neutral=%d", inputTokens, neutralCount)
 	}
 }
 

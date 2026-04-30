@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"ds2api/internal/config"
+	"ds2api/internal/util"
 )
 
 const (
@@ -648,8 +649,8 @@ func buildPreview(item Entry) string {
 	if candidate == "" {
 		candidate = strings.TrimSpace(item.UserInput)
 	}
-	if len(candidate) > defaultPreviewAt {
-		return candidate[:defaultPreviewAt] + "..."
+	if truncated, ok := util.TruncateRunes(candidate, defaultPreviewAt); ok {
+		return truncated + "..."
 	}
 	return candidate
 }
