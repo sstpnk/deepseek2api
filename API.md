@@ -287,7 +287,7 @@ Content-Type: application/json
 
 #### 流式响应（`stream=true`）
 
-SSE 格式：每段为 `data: <json>\n\n`，结束为 `data: [DONE]`。
+SSE 格式：每段为 `data: <json>\n\n`，结束为 `data: [DONE]`。每个 `chat.completion.chunk` frame 的 `choices` 只包含一个 `index:0` choice，以保持 reasoning / content / tool delta 的输出顺序。
 
 ```text
 data: {"id":"...","object":"chat.completion.chunk","choices":[{"delta":{"role":"assistant"},"index":0}]}

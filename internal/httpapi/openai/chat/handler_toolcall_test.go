@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"ds2api/internal/sse"
 )
 
 func makeSSEHTTPResponse(lines ...string) *http.Response {
@@ -82,6 +84,50 @@ func streamFinishReason(frames []map[string]any) string {
 		}
 	}
 	return ""
+}
+
+func TestChatStreamRuntimeEmitsSeparateFramesForBatchedParts(t *testing.T) {
+	rec := httptest.NewRecorder()
+	streamRuntime := newChatStreamRuntime(rec, nil, false, "cid-batched-order", 123, "deepseek-v4-pro", "prompt", true, false, false, nil, nil, false, false)
+
+	decision := streamRuntime.onParsed(sse.LineResult{
+		Parsed: true,
+		Parts: []sse.ContentPart{
+			{Text: "thinking-", Type: "thinking"},
+			{Text: "answer", Type: "text"},
+		},
+		NextType: "text",
+	})
+	if !decision.ContentSeen {
+		t.Fatal("expected batched thinking/text parts to mark content seen")
+	}
+
+	frames, done := parseSSEDataFrames(t, rec.Body.String())
+	if done {
+		t.Fatalf("did not expect [DONE] from onParsed only, body=%s", rec.Body.String())
+	}
+	if len(frames) != 2 {
+		t.Fatalf("expected one SSE frame per parsed part, got %d body=%s", len(frames), rec.Body.String())
+	}
+	for i, frame := range frames {
+		choices, _ := frame["choices"].([]any)
+		if len(choices) != 1 {
+			t.Fatalf("frame %d should contain exactly one choice, got %d body=%s", i, len(choices), rec.Body.String())
+		}
+	}
+
+	firstChoice, _ := frames[0]["choices"].([]any)
+	first, _ := firstChoice[0].(map[string]any)
+	firstDelta, _ := first["delta"].(map[string]any)
+	if firstDelta["role"] != "assistant" || firstDelta["reasoning_content"] != "thinking-" {
+		t.Fatalf("expected first frame to carry assistant reasoning delta, got %#v", firstDelta)
+	}
+	secondChoice, _ := frames[1]["choices"].([]any)
+	second, _ := secondChoice[0].(map[string]any)
+	secondDelta, _ := second["delta"].(map[string]any)
+	if secondDelta["content"] != "answer" {
+		t.Fatalf("expected second frame to carry text delta, got %#v", secondDelta)
+	}
 }
 
 // Backward-compatible alias for historical test name used in CI logs.

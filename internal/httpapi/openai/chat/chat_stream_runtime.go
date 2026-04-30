@@ -278,8 +278,19 @@ func (s *chatStreamRuntime) onParsed(parsed sse.LineResult) streamengine.ParsedD
 		return streamengine.ParsedDecision{Stop: true, StopReason: streamengine.StopReasonHandlerRequested}
 	}
 
-	newChoices := make([]map[string]any, 0, len(parsed.Parts))
 	contentSeen := false
+	emitDelta := func(delta map[string]any) {
+		if len(delta) == 0 {
+			return
+		}
+		s.sendChunk(openaifmt.BuildChatStreamChunk(
+			s.completionID,
+			s.created,
+			s.model,
+			[]map[string]any{openaifmt.BuildChatStreamDeltaChoice(0, delta)},
+			nil,
+		))
+	}
 	for _, p := range parsed.ToolDetectionThinkingParts {
 		trimmed := sse.TrimContinuationOverlap(s.toolDetectionThinking.String(), p.Text)
 		if trimmed != "" {
@@ -353,7 +364,7 @@ func (s *chatStreamRuntime) onParsed(parsed sse.LineResult) streamengine.ParsedD
 							tcDelta["role"] = "assistant"
 							s.firstChunkSent = true
 						}
-						newChoices = append(newChoices, openaifmt.BuildChatStreamDeltaChoice(0, tcDelta))
+						emitDelta(tcDelta)
 						continue
 					}
 					if len(evt.ToolCalls) > 0 {
@@ -366,7 +377,7 @@ func (s *chatStreamRuntime) onParsed(parsed sse.LineResult) streamengine.ParsedD
 							tcDelta["role"] = "assistant"
 							s.firstChunkSent = true
 						}
-						newChoices = append(newChoices, openaifmt.BuildChatStreamDeltaChoice(0, tcDelta))
+						emitDelta(tcDelta)
 						s.resetStreamToolCallState()
 						continue
 					}
@@ -382,18 +393,15 @@ func (s *chatStreamRuntime) onParsed(parsed sse.LineResult) streamengine.ParsedD
 							contentDelta["role"] = "assistant"
 							s.firstChunkSent = true
 						}
-						newChoices = append(newChoices, openaifmt.BuildChatStreamDeltaChoice(0, contentDelta))
+						emitDelta(contentDelta)
 					}
 				}
 			}
 		}
 		if len(delta) > 0 {
-			newChoices = append(newChoices, openaifmt.BuildChatStreamDeltaChoice(0, delta))
+			emitDelta(delta)
 		}
 	}
 
-	if len(newChoices) > 0 {
-		s.sendChunk(openaifmt.BuildChatStreamChunk(s.completionID, s.created, s.model, newChoices, nil))
-	}
 	return streamengine.ParsedDecision{ContentSeen: contentSeen}
 }

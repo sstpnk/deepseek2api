@@ -280,7 +280,7 @@ Content-Type: application/json
 
 #### Streaming (`stream=true`)
 
-SSE format: each frame is `data: <json>\n\n`, terminated by `data: [DONE]`.
+SSE format: each frame is `data: <json>\n\n`, terminated by `data: [DONE]`. Each `chat.completion.chunk` frame contains exactly one `index:0` choice so reasoning / content / tool deltas preserve output order.
 
 ```text
 data: {"id":"...","object":"chat.completion.chunk","choices":[{"delta":{"role":"assistant"},"index":0}]}
