@@ -11,6 +11,7 @@ type Config struct {
 	Keys              []string                `json:"keys,omitempty"`
 	APIKeys           []APIKey                `json:"api_keys,omitempty"`
 	Accounts          []Account               `json:"accounts,omitempty"`
+	Quarantine        []QuarantinedAccount    `json:"quarantine,omitempty"`
 	Proxies           []Proxy                 `json:"proxies,omitempty"`
 	ModelAliases      map[string]string       `json:"model_aliases,omitempty"`
 	Admin             AdminConfig             `json:"admin,omitempty"`
@@ -25,6 +26,22 @@ type Config struct {
 	VercelSyncHash    string                  `json:"_vercel_sync_hash,omitempty"`
 	VercelSyncTime    int64                   `json:"_vercel_sync_time,omitempty"`
 	AdditionalFields  map[string]any          `json:"-"`
+}
+
+// QuarantinedAccount is an account that failed an auto-delete verification but
+// has not yet been confirmed dead. The background sweeper re-verifies it every
+// quarantineSweepInterval; on three consecutive failures (Failures >= 3) it is
+// removed for real, on any single success it is moved back into Accounts with
+// its ProxyID intact. The original Account (including ProxyID) is preserved
+// verbatim so a misclassified account can be restored without losing its
+// dedicated Resin proxy assignment.
+type QuarantinedAccount struct {
+	Account       Account `json:"account"`
+	QuarantinedAt int64   `json:"quarantined_at_unix,omitempty"`
+	LastCheckedAt int64   `json:"last_checked_at_unix,omitempty"`
+	Failures      int     `json:"failures,omitempty"`
+	LastError     string  `json:"last_error,omitempty"`
+	Reason        string  `json:"reason,omitempty"`
 }
 
 type Account struct {
@@ -81,6 +98,9 @@ func (c *Config) ClearAccountTokens() {
 	for i := range c.Accounts {
 		c.Accounts[i].Token = ""
 	}
+	for i := range c.Quarantine {
+		c.Quarantine[i].Account.Token = ""
+	}
 }
 
 func (c *Config) NormalizeCredentials() {
@@ -106,19 +126,41 @@ func (c *Config) NormalizeCredentials() {
 
 // DropInvalidAccounts removes accounts that cannot be addressed by admin APIs
 // (no email and no normalizable mobile). This prevents legacy token-only
-// records from becoming orphaned empty entries after token stripping.
+// records from becoming orphaned empty entries after token stripping. Also
+// prunes the quarantine list under the same rule so a malformed entry can't
+// make the sweeper crash.
 func (c *Config) DropInvalidAccounts() {
-	if c == nil || len(c.Accounts) == 0 {
+	if c == nil {
 		return
 	}
-	kept := make([]Account, 0, len(c.Accounts))
-	for _, acc := range c.Accounts {
-		if acc.Identifier() == "" {
+	if len(c.Accounts) > 0 {
+		kept := make([]Account, 0, len(c.Accounts))
+		for _, acc := range c.Accounts {
+			if acc.Identifier() == "" {
+				continue
+			}
+			kept = append(kept, acc)
+		}
+		c.Accounts = kept
+	}
+	c.DropInvalidQuarantine()
+}
+
+// DropInvalidQuarantine drops quarantine entries that lack a usable identifier
+// (an account record needs at least an email or normalizable mobile to be
+// findable through the admin API). Mirrors DropInvalidAccounts.
+func (c *Config) DropInvalidQuarantine() {
+	if c == nil || len(c.Quarantine) == 0 {
+		return
+	}
+	kept := make([]QuarantinedAccount, 0, len(c.Quarantine))
+	for _, q := range c.Quarantine {
+		if q.Account.Identifier() == "" {
 			continue
 		}
-		kept = append(kept, acc)
+		kept = append(kept, q)
 	}
-	c.Accounts = kept
+	c.Quarantine = kept
 }
 
 func (c *Config) normalizeModelAliases() {

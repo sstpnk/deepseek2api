@@ -20,6 +20,7 @@ import (
 	"ds2api/internal/config"
 	dsclient "ds2api/internal/deepseek/client"
 	"ds2api/internal/httpapi/admin"
+	adminaccounts "ds2api/internal/httpapi/admin/accounts"
 	"ds2api/internal/httpapi/claude"
 	"ds2api/internal/httpapi/gemini"
 	"ds2api/internal/httpapi/openai/chat"
@@ -36,6 +37,10 @@ type App struct {
 	Resolver *auth.Resolver
 	DS       *dsclient.Client
 	Router   http.Handler
+	// Sweeper drives the quarantine re-verification loop. It is started by
+	// the caller (cmd/ds2api/main.go) so the lifecycle ties cleanly to
+	// signal handling: cancel the context to stop the goroutine on shutdown.
+	Sweeper *adminaccounts.Sweeper
 }
 
 func NewApp() (*App, error) {
@@ -67,6 +72,8 @@ func NewApp() (*App, error) {
 	claudeHandler := &claude.Handler{Store: store, Auth: resolver, DS: dsClient, OpenAI: chatHandler}
 	geminiHandler := &gemini.Handler{Store: store, Auth: resolver, DS: dsClient, OpenAI: chatHandler}
 	adminHandler := &admin.Handler{Store: store, Pool: pool, DS: dsClient, OpenAI: chatHandler, ChatHistory: chatHistoryStore}
+	sweeper := adminaccounts.NewSweeper(store, pool, dsClient)
+	adminHandler.QuarantineSweeper = sweeper
 	webuiHandler := webui.NewHandler()
 
 	r := chi.NewRouter()
@@ -119,7 +126,7 @@ func NewApp() (*App, error) {
 		http.NotFound(w, req)
 	})
 
-	return &App{Store: store, Pool: pool, Resolver: resolver, DS: dsClient, Router: r}, nil
+	return &App{Store: store, Pool: pool, Resolver: resolver, DS: dsClient, Router: r, Sweeper: sweeper}, nil
 }
 
 func timeout(d time.Duration) func(http.Handler) http.Handler {

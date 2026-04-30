@@ -46,6 +46,15 @@ func main() {
 		lanURL = fmt.Sprintf("http://%s:%s", lanIP, port)
 	}
 
+	// Quarantine sweeper runs alongside the HTTP server: re-verifies failed
+	// accounts every two hours, restores or hard-deletes after three strikes.
+	// Cancelling sweeperCtx on shutdown stops the goroutine cleanly.
+	sweeperCtx, cancelSweeper := context.WithCancel(context.Background())
+	defer cancelSweeper()
+	if app.Sweeper != nil {
+		go app.Sweeper.Run(sweeperCtx)
+	}
+
 	// Start server in a goroutine so we can listen for shutdown signals.
 	go func() {
 		if lanURL != "" {
@@ -65,6 +74,7 @@ func main() {
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 	sig := <-quit
 	config.Logger.Info("shutdown signal received", "signal", sig.String())
+	cancelSweeper()
 
 	// Graceful shutdown: allow up to 10 seconds for in-flight requests to complete.
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

@@ -46,74 +46,82 @@ func (h *Handler) testSingleAccount(w http.ResponseWriter, r *http.Request) {
 	message, _ := req["message"].(string)
 	autoDelete, _ := req["auto_delete"].(bool)
 	result := h.testAccount(r.Context(), acc, model, message)
-	if autoDelete && h.maybeAutoDeleteFailedAccount(r.Context(), acc, result) {
+	if autoDelete && h.maybeQuarantineFailedAccount(r.Context(), acc, result) {
+		// Quarantining is a removal from the pool — refresh the queue once
+		// per request, same contract as direct deletion used to have.
 		h.Pool.Reset()
 	}
 	writeJSON(w, http.StatusOK, result)
 }
 
-// maybeAutoDeleteFailedAccount inspects a failed test result and, when the
-// caller opted into auto-deletion, runs a two-strike Login verification before
-// removing the account. It mutates result in place to record the outcome:
+// maybeQuarantineFailedAccount inspects a failed test result and, when the
+// caller opted into auto-deletion, runs a two-strike Login verification. If
+// both probes fail the account is moved into the quarantine list (NOT deleted
+// outright) — the background sweeper will give it three more chances over six
+// hours before the actual delete. Mutates result in place to record:
 //   - result["verified_unusable"] = true   if both verification logins failed
-//   - result["deleted"] = true             if the account was removed
-//   - result["delete_error"] = "..."       if removal failed
+//   - result["quarantined"]       = true   if the account was moved
+//   - result["quarantine_error"]  = "..."  if quarantine bookkeeping failed
 //
-// Returns true when an account was actually deleted. The caller is
-// responsible for calling Pool.Reset() once after any batch of removals so the
-// pool's queue reflects the smaller account set; see testAllAccounts and
-// testSingleAccount for the two call sites.
+// Returns true when an account was actually moved. The caller is responsible
+// for calling Pool.Reset() once after any batch of moves so the pool's queue
+// reflects the smaller account set; see testAllAccounts and testSingleAccount
+// for the two call sites.
 //
 // Only call this when result["success"] is false; success accounts are not
 // touched even if auto_delete is enabled.
-func (h *Handler) maybeAutoDeleteFailedAccount(ctx context.Context, acc config.Account, result map[string]any) bool {
+func (h *Handler) maybeQuarantineFailedAccount(ctx context.Context, acc config.Account, result map[string]any) bool {
 	if ok, _ := result["success"].(bool); ok {
 		return false
 	}
-	if !h.verifyAccountUnusable(ctx, acc) {
+	verifyErr := h.verifyAccountUnusable(ctx, acc)
+	if verifyErr == "" {
 		return false
 	}
 	result["verified_unusable"] = true
-	if err := h.deleteAccountByIdentifierInternal(acc.Identifier()); err != nil {
-		result["delete_error"] = err.Error()
+	reason, _ := result["message"].(string)
+	if err := h.quarantineAccountByIdentifier(acc.Identifier(), verifyErr, reason); err != nil {
+		result["quarantine_error"] = err.Error()
 		return false
 	}
-	result["deleted"] = true
+	result["quarantined"] = true
 	return true
 }
 
 // verifyAccountUnusable performs two consecutive Login attempts against the
 // upstream. Both must fail for the account to be considered confirmed-broken.
 // This filters most transient network blips: a single failed attempt is not
-// enough to trigger deletion. The two attempts go through the same per-account
-// proxy as the regular login path, so a flaky proxy will register as a failure
-// — the user opts into this risk by enabling auto_delete.
-func (h *Handler) verifyAccountUnusable(ctx context.Context, acc config.Account) bool {
+// enough to trigger quarantine. Returns the joined error string when both
+// fail (empty string means at least one Login succeeded, account is fine).
+//
+// The two attempts go through the same per-account proxy as the regular
+// login path, so a flaky proxy will register as a failure — the user opts
+// into this risk by enabling auto_delete. The quarantine sweeper gives the
+// proxy three more chances at two-hour intervals before the real delete.
+func (h *Handler) verifyAccountUnusable(ctx context.Context, acc config.Account) string {
 	if _, err := h.DS.Login(ctx, acc); err == nil {
-		return false
+		return ""
+	} else {
+		first := err.Error()
+		if _, err2 := h.DS.Login(ctx, acc); err2 == nil {
+			return ""
+		} else {
+			return joinErrors(first, err2.Error())
+		}
 	}
-	if _, err := h.DS.Login(ctx, acc); err == nil {
-		return false
-	}
-	return true
 }
 
-// deleteAccountByIdentifierInternal removes a single account from the store
-// without touching Pool. The caller is responsible for Pool.Reset() once after
-// any batch of removals to avoid Reset thrash under concurrent test workers.
-func (h *Handler) deleteAccountByIdentifierInternal(identifier string) error {
+// quarantineAccountByIdentifier moves a single account from the active list
+// into the quarantine list under the store mutex. Mirrors
+// deleteAccountByIdentifierInternal in shape — the caller is responsible for
+// Pool.Reset() once per batch.
+func (h *Handler) quarantineAccountByIdentifier(identifier, lastError, reason string) error {
 	identifier = strings.TrimSpace(identifier)
 	if identifier == "" {
 		return fmt.Errorf("identifier 为空")
 	}
 	return h.Store.Update(func(c *config.Config) error {
-		for i, a := range c.Accounts {
-			if accountMatchesIdentifier(a, identifier) {
-				c.Accounts = append(c.Accounts[:i], c.Accounts[i+1:]...)
-				return nil
-			}
-		}
-		return fmt.Errorf("账号不存在: %s", identifier)
+		return quarantineAccountLocked(c, identifier, lastError, reason)
 	})
 }
 
@@ -129,44 +137,50 @@ func (h *Handler) testAllAccounts(w http.ResponseWriter, r *http.Request) {
 
 	accounts := h.Store.Snapshot().Accounts
 	if len(accounts) == 0 {
-		writeJSON(w, http.StatusOK, map[string]any{"total": 0, "success": 0, "failed": 0, "deleted": 0, "results": []any{}, "deleted_accounts": []any{}})
+		writeJSON(w, http.StatusOK, map[string]any{"total": 0, "success": 0, "failed": 0, "quarantined": 0, "deleted": 0, "results": []any{}, "quarantined_accounts": []any{}, "deleted_accounts": []any{}})
 		return
 	}
 
 	results := runAccountTestsConcurrently(accounts, concurrency, func(_ int, account config.Account) map[string]any {
 		res := h.testAccount(r.Context(), account, model, "")
 		if autoDelete {
-			h.maybeAutoDeleteFailedAccount(r.Context(), account, res)
+			h.maybeQuarantineFailedAccount(r.Context(), account, res)
 		}
 		return res
 	})
 
 	success := 0
-	deletedIDs := make([]string, 0)
+	quarantinedIDs := make([]string, 0)
 	for _, res := range results {
 		if ok, _ := res["success"].(bool); ok {
 			success++
 		}
-		if dl, _ := res["deleted"].(bool); dl {
+		if q, _ := res["quarantined"].(bool); q {
 			id, _ := res["account"].(string)
 			if id != "" {
-				deletedIDs = append(deletedIDs, id)
+				quarantinedIDs = append(quarantinedIDs, id)
 			}
 		}
 	}
 	// Single Pool.Reset for the whole batch — the per-test goroutines mutate
-	// store.Accounts via deleteAccountByIdentifierInternal under the store
-	// mutex, but Pool.queue is rebuilt only here so live traffic doesn't see
-	// the queue churned 1×N times for a refresh-all run.
-	if len(deletedIDs) > 0 {
+	// store.Accounts via quarantineAccountByIdentifier under the store mutex,
+	// but Pool.queue is rebuilt only here so live traffic doesn't see the
+	// queue churned 1×N times for a refresh-all run.
+	if len(quarantinedIDs) > 0 {
 		h.Pool.Reset()
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"total":            len(accounts),
-		"success":          success,
-		"failed":           len(accounts) - success,
-		"deleted":          len(deletedIDs),
-		"deleted_accounts": deletedIDs,
+		"total":                len(accounts),
+		"success":              success,
+		"failed":               len(accounts) - success,
+		"quarantined":          len(quarantinedIDs),
+		"quarantined_accounts": quarantinedIDs,
+		// Kept for backwards-compatible API consumers; quarantine *replaces*
+		// the immediate-delete path so this number is always 0 for the
+		// /test-all endpoint now. Confirmed deletion happens only from the
+		// background sweeper after three failed sweeps.
+		"deleted":          0,
+		"deleted_accounts": []any{},
 		"concurrency":      concurrency,
 		"auto_delete":      autoDelete,
 		"results":          results,

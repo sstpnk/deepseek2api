@@ -7,6 +7,7 @@ import AccountsTable from './AccountsTable'
 import AddKeyModal from './AddKeyModal'
 import AddAccountModal from './AddAccountModal'
 import EditAccountModal from './EditAccountModal'
+import QuarantinePanel from './QuarantinePanel'
 
 export default function AccountManagerContainer({ config, onRefresh, onMessage, authFetch }) {
     const { t } = useI18n()
@@ -146,6 +147,16 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
                 envBacked={Boolean(config?.env_backed)}
                 refreshOptions={refreshOptions}
                 onRefreshOptionsChange={setRefreshOptions}
+            />
+
+            <QuarantinePanel
+                t={t}
+                apiFetch={apiFetch}
+                onMessage={onMessage}
+                onChange={() => {
+                    fetchAccounts()
+                    onRefresh()
+                }}
             />
 
             <AddKeyModal

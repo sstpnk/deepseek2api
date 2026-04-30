@@ -263,18 +263,45 @@ func TestTestSingleAccount_AutoDeleteRemovesAccountWhenLoginFailsTwice(t *testin
 	if got, _ := resp["verified_unusable"].(bool); !got {
 		t.Fatalf("expected verified_unusable=true, got %#v", resp)
 	}
-	if got, _ := resp["deleted"].(bool); !got {
-		t.Fatalf("expected deleted=true after two-strike login fail, got %#v", resp)
+	// New auto-delete contract: account is moved to quarantine, NOT deleted
+	// outright. The background sweeper takes over from here.
+	if got, _ := resp["quarantined"].(bool); !got {
+		t.Fatalf("expected quarantined=true after two-strike login fail, got %#v", resp)
+	}
+	if got, _ := resp["deleted"].(bool); got {
+		t.Fatalf("expected deleted=false (quarantine replaces immediate delete), got %#v", resp)
 	}
 
-	// Account should be gone from the listing after auto-delete.
+	// Account should be gone from the active listing — it's in quarantine.
 	listReq := adminReq(http.MethodGet, "/accounts?page=1&page_size=10", nil)
 	listRec := httptest.NewRecorder()
 	srv.ServeHTTP(listRec, listReq)
 	var listResp map[string]any
 	_ = json.Unmarshal(listRec.Body.Bytes(), &listResp)
 	if total, _ := listResp["total"].(float64); total != 0 {
-		t.Fatalf("expected zero accounts after auto-delete, got total=%v body=%s", total, listRec.Body.String())
+		t.Fatalf("expected zero active accounts after quarantine, got total=%v body=%s", total, listRec.Body.String())
+	}
+
+	// And it must show up under /accounts/quarantine with failures=0 and a
+	// remaining_attempts of QuarantineMaxFailures.
+	qReq := adminReq(http.MethodGet, "/accounts/quarantine", nil)
+	qRec := httptest.NewRecorder()
+	srv.ServeHTTP(qRec, qReq)
+	var qResp map[string]any
+	_ = json.Unmarshal(qRec.Body.Bytes(), &qResp)
+	if total, _ := qResp["total"].(float64); total != 1 {
+		t.Fatalf("expected 1 quarantined account, got total=%v body=%s", total, qRec.Body.String())
+	}
+	items, _ := qResp["items"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("expected items[0], got %#v", items)
+	}
+	first := items[0].(map[string]any)
+	if got, _ := first["failures"].(float64); got != 0 {
+		t.Fatalf("expected failures=0 on entry, got %v", got)
+	}
+	if got, _ := first["remaining_attempts"].(float64); got != float64(QuarantineMaxFailures) {
+		t.Fatalf("expected remaining_attempts=%d, got %v", QuarantineMaxFailures, got)
 	}
 }
 
@@ -327,14 +354,14 @@ func TestTestSingleAccount_AutoDeleteSkippedWhenVerificationLoginSucceeds(t *tes
 	}
 	var resp map[string]any
 	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
-	if got, _ := resp["deleted"].(bool); got {
-		t.Fatalf("expected NOT deleted when verification login succeeds, got %#v", resp)
+	if got, _ := resp["quarantined"].(bool); got {
+		t.Fatalf("expected NOT quarantined when verification login succeeds, got %#v", resp)
 	}
 	if got, _ := resp["verified_unusable"].(bool); got {
 		t.Fatalf("expected verified_unusable=false when verification recovers, got %#v", resp)
 	}
 
-	// Account should still be present.
+	// Account should still be present in the active list.
 	listReq := adminReq(http.MethodGet, "/accounts?page=1&page_size=10", nil)
 	listRec := httptest.NewRecorder()
 	srv.ServeHTTP(listRec, listReq)
@@ -362,8 +389,13 @@ func TestTestAllAccounts_AutoDeleteRemovesOnlyConfirmedDeadAccounts(t *testing.T
 	}
 	var resp map[string]any
 	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
-	if got, _ := resp["deleted"].(float64); got != 2 {
-		t.Fatalf("expected deleted=2, got %v body=%s", got, rec.Body.String())
+	// New contract: confirmed-dead accounts go to quarantine, not the trash.
+	// `deleted` is always 0 from /test-all; the sweeper does the real delete.
+	if got, _ := resp["quarantined"].(float64); got != 2 {
+		t.Fatalf("expected quarantined=2, got %v body=%s", got, rec.Body.String())
+	}
+	if got, _ := resp["deleted"].(float64); got != 0 {
+		t.Fatalf("expected deleted=0 (sweeper owns deletions now), got %v", got)
 	}
 	if got, _ := resp["concurrency"].(float64); got != 4 {
 		t.Fatalf("expected concurrency=4 in response, got %v", got)
@@ -374,7 +406,15 @@ func TestTestAllAccounts_AutoDeleteRemovesOnlyConfirmedDeadAccounts(t *testing.T
 	var listResp map[string]any
 	_ = json.Unmarshal(listRec.Body.Bytes(), &listResp)
 	if total, _ := listResp["total"].(float64); total != 0 {
-		t.Fatalf("expected both accounts deleted, got total=%v", total)
+		t.Fatalf("expected both accounts moved out of active list, got total=%v", total)
+	}
+	qReq := adminReq(http.MethodGet, "/accounts/quarantine", nil)
+	qRec := httptest.NewRecorder()
+	srv.ServeHTTP(qRec, qReq)
+	var qResp map[string]any
+	_ = json.Unmarshal(qRec.Body.Bytes(), &qResp)
+	if total, _ := qResp["total"].(float64); total != 2 {
+		t.Fatalf("expected 2 in quarantine, got total=%v body=%s", total, qRec.Body.String())
 	}
 }
 

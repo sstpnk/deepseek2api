@@ -13,7 +13,7 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
     const [loading, setLoading] = useState(false)
     const [testing, setTesting] = useState({})
     const [testingAll, setTestingAll] = useState(false)
-    const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0, results: [], deleted: 0 })
+    const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0, results: [], quarantined: 0 })
     const [refreshOptions, setRefreshOptions] = useState({ concurrency: 10, autoDelete: false })
     const [sessionCounts, setSessionCounts] = useState({})
     const [deletingSessions, setDeletingSessions] = useState({})
@@ -254,7 +254,7 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
         if (!confirm(t(confirmKey, { concurrency, total: allAccounts.length }))) return
 
         setTestingAll(true)
-        setBatchProgress({ current: 0, total: allAccounts.length, results: [], deleted: 0 })
+        setBatchProgress({ current: 0, total: allAccounts.length, results: [], quarantined: 0 })
 
         // Resolve identifiers up front so workers can dequeue without touching
         // the original config.accounts ordering. Entries with no identifier go
@@ -272,7 +272,7 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
 
         let cursor = 0
         let successCount = 0
-        let deletedCount = 0
+        let quarantinedCount = 0
         let completed = results.length
 
         // Update progress in the React state from a snapshot of the current
@@ -284,7 +284,7 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
                 current: completed,
                 total: allAccounts.length,
                 results: [...results],
-                deleted: deletedCount,
+                quarantined: quarantinedCount,
             })
         }
         flushProgress()
@@ -302,11 +302,11 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
                     success: !!data.success,
                     message: data.message,
                     time: data.response_time,
-                    deleted: !!data.deleted,
+                    quarantined: !!data.quarantined,
                     verified_unusable: !!data.verified_unusable,
                 })
                 if (data.success) successCount++
-                if (data.deleted) deletedCount++
+                if (data.quarantined) quarantinedCount++
             } catch (e) {
                 results.push({ id, success: false, message: e.message })
             }
@@ -331,13 +331,13 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
         for (let i = 0; i < workerCount; i++) workers.push(worker())
         await Promise.all(workers)
 
-        const summaryKey = autoDelete && deletedCount > 0
-            ? 'accountManager.testAllCompletedWithDelete'
+        const summaryKey = autoDelete && quarantinedCount > 0
+            ? 'accountManager.testAllCompletedWithQuarantine'
             : 'accountManager.testAllCompleted'
         onMessage('success', t(summaryKey, {
             success: successCount,
             total: allAccounts.length,
-            deleted: deletedCount,
+            quarantined: quarantinedCount,
         }))
         fetchAccounts()
         onRefresh()

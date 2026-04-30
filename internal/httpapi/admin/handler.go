@@ -23,12 +23,21 @@ type Handler struct {
 	DS          adminshared.DeepSeekCaller
 	OpenAI      adminshared.OpenAIChatCaller
 	ChatHistory *chathistory.Store
+	// QuarantineSweeper is wired through to the accounts sub-handler so its
+	// manual /admin/accounts/quarantine/sweep endpoint can trigger an
+	// immediate sweep without spawning a duplicate goroutine. Optional in
+	// tests — when nil the manual-sweep endpoint returns 503.
+	QuarantineSweeper *adminaccounts.Sweeper
 }
 
 func RegisterRoutes(r chi.Router, h *Handler) {
 	deps := adminsharedDeps(h)
+	var sweeper *adminaccounts.Sweeper
+	if h != nil {
+		sweeper = h.QuarantineSweeper
+	}
 	authHandler := &adminauth.Handler{Store: deps.Store, Pool: deps.Pool, DS: deps.DS, OpenAI: deps.OpenAI, ChatHistory: deps.ChatHistory}
-	accountsHandler := &adminaccounts.Handler{Store: deps.Store, Pool: deps.Pool, DS: deps.DS, OpenAI: deps.OpenAI, ChatHistory: deps.ChatHistory}
+	accountsHandler := &adminaccounts.Handler{Store: deps.Store, Pool: deps.Pool, DS: deps.DS, OpenAI: deps.OpenAI, ChatHistory: deps.ChatHistory, Sweeper: sweeper}
 	configHandler := &adminconfig.Handler{Store: deps.Store, Pool: deps.Pool, DS: deps.DS, OpenAI: deps.OpenAI, ChatHistory: deps.ChatHistory}
 	settingsHandler := &adminsettings.Handler{Store: deps.Store, Pool: deps.Pool, DS: deps.DS, OpenAI: deps.OpenAI, ChatHistory: deps.ChatHistory}
 	proxiesHandler := &adminproxies.Handler{Store: deps.Store, Pool: deps.Pool, DS: deps.DS, OpenAI: deps.OpenAI, ChatHistory: deps.ChatHistory}

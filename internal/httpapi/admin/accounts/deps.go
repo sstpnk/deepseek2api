@@ -14,6 +14,11 @@ type Handler struct {
 	DS          adminshared.DeepSeekCaller
 	OpenAI      adminshared.OpenAIChatCaller
 	ChatHistory *chathistory.Store
+	// Sweeper drives the periodic quarantine re-verification. Server bootstrap
+	// constructs a single Sweeper and shares it with the Handler so the
+	// /admin/accounts/quarantine/sweep endpoint can trigger an immediate run
+	// without spawning a competing background goroutine. Optional in tests.
+	Sweeper *Sweeper
 }
 
 var writeJSON = adminshared.WriteJSON

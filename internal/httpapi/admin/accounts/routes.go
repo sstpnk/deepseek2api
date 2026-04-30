@@ -19,6 +19,11 @@ func RegisterRoutes(r chi.Router, h *Handler) {
 	r.Post("/accounts/test", h.testSingleAccount)
 	r.Post("/accounts/test-all", h.testAllAccounts)
 	r.Post("/accounts/sessions/delete-all", h.deleteAllSessions)
+	r.Get("/accounts/quarantine", h.listQuarantine)
+	r.Post("/accounts/quarantine/sweep", h.sweepQuarantineNow)
+	r.Post("/accounts/quarantine/restore", h.restoreQuarantineEntry)
+	r.Post("/accounts/quarantine/{identifier}/restore", h.restoreQuarantineEntry)
+	r.Delete("/accounts/quarantine/{identifier}", h.deleteQuarantineEntry)
 	r.Post("/test", h.testAPI)
 }
 

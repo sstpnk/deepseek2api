@@ -113,9 +113,9 @@ export default function AccountsTable({
                         <span className="font-medium">{t('accountManager.testingAllAccounts')}</span>
                         <span className="text-muted-foreground">
                             {batchProgress.current} / {batchProgress.total}
-                            {batchProgress.deleted > 0 && (
-                                <span className="ml-2 text-destructive">
-                                    {t('accountManager.refreshDeletedSoFar', { n: batchProgress.deleted })}
+                            {batchProgress.quarantined > 0 && (
+                                <span className="ml-2 text-amber-500">
+                                    {t('accountManager.refreshQuarantinedSoFar', { n: batchProgress.quarantined })}
                                 </span>
                             )}
                         </span>
@@ -131,13 +131,13 @@ export default function AccountsTable({
                             {batchProgress.results.map((r, i) => (
                                 <div key={i} className={clsx(
                                     "text-xs px-2 py-1 rounded border truncate",
-                                    r.deleted
-                                        ? "bg-destructive/20 border-destructive/40 text-destructive font-medium"
+                                    r.quarantined
+                                        ? "bg-amber-500/20 border-amber-500/40 text-amber-500 font-medium"
                                         : r.success
                                             ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500"
                                             : "bg-destructive/10 border-destructive/20 text-destructive"
                                 )}>
-                                    {r.deleted ? '🗑' : (r.success ? '✓' : '✗')} {r.id}
+                                    {r.quarantined ? '⏸' : (r.success ? '✓' : '✗')} {r.id}
                                 </div>
                             ))}
                         </div>
