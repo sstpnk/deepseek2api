@@ -120,6 +120,10 @@ func writeUpstreamEmptyOutputError(w http.ResponseWriter, text, thinking string,
 	return shared.WriteUpstreamEmptyOutputError(w, text, thinking, contentFilter)
 }
 
+func promoteThinkingWhenTextEmpty(text, thinking string, contentFilter bool) (string, bool) {
+	return shared.PromoteThinkingWhenTextEmpty(text, thinking, contentFilter)
+}
+
 func emptyOutputRetryEnabled() bool {
 	return shared.EmptyOutputRetryEnabled()
 }

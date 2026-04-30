@@ -44,8 +44,77 @@ func (h *Handler) testSingleAccount(w http.ResponseWriter, r *http.Request) {
 		model = "deepseek-v4-flash"
 	}
 	message, _ := req["message"].(string)
+	autoDelete, _ := req["auto_delete"].(bool)
 	result := h.testAccount(r.Context(), acc, model, message)
+	if autoDelete && h.maybeAutoDeleteFailedAccount(r.Context(), acc, result) {
+		h.Pool.Reset()
+	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+// maybeAutoDeleteFailedAccount inspects a failed test result and, when the
+// caller opted into auto-deletion, runs a two-strike Login verification before
+// removing the account. It mutates result in place to record the outcome:
+//   - result["verified_unusable"] = true   if both verification logins failed
+//   - result["deleted"] = true             if the account was removed
+//   - result["delete_error"] = "..."       if removal failed
+//
+// Returns true when an account was actually deleted. The caller is
+// responsible for calling Pool.Reset() once after any batch of removals so the
+// pool's queue reflects the smaller account set; see testAllAccounts and
+// testSingleAccount for the two call sites.
+//
+// Only call this when result["success"] is false; success accounts are not
+// touched even if auto_delete is enabled.
+func (h *Handler) maybeAutoDeleteFailedAccount(ctx context.Context, acc config.Account, result map[string]any) bool {
+	if ok, _ := result["success"].(bool); ok {
+		return false
+	}
+	if !h.verifyAccountUnusable(ctx, acc) {
+		return false
+	}
+	result["verified_unusable"] = true
+	if err := h.deleteAccountByIdentifierInternal(acc.Identifier()); err != nil {
+		result["delete_error"] = err.Error()
+		return false
+	}
+	result["deleted"] = true
+	return true
+}
+
+// verifyAccountUnusable performs two consecutive Login attempts against the
+// upstream. Both must fail for the account to be considered confirmed-broken.
+// This filters most transient network blips: a single failed attempt is not
+// enough to trigger deletion. The two attempts go through the same per-account
+// proxy as the regular login path, so a flaky proxy will register as a failure
+// — the user opts into this risk by enabling auto_delete.
+func (h *Handler) verifyAccountUnusable(ctx context.Context, acc config.Account) bool {
+	if _, err := h.DS.Login(ctx, acc); err == nil {
+		return false
+	}
+	if _, err := h.DS.Login(ctx, acc); err == nil {
+		return false
+	}
+	return true
+}
+
+// deleteAccountByIdentifierInternal removes a single account from the store
+// without touching Pool. The caller is responsible for Pool.Reset() once after
+// any batch of removals to avoid Reset thrash under concurrent test workers.
+func (h *Handler) deleteAccountByIdentifierInternal(identifier string) error {
+	identifier = strings.TrimSpace(identifier)
+	if identifier == "" {
+		return fmt.Errorf("identifier 为空")
+	}
+	return h.Store.Update(func(c *config.Config) error {
+		for i, a := range c.Accounts {
+			if accountMatchesIdentifier(a, identifier) {
+				c.Accounts = append(c.Accounts[:i], c.Accounts[i+1:]...)
+				return nil
+			}
+		}
+		return fmt.Errorf("账号不存在: %s", identifier)
+	})
 }
 
 func (h *Handler) testAllAccounts(w http.ResponseWriter, r *http.Request) {
@@ -55,25 +124,100 @@ func (h *Handler) testAllAccounts(w http.ResponseWriter, r *http.Request) {
 	if model == "" {
 		model = "deepseek-v4-flash"
 	}
+	autoDelete, _ := req["auto_delete"].(bool)
+	concurrency := clampConcurrency(intFromRequest(req, "concurrency", defaultRefreshConcurrency))
+
 	accounts := h.Store.Snapshot().Accounts
 	if len(accounts) == 0 {
-		writeJSON(w, http.StatusOK, map[string]any{"total": 0, "success": 0, "failed": 0, "results": []any{}})
+		writeJSON(w, http.StatusOK, map[string]any{"total": 0, "success": 0, "failed": 0, "deleted": 0, "results": []any{}, "deleted_accounts": []any{}})
 		return
 	}
 
-	// Concurrent testing with a semaphore to limit parallelism.
-	const maxConcurrency = 5
-	results := runAccountTestsConcurrently(accounts, maxConcurrency, func(_ int, account config.Account) map[string]any {
-		return h.testAccount(r.Context(), account, model, "")
+	results := runAccountTestsConcurrently(accounts, concurrency, func(_ int, account config.Account) map[string]any {
+		res := h.testAccount(r.Context(), account, model, "")
+		if autoDelete {
+			h.maybeAutoDeleteFailedAccount(r.Context(), account, res)
+		}
+		return res
 	})
 
 	success := 0
+	deletedIDs := make([]string, 0)
 	for _, res := range results {
 		if ok, _ := res["success"].(bool); ok {
 			success++
 		}
+		if dl, _ := res["deleted"].(bool); dl {
+			id, _ := res["account"].(string)
+			if id != "" {
+				deletedIDs = append(deletedIDs, id)
+			}
+		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"total": len(accounts), "success": success, "failed": len(accounts) - success, "results": results})
+	// Single Pool.Reset for the whole batch — the per-test goroutines mutate
+	// store.Accounts via deleteAccountByIdentifierInternal under the store
+	// mutex, but Pool.queue is rebuilt only here so live traffic doesn't see
+	// the queue churned 1×N times for a refresh-all run.
+	if len(deletedIDs) > 0 {
+		h.Pool.Reset()
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"total":            len(accounts),
+		"success":          success,
+		"failed":           len(accounts) - success,
+		"deleted":          len(deletedIDs),
+		"deleted_accounts": deletedIDs,
+		"concurrency":      concurrency,
+		"auto_delete":      autoDelete,
+		"results":          results,
+	})
+}
+
+// Concurrency bounds for the bulk refresh path. Capped to keep upstream load
+// manageable and to avoid pathological goroutine counts on huge account lists.
+const (
+	defaultRefreshConcurrency = 10
+	minRefreshConcurrency     = 1
+	maxRefreshConcurrency     = 20
+)
+
+func clampConcurrency(n int) int {
+	if n < minRefreshConcurrency {
+		return minRefreshConcurrency
+	}
+	if n > maxRefreshConcurrency {
+		return maxRefreshConcurrency
+	}
+	return n
+}
+
+// intFromRequest reads an integer from a JSON-decoded map. JSON numbers come
+// back as float64; we accept that plus a few common alternatives so the
+// frontend can send either a number or a string.
+func intFromRequest(req map[string]any, key string, fallback int) int {
+	if req == nil {
+		return fallback
+	}
+	v, ok := req[key]
+	if !ok || v == nil {
+		return fallback
+	}
+	switch x := v.(type) {
+	case float64:
+		return int(x)
+	case int:
+		return x
+	case string:
+		s := strings.TrimSpace(x)
+		if s == "" {
+			return fallback
+		}
+		var n int
+		if _, err := fmt.Sscanf(s, "%d", &n); err == nil {
+			return n
+		}
+	}
+	return fallback
 }
 
 func runAccountTestsConcurrently(accounts []config.Account, maxConcurrency int, testFn func(int, config.Account) map[string]any) []map[string]any {

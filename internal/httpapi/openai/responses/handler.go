@@ -102,12 +102,20 @@ func replaceCitationMarkersWithLinks(text string, links map[int]string) string {
 	return shared.ReplaceCitationMarkersWithLinks(text, links)
 }
 
+func shouldWriteUpstreamEmptyOutputError(text string) bool {
+	return shared.ShouldWriteUpstreamEmptyOutputError(text)
+}
+
 func upstreamEmptyOutputDetail(contentFilter bool, text, thinking string) (int, string, string) {
 	return shared.UpstreamEmptyOutputDetail(contentFilter, text, thinking)
 }
 
 func writeUpstreamEmptyOutputError(w http.ResponseWriter, text, thinking string, contentFilter bool) bool {
 	return shared.WriteUpstreamEmptyOutputError(w, text, thinking, contentFilter)
+}
+
+func promoteThinkingWhenTextEmpty(text, thinking string, contentFilter bool) (string, bool) {
+	return shared.PromoteThinkingWhenTextEmpty(text, thinking, contentFilter)
 }
 
 func emptyOutputRetryEnabled() bool {

@@ -209,3 +209,189 @@ func TestTestAccount_MessageModeUsesVisionModelTypeForVisionModel(t *testing.T) 
 		t.Fatalf("expected model_type vision, got %#v", got)
 	}
 }
+
+// alwaysFailLoginDSMock simulates a permanently broken account: every Login
+// returns an authentication error. Used to verify auto-delete confirms the
+// account is unusable via the two-strike Login probe before deleting.
+type alwaysFailLoginDSMock struct {
+	loginCalls int
+}
+
+func (m *alwaysFailLoginDSMock) Login(_ context.Context, _ config.Account) (string, error) {
+	m.loginCalls++
+	return "", errors.New("login failed: invalid credentials")
+}
+
+func (m *alwaysFailLoginDSMock) CreateSession(_ context.Context, _ *auth.RequestAuth, _ int) (string, error) {
+	return "", errors.New("create session should not be reached")
+}
+
+func (m *alwaysFailLoginDSMock) GetPow(_ context.Context, _ *auth.RequestAuth, _ int) (string, error) {
+	return "", errors.New("get pow should not be reached")
+}
+
+func (m *alwaysFailLoginDSMock) CallCompletion(_ context.Context, _ *auth.RequestAuth, _ map[string]any, _ string, _ int) (*http.Response, error) {
+	return nil, errors.New("completion should not be reached")
+}
+
+func (m *alwaysFailLoginDSMock) DeleteAllSessionsForToken(_ context.Context, _ string) error {
+	return nil
+}
+
+func (m *alwaysFailLoginDSMock) GetSessionCountForToken(_ context.Context, _ string) (*dsclient.SessionStats, error) {
+	return nil, errors.New("session count should not be reached")
+}
+
+func TestTestSingleAccount_AutoDeleteRemovesAccountWhenLoginFailsTwice(t *testing.T) {
+	srv := newHTTPAdminHarness(t, `{"accounts":[{"email":"dead@example.com","password":"pwd","token":""}]}`, &alwaysFailLoginDSMock{})
+
+	body := []byte(`{"identifier":"dead@example.com","auto_delete":true}`)
+	req := adminReq(http.MethodPost, "/accounts/test", body)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if ok, _ := resp["success"].(bool); ok {
+		t.Fatalf("expected success=false for failing login, got %#v", resp)
+	}
+	if got, _ := resp["verified_unusable"].(bool); !got {
+		t.Fatalf("expected verified_unusable=true, got %#v", resp)
+	}
+	if got, _ := resp["deleted"].(bool); !got {
+		t.Fatalf("expected deleted=true after two-strike login fail, got %#v", resp)
+	}
+
+	// Account should be gone from the listing after auto-delete.
+	listReq := adminReq(http.MethodGet, "/accounts?page=1&page_size=10", nil)
+	listRec := httptest.NewRecorder()
+	srv.ServeHTTP(listRec, listReq)
+	var listResp map[string]any
+	_ = json.Unmarshal(listRec.Body.Bytes(), &listResp)
+	if total, _ := listResp["total"].(float64); total != 0 {
+		t.Fatalf("expected zero accounts after auto-delete, got total=%v body=%s", total, listRec.Body.String())
+	}
+}
+
+// flakyLoginDSMock fails the first Login call (so testAccount returns failed)
+// but succeeds on the verification probes. Used to ensure transient failures
+// do not trigger auto-delete: the two-strike check requires BOTH probes to
+// fail.
+type flakyLoginDSMock struct {
+	loginCalls int
+}
+
+func (m *flakyLoginDSMock) Login(_ context.Context, _ config.Account) (string, error) {
+	m.loginCalls++
+	if m.loginCalls == 1 {
+		return "", errors.New("login failed: transient error")
+	}
+	return "good-token", nil
+}
+
+func (m *flakyLoginDSMock) CreateSession(_ context.Context, _ *auth.RequestAuth, _ int) (string, error) {
+	return "session-id", nil
+}
+
+func (m *flakyLoginDSMock) GetPow(_ context.Context, _ *auth.RequestAuth, _ int) (string, error) {
+	return "", errors.New("get pow should not be reached")
+}
+
+func (m *flakyLoginDSMock) CallCompletion(_ context.Context, _ *auth.RequestAuth, _ map[string]any, _ string, _ int) (*http.Response, error) {
+	return nil, errors.New("completion should not be reached")
+}
+
+func (m *flakyLoginDSMock) DeleteAllSessionsForToken(_ context.Context, _ string) error {
+	return nil
+}
+
+func (m *flakyLoginDSMock) GetSessionCountForToken(_ context.Context, _ string) (*dsclient.SessionStats, error) {
+	return &dsclient.SessionStats{Success: true}, nil
+}
+
+func TestTestSingleAccount_AutoDeleteSkippedWhenVerificationLoginSucceeds(t *testing.T) {
+	srv := newHTTPAdminHarness(t, `{"accounts":[{"email":"flaky@example.com","password":"pwd","token":""}]}`, &flakyLoginDSMock{})
+
+	body := []byte(`{"identifier":"flaky@example.com","auto_delete":true}`)
+	req := adminReq(http.MethodPost, "/accounts/test", body)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+	if got, _ := resp["deleted"].(bool); got {
+		t.Fatalf("expected NOT deleted when verification login succeeds, got %#v", resp)
+	}
+	if got, _ := resp["verified_unusable"].(bool); got {
+		t.Fatalf("expected verified_unusable=false when verification recovers, got %#v", resp)
+	}
+
+	// Account should still be present.
+	listReq := adminReq(http.MethodGet, "/accounts?page=1&page_size=10", nil)
+	listRec := httptest.NewRecorder()
+	srv.ServeHTTP(listRec, listReq)
+	var listResp map[string]any
+	_ = json.Unmarshal(listRec.Body.Bytes(), &listResp)
+	if total, _ := listResp["total"].(float64); total != 1 {
+		t.Fatalf("expected account preserved when verification recovers, got total=%v", total)
+	}
+}
+
+func TestTestAllAccounts_AutoDeleteRemovesOnlyConfirmedDeadAccounts(t *testing.T) {
+	const cfg = `{"accounts":[
+		{"email":"dead1@example.com","password":"pwd","token":""},
+		{"email":"dead2@example.com","password":"pwd","token":""}
+	]}`
+	srv := newHTTPAdminHarness(t, cfg, &alwaysFailLoginDSMock{})
+
+	body := []byte(`{"auto_delete":true,"concurrency":4}`)
+	req := adminReq(http.MethodPost, "/accounts/test-all", body)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+	if got, _ := resp["deleted"].(float64); got != 2 {
+		t.Fatalf("expected deleted=2, got %v body=%s", got, rec.Body.String())
+	}
+	if got, _ := resp["concurrency"].(float64); got != 4 {
+		t.Fatalf("expected concurrency=4 in response, got %v", got)
+	}
+	listReq := adminReq(http.MethodGet, "/accounts?page=1&page_size=10", nil)
+	listRec := httptest.NewRecorder()
+	srv.ServeHTTP(listRec, listReq)
+	var listResp map[string]any
+	_ = json.Unmarshal(listRec.Body.Bytes(), &listResp)
+	if total, _ := listResp["total"].(float64); total != 0 {
+		t.Fatalf("expected both accounts deleted, got total=%v", total)
+	}
+}
+
+func TestClampConcurrencyClampsToBounds(t *testing.T) {
+	cases := []struct {
+		in, want int
+	}{
+		{-5, minRefreshConcurrency},
+		{0, minRefreshConcurrency},
+		{1, 1},
+		{10, 10},
+		{20, 20},
+		{50, maxRefreshConcurrency},
+	}
+	for _, tc := range cases {
+		if got := clampConcurrency(tc.in); got != tc.want {
+			t.Fatalf("clampConcurrency(%d)=%d want %d", tc.in, got, tc.want)
+		}
+	}
+}

@@ -123,7 +123,7 @@ func TestHandleNonStreamReturnsContentFilterErrorWhenUpstreamFilteredWithoutOutp
 	}
 }
 
-func TestHandleNonStreamReturns429WhenUpstreamHasOnlyThinking(t *testing.T) {
+func TestHandleNonStreamPromotesThinkingWhenUpstreamVisibleEmpty(t *testing.T) {
 	h := &Handler{}
 	resp := makeSSEHTTPResponse(
 		`data: {"p":"response/thinking_content","v":"Only thinking"}`,
@@ -132,13 +132,21 @@ func TestHandleNonStreamReturns429WhenUpstreamHasOnlyThinking(t *testing.T) {
 	rec := httptest.NewRecorder()
 
 	h.handleNonStream(rec, resp, "cid-thinking-only", "deepseek-v4-pro", "prompt", true, false, nil, nil, nil)
-	if rec.Code != http.StatusTooManyRequests {
-		t.Fatalf("expected status 429 for thinking-only upstream output, got %d body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 with thinking promoted to content, got %d body=%s", rec.Code, rec.Body.String())
 	}
 	out := decodeJSONBody(t, rec.Body.String())
-	errObj, _ := out["error"].(map[string]any)
-	if asString(errObj["code"]) != "upstream_empty_output" {
-		t.Fatalf("expected code=upstream_empty_output, got %#v", out)
+	choices, _ := out["choices"].([]any)
+	if len(choices) != 1 {
+		t.Fatalf("expected one choice, got %#v", out)
+	}
+	choice, _ := choices[0].(map[string]any)
+	msg, _ := choice["message"].(map[string]any)
+	if s, _ := msg["content"].(string); s != "Only thinking" {
+		t.Fatalf("expected thinking promoted to content, got %#v", msg)
+	}
+	if s, _ := msg["reasoning_content"].(string); s != "Only thinking" {
+		t.Fatalf("expected reasoning_content preserved, got %#v", msg)
 	}
 }
 

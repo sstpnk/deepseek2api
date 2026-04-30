@@ -4,7 +4,8 @@ import clsx from 'clsx'
 
 import { useI18n } from '../../i18n'
 
-const LIMIT_OPTIONS = [0, 10, 20, 50]
+const LIMIT_OPTIONS = [0, 10, 20, 50, 100, 1000, 10000, 100000]
+const DEFAULT_LIMIT = 100000
 const DISABLED_LIMIT = 0
 const MESSAGE_COLLAPSE_AT = 700
 const VIEW_MODE_KEY = 'ds2api_chat_history_view_mode'
@@ -595,7 +596,7 @@ export default function ChatHistoryContainer({ authFetch, onMessage }) {
     const { t, lang } = useI18n()
     const apiFetch = authFetch || fetch
     const [items, setItems] = useState([])
-    const [limit, setLimit] = useState(20)
+    const [limit, setLimit] = useState(DEFAULT_LIMIT)
     const [loading, setLoading] = useState(true)
     const [refreshing, setRefreshing] = useState(false)
     const [selectedId, setSelectedId] = useState('')
@@ -662,7 +663,7 @@ export default function ChatHistoryContainer({ authFetch, onMessage }) {
                 throw new Error(data?.detail || t('chatHistory.loadFailed'))
             }
             listETagRef.current = res.headers.get('ETag') || ''
-            setLimit(typeof data.limit === 'number' ? data.limit : 20)
+            setLimit(typeof data.limit === 'number' ? data.limit : DEFAULT_LIMIT)
             syncItems(Array.isArray(data.items) ? data.items : [])
         } catch (error) {
             setDetail(error.message || t('chatHistory.loadFailed'))

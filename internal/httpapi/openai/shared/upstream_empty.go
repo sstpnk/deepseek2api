@@ -1,9 +1,29 @@
 package shared
 
-import "net/http"
+import (
+	"net/http"
+	"strings"
+)
 
 func ShouldWriteUpstreamEmptyOutputError(text string) bool {
 	return text == ""
+}
+
+// PromoteThinkingWhenTextEmpty returns the text to use as the visible output
+// when the upstream reasoner dumped the entire answer into the thinking
+// channel. Returns (newText, promoted). Content-filter responses are left
+// untouched so we still surface the filter error to the caller.
+func PromoteThinkingWhenTextEmpty(text, thinking string, contentFilter bool) (string, bool) {
+	if contentFilter {
+		return text, false
+	}
+	if strings.TrimSpace(text) != "" {
+		return text, false
+	}
+	if strings.TrimSpace(thinking) == "" {
+		return text, false
+	}
+	return thinking, true
 }
 
 func UpstreamEmptyOutputDetail(contentFilter bool, text, thinking string) (int, string, string) {

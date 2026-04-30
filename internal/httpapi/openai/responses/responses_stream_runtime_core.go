@@ -160,23 +160,33 @@ func (s *responsesStreamRuntime) finalize(finishReason string, deferEmptyOutput 
 		}
 	}
 
-	s.closeMessageItem()
-
 	if s.toolChoice.IsRequired() && len(detected) == 0 {
+		s.closeMessageItem()
 		s.failResponse(http.StatusUnprocessableEntity, "tool_choice requires at least one valid tool call.", "tool_choice_violation")
 		return true
 	}
 	if len(detected) == 0 && strings.TrimSpace(finalText) == "" {
-		status, message, code := upstreamEmptyOutputDetail(finishReason == "content_filter", finalText, finalThinking)
 		if deferEmptyOutput {
+			status, message, code := upstreamEmptyOutputDetail(finishReason == "content_filter", finalText, finalThinking)
+			s.closeMessageItem()
 			s.finalErrorStatus = status
 			s.finalErrorMessage = message
 			s.finalErrorCode = code
 			return false
 		}
-		s.failResponse(status, message, code)
-		return true
+		// Retry budget exhausted: surface thinking as visible content if the
+		// upstream reasoner emitted the entire answer there. Otherwise fail.
+		if promoted, ok := promoteThinkingWhenTextEmpty(finalText, finalThinking, finishReason == "content_filter"); ok {
+			s.emitTextDelta(promoted)
+			finalText = promoted
+		} else {
+			status, message, code := upstreamEmptyOutputDetail(finishReason == "content_filter", finalText, finalThinking)
+			s.closeMessageItem()
+			s.failResponse(status, message, code)
+			return true
+		}
 	}
+	s.closeMessageItem()
 	s.closeIncompleteFunctionItems()
 
 	obj := s.buildCompletedResponseObject(finalThinking, finalText, detected)

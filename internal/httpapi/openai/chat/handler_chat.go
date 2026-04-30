@@ -169,12 +169,16 @@ func (h *Handler) handleNonStream(w http.ResponseWriter, resp *http.Response, co
 	}
 	detected := detectAssistantToolCalls(finalText, finalThinking, finalToolDetectionThinking, toolNames)
 	if shouldWriteUpstreamEmptyOutputError(finalText) && len(detected.Calls) == 0 {
-		status, message, code := upstreamEmptyOutputDetail(result.ContentFilter, finalText, finalThinking)
-		if historySession != nil {
-			historySession.error(status, message, code, finalThinking, finalText)
+		if promoted, ok := promoteThinkingWhenTextEmpty(finalText, finalThinking, result.ContentFilter); ok {
+			finalText = promoted
+		} else {
+			status, message, code := upstreamEmptyOutputDetail(result.ContentFilter, finalText, finalThinking)
+			if historySession != nil {
+				historySession.error(status, message, code, finalThinking, finalText)
+			}
+			writeUpstreamEmptyOutputError(w, finalText, finalThinking, result.ContentFilter)
+			return
 		}
-		writeUpstreamEmptyOutputError(w, finalText, finalThinking, result.ContentFilter)
-		return
 	}
 	respBody := openaifmt.BuildChatCompletionWithToolCalls(completionID, model, finalPrompt, finalThinking, finalText, detected.Calls, toolsRaw)
 	finishReason := "stop"

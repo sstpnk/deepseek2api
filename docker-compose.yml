@@ -1,6 +1,10 @@
 services:
   ds2api:
-    image: ghcr.io/cjackhwang/ds2api:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime-from-source
+    image: ds2api-local:latest
     container_name: ds2api
     restart: always
     env_file:
@@ -10,6 +14,7 @@ services:
       - "${DS2API_HOST_PORT:-6011}:5001"
     volumes:
       - ./config.json:/app/config.json    # 配置文件
+      - ./data:/app/data                  # 聊天历史与持久化数据
     environment:
       - TZ=Asia/Shanghai
       - LOG_LEVEL=INFO

@@ -148,7 +148,7 @@ func TestStoreDeleteClearAndLimitValidation(t *testing.T) {
 	if len(snapshot.Items) != 0 {
 		t.Fatalf("expected empty items after delete, got %d", len(snapshot.Items))
 	}
-	if _, err := store.SetLimit(999); err == nil {
+	if _, err := store.SetLimit(-1); err == nil {
 		t.Fatalf("expected invalid limit error")
 	}
 	if err := store.Clear(); err != nil {

@@ -54,6 +54,8 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
         testing,
         testingAll,
         batchProgress,
+        refreshOptions,
+        setRefreshOptions,
         sessionCounts,
         deletingSessions,
         updatingProxy,
@@ -142,6 +144,8 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
                 searchQuery={searchQuery}
                 onSearchChange={handleSearchChange}
                 envBacked={Boolean(config?.env_backed)}
+                refreshOptions={refreshOptions}
+                onRefreshOptionsChange={setRefreshOptions}
             />
 
             <AddKeyModal

@@ -67,3 +67,10 @@ CLAUDE.local.md
 data/
 .codex
 .roomodes
+
+# Local upgrade/backup artifacts (host-only, never commit)
+.backup-config-*
+.backup-data-*/
+.upgrade-backup-*
+1panel-*
+*.bak.*

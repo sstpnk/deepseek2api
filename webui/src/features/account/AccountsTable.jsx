@@ -31,6 +31,8 @@ export default function AccountsTable({
     searchQuery,
     onSearchChange,
     envBacked = false,
+    refreshOptions = { concurrency: 10, autoDelete: false },
+    onRefreshOptionsChange = () => {},
 }) {
     const [copiedId, setCopiedId] = useState(null)
 
@@ -55,6 +57,38 @@ export default function AccountsTable({
                         placeholder={t('accountManager.searchPlaceholder')}
                         className="px-3 py-1.5 text-sm bg-muted border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground"
                     />
+                    <div className="flex items-center gap-1 px-2 py-1 bg-muted/40 border border-border rounded-lg text-xs">
+                        <label className="text-muted-foreground" title={t('accountManager.refreshConcurrencyHint')}>
+                            {t('accountManager.refreshConcurrencyLabel')}
+                        </label>
+                        <input
+                            type="number"
+                            min={1}
+                            max={20}
+                            value={refreshOptions.concurrency}
+                            onChange={e => onRefreshOptionsChange({
+                                ...refreshOptions,
+                                concurrency: Math.max(1, Math.min(20, parseInt(e.target.value, 10) || 1)),
+                            })}
+                            disabled={testingAll}
+                            className="w-12 px-1 py-0.5 bg-background border border-border rounded text-center focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                        />
+                        <label className="flex items-center gap-1 ml-2 text-muted-foreground cursor-pointer" title={t('accountManager.refreshAutoDeleteHint')}>
+                            <input
+                                type="checkbox"
+                                checked={!!refreshOptions.autoDelete}
+                                onChange={e => onRefreshOptionsChange({
+                                    ...refreshOptions,
+                                    autoDelete: e.target.checked,
+                                })}
+                                disabled={testingAll}
+                                className="rounded border-border"
+                            />
+                            <span className={clsx(refreshOptions.autoDelete && 'text-destructive font-medium')}>
+                                {t('accountManager.refreshAutoDeleteLabel')}
+                            </span>
+                        </label>
+                    </div>
                     <button
                         onClick={onTestAll}
                         disabled={testingAll || totalAccounts === 0}
@@ -77,7 +111,14 @@ export default function AccountsTable({
                 <div className="p-4 border-b border-border bg-muted/30">
                     <div className="flex items-center justify-between text-sm mb-2">
                         <span className="font-medium">{t('accountManager.testingAllAccounts')}</span>
-                        <span className="text-muted-foreground">{batchProgress.current} / {batchProgress.total}</span>
+                        <span className="text-muted-foreground">
+                            {batchProgress.current} / {batchProgress.total}
+                            {batchProgress.deleted > 0 && (
+                                <span className="ml-2 text-destructive">
+                                    {t('accountManager.refreshDeletedSoFar', { n: batchProgress.deleted })}
+                                </span>
+                            )}
+                        </span>
                     </div>
                     <div className="w-full bg-muted rounded-full h-2 overflow-hidden mb-4">
                         <div
@@ -90,9 +131,13 @@ export default function AccountsTable({
                             {batchProgress.results.map((r, i) => (
                                 <div key={i} className={clsx(
                                     "text-xs px-2 py-1 rounded border truncate",
-                                    r.success ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500" : "bg-destructive/10 border-destructive/20 text-destructive"
+                                    r.deleted
+                                        ? "bg-destructive/20 border-destructive/40 text-destructive font-medium"
+                                        : r.success
+                                            ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500"
+                                            : "bg-destructive/10 border-destructive/20 text-destructive"
                                 )}>
-                                    {r.success ? '✓' : '✗'} {r.id}
+                                    {r.deleted ? '🗑' : (r.success ? '✓' : '✗')} {r.id}
                                 </div>
                             ))}
                         </div>

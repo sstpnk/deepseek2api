@@ -19,17 +19,15 @@ import (
 const (
 	FileVersion      = 2
 	DisabledLimit    = 0
-	DefaultLimit     = 20
-	MaxLimit         = 50
+	DefaultLimit     = 100000
+	MaxLimit         = 100000
 	defaultPreviewAt = 160
-)
 
-var allowedLimits = map[int]struct{}{
-	DisabledLimit: {},
-	10:            {},
-	20:            {},
-	50:            {},
-}
+	// MaxStorageBytes caps the on-disk footprint of the chat-history detail
+	// directory. When the total size of retained detail files exceeds this
+	// budget, the oldest entries are evicted until the total fits.
+	MaxStorageBytes int64 = 80 * 1024 * 1024 * 1024
+)
 
 var ErrDisabled = errors.New("chat history disabled")
 
@@ -134,6 +132,10 @@ type Store struct {
 	details   map[string]Entry
 	dirty     map[string]struct{}
 	deleted   map[string]struct{}
+	// sizeIndex tracks the on-disk byte size of each detail file keyed by
+	// entry ID, so eviction by storage budget does not require re-stat'ing
+	// the filesystem on every write.
+	sizeIndex map[string]int64
 	err       error
 }
 
@@ -147,9 +149,10 @@ func New(path string) *Store {
 			Revision: 0,
 			Items:    []SummaryEntry{},
 		},
-		details: map[string]Entry{},
-		dirty:   map[string]struct{}{},
-		deleted: map[string]struct{}{},
+		details:   map[string]Entry{},
+		dirty:     map[string]struct{}{},
+		deleted:   map[string]struct{}{},
+		sizeIndex: map[string]int64{},
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -451,6 +454,7 @@ func (s *Store) loadLocked() error {
 		}
 		s.details[item.ID] = detail
 	}
+	s.initSizeIndexLocked()
 	s.rebuildIndexLocked()
 	if saveErr := s.saveLocked(); saveErr != nil {
 		config.Logger.Warn("[chat_history] index rewrite failed", "path", s.path, "error", saveErr)
@@ -522,6 +526,10 @@ func (s *Store) saveLocked() error {
 		if err := writeFileAtomic(path, append(payload, '\n')); err != nil {
 			return err
 		}
+		if s.sizeIndex == nil {
+			s.sizeIndex = map[string]int64{}
+		}
+		s.sizeIndex[id] = int64(len(payload)) + 1
 	}
 
 	payload, err := json.MarshalIndent(s.state, "", "  ")
@@ -551,6 +559,7 @@ func (s *Store) rebuildIndexLocked() {
 	}
 	if s.state.Limit == DisabledLimit {
 		s.state.Items = summaries
+		s.evictBySizeLocked()
 		return
 	}
 	if len(summaries) > s.state.Limit {
@@ -567,6 +576,35 @@ func (s *Store) rebuildIndexLocked() {
 		summaries = summaries[:s.state.Limit]
 	}
 	s.state.Items = summaries
+	s.evictBySizeLocked()
+}
+
+// evictBySizeLocked drops the oldest retained entries while the total
+// detail-file footprint exceeds MaxStorageBytes. Items are already ordered
+// newest-first in s.state.Items, so we walk from the front and start
+// dropping once the running total breaches the budget.
+func (s *Store) evictBySizeLocked() {
+	if MaxStorageBytes <= 0 || len(s.state.Items) == 0 {
+		return
+	}
+	var total int64
+	keepEnd := len(s.state.Items)
+	for i, sum := range s.state.Items {
+		sz := s.sizeIndex[sum.ID]
+		if total+sz > MaxStorageBytes {
+			keepEnd = i
+			break
+		}
+		total += sz
+	}
+	if keepEnd >= len(s.state.Items) {
+		return
+	}
+	for _, sum := range s.state.Items[keepEnd:] {
+		s.markDetailDeletedLocked(sum.ID)
+		delete(s.details, sum.ID)
+	}
+	s.state.Items = s.state.Items[:keepEnd]
 }
 
 func (s *Store) nextRevisionLocked() int64 {
@@ -708,8 +746,7 @@ func DetailETag(id string, revision int64) string {
 }
 
 func isAllowedLimit(limit int) bool {
-	_, ok := allowedLimits[limit]
-	return ok
+	return limit >= DisabledLimit && limit <= MaxLimit
 }
 
 func (s *Store) markDetailDirtyLocked(id string) {
@@ -723,8 +760,18 @@ func (s *Store) markDetailDirtyLocked(id string) {
 	if s.deleted == nil {
 		s.deleted = map[string]struct{}{}
 	}
+	if s.sizeIndex == nil {
+		s.sizeIndex = map[string]int64{}
+	}
 	s.dirty[id] = struct{}{}
 	delete(s.deleted, id)
+	// Estimate the on-disk size of the (about-to-be-written) detail file so
+	// rebuildIndexLocked can apply the storage budget before saveLocked runs.
+	if item, ok := s.details[id]; ok {
+		if payload, err := json.MarshalIndent(detailEnvelope{Version: FileVersion, Item: item}, "", "  "); err == nil {
+			s.sizeIndex[id] = int64(len(payload)) + 1 // +1 for trailing newline appended in saveLocked
+		}
+	}
 }
 
 func (s *Store) markDetailDeletedLocked(id string) {
@@ -740,6 +787,36 @@ func (s *Store) markDetailDeletedLocked(id string) {
 	}
 	s.deleted[id] = struct{}{}
 	delete(s.dirty, id)
+	delete(s.sizeIndex, id)
+}
+
+// initSizeIndexLocked walks the detail directory and primes sizeIndex with
+// each existing file's actual size. Used after a fresh load so eviction by
+// storage budget is accurate without re-marshalling every entry.
+func (s *Store) initSizeIndexLocked() {
+	s.sizeIndex = map[string]int64{}
+	if strings.TrimSpace(s.detailDir) == "" {
+		return
+	}
+	entries, err := os.ReadDir(s.detailDir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !strings.HasSuffix(name, ".json") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		id := strings.TrimSuffix(name, ".json")
+		s.sizeIndex[id] = info.Size()
+	}
 }
 
 func (s *Store) clearPendingDetailChangesLocked() {

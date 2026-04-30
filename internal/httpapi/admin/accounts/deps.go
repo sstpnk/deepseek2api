@@ -28,6 +28,9 @@ func maskSecretPreview(secret string) string {
 func toAccount(m map[string]any) config.Account {
 	return adminshared.ToAccount(m)
 }
+func fieldString(m map[string]any, key string) string {
+	return adminshared.FieldString(m, key)
+}
 func fieldStringOptional(m map[string]any, key string) (string, bool) {
 	return adminshared.FieldStringOptional(m, key)
 }

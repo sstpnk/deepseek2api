@@ -194,7 +194,7 @@ func TestHandleResponsesStreamRequiredToolChoiceFailure(t *testing.T) {
 	}
 }
 
-func TestHandleResponsesStreamFailsWhenUpstreamHasOnlyThinking(t *testing.T) {
+func TestHandleResponsesStreamPromotesThinkingWhenUpstreamVisibleEmpty(t *testing.T) {
 	h := &Handler{}
 	req := httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
 	rec := httptest.NewRecorder()
@@ -216,19 +216,22 @@ func TestHandleResponsesStreamFailsWhenUpstreamHasOnlyThinking(t *testing.T) {
 	h.handleResponsesStream(rec, req, resp, "owner-a", "resp_test", "deepseek-v4-pro", "prompt", true, false, nil, nil, promptcompat.DefaultToolChoicePolicy(), "")
 
 	body := rec.Body.String()
-	if !strings.Contains(body, "event: response.failed") {
-		t.Fatalf("expected response.failed event, body=%s", body)
+	if strings.Contains(body, "event: response.failed") {
+		t.Fatalf("did not expect response.failed when thinking can be promoted, body=%s", body)
 	}
-	if strings.Contains(body, "event: response.completed") {
-		t.Fatalf("did not expect response.completed, body=%s", body)
+	if !strings.Contains(body, "event: response.completed") {
+		t.Fatalf("expected response.completed event, body=%s", body)
 	}
-	payload, ok := extractSSEEventPayload(body, "response.failed")
+	if !strings.Contains(body, "response.output_text.delta") {
+		t.Fatalf("expected output_text.delta for promoted thinking, body=%s", body)
+	}
+	payload, ok := extractSSEEventPayload(body, "response.completed")
 	if !ok {
-		t.Fatalf("expected response.failed payload, body=%s", body)
+		t.Fatalf("expected response.completed payload, body=%s", body)
 	}
-	errObj, _ := payload["error"].(map[string]any)
-	if asString(errObj["code"]) != "upstream_empty_output" {
-		t.Fatalf("expected code=upstream_empty_output, got %#v", payload)
+	response, _ := payload["response"].(map[string]any)
+	if s, _ := response["output_text"].(string); s != "Only thinking" {
+		t.Fatalf("expected output_text promoted from thinking, got %#v", response)
 	}
 }
 
@@ -399,7 +402,7 @@ func TestHandleResponsesNonStreamReturnsContentFilterErrorWhenUpstreamFilteredWi
 	}
 }
 
-func TestHandleResponsesNonStreamReturns429WhenUpstreamHasOnlyThinking(t *testing.T) {
+func TestHandleResponsesNonStreamPromotesThinkingWhenUpstreamVisibleEmpty(t *testing.T) {
 	h := &Handler{}
 	rec := httptest.NewRecorder()
 	resp := &http.Response{
@@ -411,13 +414,12 @@ func TestHandleResponsesNonStreamReturns429WhenUpstreamHasOnlyThinking(t *testin
 	}
 
 	h.handleResponsesNonStream(rec, resp, "owner-a", "resp_test", "deepseek-v4-pro", "prompt", true, false, nil, nil, promptcompat.DefaultToolChoicePolicy(), "")
-	if rec.Code != http.StatusTooManyRequests {
-		t.Fatalf("expected 429 for thinking-only upstream output, got %d body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 with thinking promoted to content, got %d body=%s", rec.Code, rec.Body.String())
 	}
 	out := decodeJSONBody(t, rec.Body.String())
-	errObj, _ := out["error"].(map[string]any)
-	if asString(errObj["code"]) != "upstream_empty_output" {
-		t.Fatalf("expected code=upstream_empty_output, got %#v", out)
+	if s, _ := out["output_text"].(string); s != "Only thinking" {
+		t.Fatalf("expected output_text promoted from thinking, got %#v", out)
 	}
 }
 

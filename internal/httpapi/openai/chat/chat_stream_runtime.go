@@ -210,15 +210,36 @@ func (s *chatStreamRuntime) finalize(finishReason string, deferEmptyOutput bool)
 		finishReason = "tool_calls"
 	}
 	if len(detected.Calls) == 0 && !s.toolCallsEmitted && strings.TrimSpace(finalText) == "" {
-		status, message, code := upstreamEmptyOutputDetail(finishReason == "content_filter", finalText, finalThinking)
 		if deferEmptyOutput {
+			status, message, code := upstreamEmptyOutputDetail(finishReason == "content_filter", finalText, finalThinking)
 			s.finalErrorStatus = status
 			s.finalErrorMessage = message
 			s.finalErrorCode = code
 			return false
 		}
-		s.sendFailedChunk(status, message, code)
-		return true
+		// Retry budget exhausted: fall back to surfacing the thinking channel
+		// as visible content when the upstream reasoner emitted the entire
+		// answer there. Otherwise emit the standard failure frame.
+		if promoted, ok := promoteThinkingWhenTextEmpty(finalText, finalThinking, finishReason == "content_filter"); ok {
+			finalText = promoted
+			s.finalText = finalText
+			delta := map[string]any{"content": finalText}
+			if !s.firstChunkSent {
+				delta["role"] = "assistant"
+				s.firstChunkSent = true
+			}
+			s.sendChunk(openaifmt.BuildChatStreamChunk(
+				s.completionID,
+				s.created,
+				s.model,
+				[]map[string]any{openaifmt.BuildChatStreamDeltaChoice(0, delta)},
+				nil,
+			))
+		} else {
+			status, message, code := upstreamEmptyOutputDetail(finishReason == "content_filter", finalText, finalThinking)
+			s.sendFailedChunk(status, message, code)
+			return true
+		}
 	}
 	usage := openaifmt.BuildChatUsage(s.finalPrompt, finalThinking, finalText)
 	s.finalFinishReason = finishReason

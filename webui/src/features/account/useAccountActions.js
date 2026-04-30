@@ -13,7 +13,8 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
     const [loading, setLoading] = useState(false)
     const [testing, setTesting] = useState({})
     const [testingAll, setTestingAll] = useState(false)
-    const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0, results: [] })
+    const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0, results: [], deleted: 0 })
+    const [refreshOptions, setRefreshOptions] = useState({ concurrency: 10, autoDelete: false })
     const [sessionCounts, setSessionCounts] = useState({})
     const [deletingSessions, setDeletingSessions] = useState({})
     const [updatingProxy, setUpdatingProxy] = useState({})
@@ -241,42 +242,103 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
     }
 
     const testAllAccounts = async () => {
-        if (!confirm(t('accountManager.testAllConfirm'))) return
         const allAccounts = config.accounts || []
         if (allAccounts.length === 0) return
 
+        const autoDelete = !!refreshOptions.autoDelete
+        // Mirror the backend clamp [1, 20] so the UI never sends a value the
+        // server will silently drop.
+        const concurrency = Math.max(1, Math.min(20, parseInt(refreshOptions.concurrency, 10) || 10))
+
+        const confirmKey = autoDelete ? 'accountManager.testAllConfirmAutoDelete' : 'accountManager.testAllConfirm'
+        if (!confirm(t(confirmKey, { concurrency, total: allAccounts.length }))) return
+
         setTestingAll(true)
-        setBatchProgress({ current: 0, total: allAccounts.length, results: [] })
+        setBatchProgress({ current: 0, total: allAccounts.length, results: [], deleted: 0 })
 
-        let successCount = 0
+        // Resolve identifiers up front so workers can dequeue without touching
+        // the original config.accounts ordering. Entries with no identifier go
+        // straight to results as a parse failure.
+        const queue = []
         const results = []
-
-        for (let i = 0; i < allAccounts.length; i++) {
-            const acc = allAccounts[i]
+        for (const acc of allAccounts) {
             const id = resolveAccountIdentifier(acc)
             if (!id) {
                 results.push({ id: '-', success: false, message: t('accountManager.invalidIdentifier') })
-                setBatchProgress({ current: i + 1, total: allAccounts.length, results: [...results] })
-                continue
+            } else {
+                queue.push(id)
             }
+        }
 
+        let cursor = 0
+        let successCount = 0
+        let deletedCount = 0
+        let completed = results.length
+
+        // Update progress in the React state from a snapshot of the current
+        // closure variables. Called after every worker finishes one account so
+        // the UI reflects per-account completion in real time even though the
+        // workers run in parallel.
+        const flushProgress = () => {
+            setBatchProgress({
+                current: completed,
+                total: allAccounts.length,
+                results: [...results],
+                deleted: deletedCount,
+            })
+        }
+        flushProgress()
+
+        const runOne = async (id) => {
             try {
                 const res = await apiFetch('/admin/accounts/test', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ identifier: id }),
+                    body: JSON.stringify({ identifier: id, auto_delete: autoDelete }),
                 })
                 const data = await res.json()
-                results.push({ id, success: data.success, message: data.message, time: data.response_time })
+                results.push({
+                    id,
+                    success: !!data.success,
+                    message: data.message,
+                    time: data.response_time,
+                    deleted: !!data.deleted,
+                    verified_unusable: !!data.verified_unusable,
+                })
                 if (data.success) successCount++
+                if (data.deleted) deletedCount++
             } catch (e) {
                 results.push({ id, success: false, message: e.message })
             }
-
-            setBatchProgress({ current: i + 1, total: allAccounts.length, results: [...results] })
+            completed++
+            flushProgress()
         }
 
-        onMessage('success', t('accountManager.testAllCompleted', { success: successCount, total: allAccounts.length }))
+        const worker = async () => {
+            // Each worker pulls indices from the shared cursor until the queue
+            // is drained. Closure-captured cursor avoids needing a Mutex/Atomic
+            // in JS — the event loop serializes the reads.
+            while (true) {
+                const idx = cursor
+                if (idx >= queue.length) return
+                cursor = idx + 1
+                await runOne(queue[idx])
+            }
+        }
+
+        const workers = []
+        const workerCount = Math.min(concurrency, queue.length || 1)
+        for (let i = 0; i < workerCount; i++) workers.push(worker())
+        await Promise.all(workers)
+
+        const summaryKey = autoDelete && deletedCount > 0
+            ? 'accountManager.testAllCompletedWithDelete'
+            : 'accountManager.testAllCompleted'
+        onMessage('success', t(summaryKey, {
+            success: successCount,
+            total: allAccounts.length,
+            deleted: deletedCount,
+        }))
         fetchAccounts()
         onRefresh()
         setTestingAll(false)
@@ -370,6 +432,8 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
         testing,
         testingAll,
         batchProgress,
+        refreshOptions,
+        setRefreshOptions,
         sessionCounts,
         deletingSessions,
         updatingProxy,

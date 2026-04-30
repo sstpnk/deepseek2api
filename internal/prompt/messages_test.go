@@ -41,11 +41,35 @@ func TestMessagesPrepareUsesTurnSuffixes(t *testing.T) {
 	if !strings.Contains(got, "<｜User｜>Question") {
 		t.Fatalf("expected user question, got %q", got)
 	}
-	if !strings.Contains(got, "<｜Assistant｜>Answer<｜end▁of▁sentence｜>") {
-		t.Fatalf("expected assistant sentence suffix, got %q", got)
+	// When the assistant is the final message it is treated as a prefill
+	// prefix: no end-of-sentence marker, so the model continues writing.
+	if !strings.HasSuffix(got, "<｜Assistant｜>Answer") {
+		t.Fatalf("expected trailing assistant prefix without end-of-sentence marker, got %q", got)
+	}
+	if strings.Contains(got, "<｜Assistant｜>Answer<｜end▁of▁sentence｜>") {
+		t.Fatalf("final assistant should remain half-open, got %q", got)
 	}
 	if strings.Contains(got, "<think>") || strings.Contains(got, "</think>") {
 		t.Fatalf("did not expect think tags in prompt, got %q", got)
+	}
+}
+
+func TestMessagesPrepareKeepsMiddleAssistantClosedAndFinalOpen(t *testing.T) {
+	messages := []map[string]any{
+		{"role": "user", "content": "q1"},
+		{"role": "assistant", "content": "a1"},
+		{"role": "user", "content": "q2"},
+		{"role": "assistant", "content": "prefill"},
+	}
+	got := MessagesPrepare(messages)
+	if !strings.Contains(got, "<｜Assistant｜>a1<｜end▁of▁sentence｜>") {
+		t.Fatalf("middle assistant should still be closed, got %q", got)
+	}
+	if !strings.HasSuffix(got, "<｜Assistant｜>prefill") {
+		t.Fatalf("final assistant should be half-open for continuation, got %q", got)
+	}
+	if strings.Count(got, "<｜end▁of▁sentence｜>") != 1 {
+		t.Fatalf("expected exactly one end-of-sentence marker (middle turn only), got %q", got)
 	}
 }
 

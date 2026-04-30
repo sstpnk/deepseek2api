@@ -97,9 +97,27 @@ func (h *Handler) collectResponsesNonStreamAttempt(w http.ResponseWriter, resp *
 }
 
 func (h *Handler) finishResponsesNonStreamResult(w http.ResponseWriter, result responsesNonStreamResult, attempts int, owner, responseID string, toolChoice promptcompat.ToolChoicePolicy, traceID string) {
-	if len(result.parsed.Calls) == 0 && writeUpstreamEmptyOutputError(w, result.text, result.thinking, result.contentFilter) {
-		config.Logger.Info("[openai_empty_retry] terminal empty output", "surface", "responses", "stream", false, "retry_attempts", attempts, "success_source", "none", "content_filter", result.contentFilter)
-		return
+	if len(result.parsed.Calls) == 0 && shouldWriteUpstreamEmptyOutputError(result.text) {
+		if promoted, ok := promoteThinkingWhenTextEmpty(result.text, result.thinking, result.contentFilter); ok {
+			result.text = promoted
+			result.body["output_text"] = promoted
+			if outArr, ok := result.body["output"].([]any); ok {
+				for _, item := range outArr {
+					msg, ok := item.(map[string]any)
+					if !ok || msg["type"] != "message" {
+						continue
+					}
+					content, _ := msg["content"].([]any)
+					msg["content"] = append(content, map[string]any{
+						"type": "output_text",
+						"text": promoted,
+					})
+				}
+			}
+		} else if writeUpstreamEmptyOutputError(w, result.text, result.thinking, result.contentFilter) {
+			config.Logger.Info("[openai_empty_retry] terminal empty output", "surface", "responses", "stream", false, "retry_attempts", attempts, "success_source", "none", "content_filter", result.contentFilter)
+			return
+		}
 	}
 	logResponsesToolPolicyRejection(traceID, toolChoice, result.parsed, "text")
 	if toolChoice.IsRequired() && len(result.parsed.Calls) == 0 {

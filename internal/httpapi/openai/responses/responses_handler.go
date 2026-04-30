@@ -137,8 +137,12 @@ func (h *Handler) handleResponsesNonStream(w http.ResponseWriter, resp *http.Res
 		sanitizedText = replaceCitationMarkersWithLinks(sanitizedText, result.CitationLinks)
 	}
 	textParsed := detectAssistantToolCalls(sanitizedText, sanitizedThinking, toolDetectionThinking, toolNames)
-	if len(textParsed.Calls) == 0 && writeUpstreamEmptyOutputError(w, sanitizedText, sanitizedThinking, result.ContentFilter) {
-		return
+	if len(textParsed.Calls) == 0 && shouldWriteUpstreamEmptyOutputError(sanitizedText) {
+		if promoted, ok := promoteThinkingWhenTextEmpty(sanitizedText, sanitizedThinking, result.ContentFilter); ok {
+			sanitizedText = promoted
+		} else if writeUpstreamEmptyOutputError(w, sanitizedText, sanitizedThinking, result.ContentFilter) {
+			return
+		}
 	}
 	logResponsesToolPolicyRejection(traceID, toolChoice, textParsed, "text")
 

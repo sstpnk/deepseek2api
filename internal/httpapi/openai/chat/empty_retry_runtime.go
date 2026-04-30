@@ -103,13 +103,25 @@ func (h *Handler) collectChatNonStreamAttempt(w http.ResponseWriter, resp *http.
 
 func (h *Handler) finishChatNonStreamResult(w http.ResponseWriter, result chatNonStreamResult, attempts int, usagePrompt string, historySession *chatHistorySession) {
 	if result.detectedCalls == 0 && shouldWriteUpstreamEmptyOutputError(result.text) {
-		status, message, code := upstreamEmptyOutputDetail(result.contentFilter, result.text, result.thinking)
-		if historySession != nil {
-			historySession.error(status, message, code, result.thinking, result.text)
+		if promoted, ok := promoteThinkingWhenTextEmpty(result.text, result.thinking, result.contentFilter); ok {
+			result.text = promoted
+			if choices, ok := result.body["choices"].([]map[string]any); ok && len(choices) > 0 {
+				if msg, ok := choices[0]["message"].(map[string]any); ok {
+					msg["content"] = promoted
+				}
+				choices[0]["finish_reason"] = "stop"
+			}
+			result.body["usage"] = openaifmt.BuildChatUsage(usagePrompt, result.thinking, result.text)
+			result.finishReason = "stop"
+		} else {
+			status, message, code := upstreamEmptyOutputDetail(result.contentFilter, result.text, result.thinking)
+			if historySession != nil {
+				historySession.error(status, message, code, result.thinking, result.text)
+			}
+			writeUpstreamEmptyOutputError(w, result.text, result.thinking, result.contentFilter)
+			config.Logger.Info("[openai_empty_retry] terminal empty output", "surface", "chat.completions", "stream", false, "retry_attempts", attempts, "success_source", "none", "content_filter", result.contentFilter)
+			return
 		}
-		writeUpstreamEmptyOutputError(w, result.text, result.thinking, result.contentFilter)
-		config.Logger.Info("[openai_empty_retry] terminal empty output", "surface", "chat.completions", "stream", false, "retry_attempts", attempts, "success_source", "none", "content_filter", result.contentFilter)
-		return
 	}
 	if historySession != nil {
 		historySession.success(http.StatusOK, result.thinking, result.text, result.finishReason, openaifmt.BuildChatUsage(usagePrompt, result.thinking, result.text))
