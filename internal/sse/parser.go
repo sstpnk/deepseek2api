@@ -92,6 +92,7 @@ func ParseSSEChunkForContentDetailed(chunk map[string]any, thinkingEnabled bool,
 	}
 	newType := currentFragmentType
 	parts := make([]ContentPart, 0, 8)
+	updateTypeFromExplicitPath(path, thinkingEnabled, &newType)
 	collectDirectFragments(path, chunk, v, &newType, &parts)
 	updateTypeFromNestedResponse(path, v, &newType)
 	partType := resolvePartType(path, thinkingEnabled, newType)
@@ -107,9 +108,22 @@ func ParseSSEChunkForContentDetailed(chunk map[string]any, thinkingEnabled bool,
 	detectionThinkingParts := selectThinkingParts(parts)
 	if !thinkingEnabled {
 		parts = dropThinkingParts(parts)
-		newType = "text"
 	}
 	return parts, detectionThinkingParts, false, newType
+}
+
+func updateTypeFromExplicitPath(path string, thinkingEnabled bool, newType *string) {
+	if newType == nil {
+		return
+	}
+	switch path {
+	case "response/content":
+		*newType = "text"
+	case "response/thinking_content":
+		if !thinkingEnabled || *newType != "text" {
+			*newType = "thinking"
+		}
+	}
 }
 
 func selectThinkingParts(parts []ContentPart) []ContentPart {
@@ -206,8 +220,11 @@ func resolvePartType(path string, thinkingEnabled bool, newType string) string {
 		return "text"
 	case strings.Contains(path, "response/fragments") && strings.Contains(path, "/content"):
 		return newType
-	case path == "" && thinkingEnabled:
-		return newType
+	case path == "":
+		if newType != "" {
+			return newType
+		}
+		return "text"
 	default:
 		return "text"
 	}

@@ -70,7 +70,6 @@ function finalizeThinkingParts(parts, thinkingEnabled, newType) {
   }
   if (!thinkingEnabled) {
     finalParts = dropThinkingParts(finalParts);
-    finalType = 'text';
   }
   return { parts: finalParts, newType: finalType };
 }
@@ -213,6 +212,12 @@ function parseChunkForContent(chunk, thinkingEnabled, currentType, stripReferenc
     }
   }
 
+  if (pathValue === 'response/content') {
+    newType = 'text';
+  } else if (pathValue === 'response/thinking_content' && (!thinkingEnabled || newType !== 'text')) {
+    newType = 'thinking';
+  }
+
   let partType = 'text';
   if (pathValue === 'response/thinking_content') {
     if (!thinkingEnabled) {
@@ -226,8 +231,8 @@ function parseChunkForContent(chunk, thinkingEnabled, currentType, stripReferenc
     partType = 'text';
   } else if (pathValue.includes('response/fragments') && pathValue.includes('/content')) {
     partType = newType;
-  } else if (!pathValue && thinkingEnabled) {
-    partType = newType;
+  } else if (!pathValue) {
+    partType = newType || 'text';
   }
 
   const val = chunk.v;

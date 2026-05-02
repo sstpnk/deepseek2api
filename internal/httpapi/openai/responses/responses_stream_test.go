@@ -109,6 +109,48 @@ func TestHandleResponsesStreamOutputTextDeltaCarriesItemIndexes(t *testing.T) {
 	}
 }
 
+func TestHandleResponsesStreamCoalescesSmallOutputTextDeltas(t *testing.T) {
+	h := &Handler{}
+	req := httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	rec := httptest.NewRecorder()
+
+	var streamBody strings.Builder
+	for i := 0; i < 100; i++ {
+		b, _ := json.Marshal(map[string]any{
+			"p": "response/content",
+			"v": "字",
+		})
+		streamBody.WriteString("data: ")
+		streamBody.WriteString(string(b))
+		streamBody.WriteString("\n")
+	}
+	streamBody.WriteString("data: [DONE]\n")
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(streamBody.String())),
+	}
+
+	h.handleResponsesStream(rec, req, resp, "owner-a", "resp_coalesce", "deepseek-v4-flash", "prompt", 0, false, false, nil, nil, promptcompat.DefaultToolChoicePolicy(), "")
+
+	payloads := extractSSEEventPayloads(rec.Body.String(), "response.output_text.delta")
+	if len(payloads) == 0 {
+		t.Fatalf("expected response.output_text.delta payloads, body=%s", rec.Body.String())
+	}
+	var content strings.Builder
+	for _, payload := range payloads {
+		content.WriteString(asString(payload["delta"]))
+	}
+	if got, want := content.String(), strings.Repeat("字", 100); got != want {
+		t.Fatalf("coalesced response content mismatch: got %q want %q body=%s", got, want, rec.Body.String())
+	}
+	if len(payloads) >= 100 {
+		t.Fatalf("expected coalescing to reduce 100 tiny text deltas, got %d body=%s", len(payloads), rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "event: response.completed") {
+		t.Fatalf("expected completed event, body=%s", rec.Body.String())
+	}
+}
+
 func TestHandleResponsesStreamEmitsDistinctToolCallIDsAcrossSeparateToolBlocks(t *testing.T) {
 	h := &Handler{}
 	req := httptest.NewRequest(http.MethodPost, "/v1/responses", nil)

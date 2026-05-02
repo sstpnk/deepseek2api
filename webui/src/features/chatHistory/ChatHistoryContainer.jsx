@@ -17,7 +17,15 @@ const TOOL_MARKER = '<｜Tool｜>'
 const END_INSTRUCTIONS_MARKER = '<｜end▁of▁instructions｜>'
 const END_SENTENCE_MARKER = '<｜end▁of▁sentence｜>'
 const END_TOOL_RESULTS_MARKER = '<｜end▁of▁toolresults｜>'
-const CURRENT_INPUT_FILE_PROMPT = 'The current request and prior conversation context have already been provided. Answer the latest user request directly.'
+const CURRENT_INPUT_FILE_PROMPT = 'Continue from the latest state in the attached DS2API_HISTORY.txt context. Treat it as the current working state and answer the latest user request directly.'
+const LEGACY_CURRENT_INPUT_FILE_PROMPTS = new Set([
+    'The current request and prior conversation context have already been provided. Answer the latest user request directly.',
+])
+
+function isCurrentInputFilePrompt(value) {
+    const text = String(value || '').trim()
+    return text === CURRENT_INPUT_FILE_PROMPT || LEGACY_CURRENT_INPUT_FILE_PROMPTS.has(text)
+}
 
 function formatDateTime(value, lang) {
     if (!value) return '-'
@@ -313,7 +321,7 @@ function buildListModeMessages(item, t) {
 
     const placeholderOnly = liveMessages.length === 1
         && String(liveMessages[0]?.role || '').trim().toLowerCase() === 'user'
-        && String(liveMessages[0]?.content || '').trim() === CURRENT_INPUT_FILE_PROMPT
+        && isCurrentInputFilePrompt(liveMessages[0]?.content)
 
     if (placeholderOnly) {
         return { messages: historyMessages, historyMerged: true }

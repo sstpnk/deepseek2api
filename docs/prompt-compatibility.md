@@ -118,6 +118,11 @@ OpenAI Chat / Responses 在标准化后、current input file 之前，会默认�
 - 普通请求会直接出现在最终 `prompt` 的最新 user block 末尾。
 - 如果触发 current input file，它会进入完整上下文文件中。
 
+另外，`MessagesPrepareWithThinking` 还会在最终 prompt 的最前面预置一段固定的 system 级“输出完整性约束（Output integrity guard）”：
+
+- 如果上游上下文、工具输出或解析后的文本出现乱码、损坏、部分解析、重复或其他畸形片段，不要模仿、不要回显，只输出给用户的正确内容。
+- 这段约束位于普通 system / tool prompt 之前，因此是当前最终 prompt 里的最高优先级前置指令。
+
 ### 5.1 角色标记
 
 最终 prompt 使用 DeepSeek 风格角色标记：
@@ -156,11 +161,13 @@ OpenAI Chat / Responses 在标准化后、current input file 之前，会默认�
 
 工具调用正例现在优先示范官方 DSML 风格：`<|DSML|tool_calls>` → `<|DSML|invoke name="...">` → `<|DSML|parameter name="...">`。
 兼容层仍接受旧式纯 `<tool_calls>` wrapper，但提示词会优先要求模型输出官方 DSML 标签，并强调不能只输出 closing wrapper 而漏掉 opening tag。需要注意：这是“兼容 DSML 外壳，内部仍以 XML 解析语义为准”，不是原生 DSML 全链路实现；DSML 标签会在解析入口归一化回现有 XML 标签后继续走同一套 parser。
-数组参数使用 `<item>...</item>` 子节点表示；当某个参数体只包含 item 子节点时，Go / Node 解析器会把它还原成数组，避免 `questions` / `options` 这类 schema 中要求 array 的参数被误解析成 `{ "item": ... }` 对象。若模型把完整结构化 XML fragment 误包进 CDATA，兼容层会在保护 `content` / `command` 等原文字段的前提下，尝试把非原文字段中的 CDATA XML fragment 还原成 object / array。不过，如果 CDATA 只是单个平面的 XML/HTML 标签，例如 `<b>urgent</b>` 这种行内标记，兼容层会保留原始字符串，不会强行升成 object / array；只有明显表示结构的 CDATA 片段，例如多兄弟节点、嵌套子节点或 `item` 列表，才会触发结构化恢复。
+数组参数使用 `<item>...</item>` 子节点表示；当某个参数体只包含 item 子节点时，Go / Node 解析器会把它还原成数组，避免 `questions` / `options` 这类 schema 中要求 array 的参数被误解析成 `{ "item": ... }` 对象。除此之外，解析器还会回收一些更松散的列表写法，例如 JSON array 字面量或逗号分隔的 JSON 项序列，只要它们足够明确；但 `<item>` 仍然是首选形态。若模型把完整结构化 XML fragment 误包进 CDATA，兼容层会在保护 `content` / `command` 等原文字段的前提下，尝试把非原文字段中的 CDATA XML fragment 还原成 object / array。不过，如果 CDATA 只是单个平面的 XML/HTML 标签，例如 `<b>urgent</b>` 这种行内标记，兼容层会保留原始字符串，不会强行升成 object / array；只有明显表示结构的 CDATA 片段，例如多兄弟节点、嵌套子节点或 `item` 列表，才会触发结构化恢复。
+Go 侧读取 DeepSeek SSE 时不再依赖 `bufio.Scanner` 的固定 2MiB 单行上限；当写文件类工具把很长的 `content` 放在单个 `data:` 行里返回时，非流式收集、流式解析和 auto-continue 透传都会保留完整行，再进入同一套工具解析与序列化流程。
 在 assistant 最终回包阶段，如果某个 tool 参数在声明 schema 中明确是 `string`，兼容层会在把解析后的 `tool_calls` / `function_call` 重新序列化成 OpenAI / Responses / Claude 可见参数前，递归把该路径上的 number / bool / object / array 统一转成字符串；其中 object / array 会压成紧凑 JSON 字符串。这个保护只对 schema 明确声明为 string 的路径生效，不会改写本来就是 `number` / `boolean` / `object` / `array` 的参数。这样可以兼容 DeepSeek 输出了结构化片段、但上游客户端工具 schema 又严格要求字符串参数的场景（例如 `content`、`prompt`、`path`、`taskId` 等）。
 工具 schema 的权威来源始终是**当前请求实际携带的 schema**，而不是同名工具在其他 runtime（Claude Code / OpenCode / Codex 等）里的默认印象。兼容层现在会同时兼容 OpenAI 风格 `function.parameters`、直接工具对象上的 `parameters` / `input_schema`、以及 camelCase 的 `inputSchema` / `schema`，并在最终输出阶段按这份请求内 schema 决定是保留 array/object，还是仅对明确声明为 `string` 的路径做字符串化。该规则同样适用于 Claude 的流式收尾和 Vercel Node 流式 tool-call formatter，避免不同 runtime 因 schema shape 差异而出现同名工具参数类型漂移。
 正例中的工具名只会来自当前请求实际声明的工具；如果当前请求没有足够的已知工具形态，就省略对应的单工具、多工具或嵌套示例，避免把不可用工具名写进 prompt。
 对执行类工具，脚本内容必须进入执行参数本身：`Bash` / `execute_command` 使用 `command`，`exec_command` 使用 `cmd`；不要把脚本示范成 `path` / `content` 文件写入参数。
+如果当前请求声明了 `Read` / `read_file` 这类读取工具，兼容层会额外注入一条 read-tool cache guard：当读取结果只表示“文件未变更 / 已在历史中 / 请引用先前上下文 / 没有正文内容”时，模型必须把它视为内容不可用，不能反复调用同一个无正文读取；应改为请求完整正文读取能力，或向用户说明需要重新提供文件内容。这个约束只缓解客户端缓存返回空内容导致的死循环，DS2API 不会也无法凭空恢复客户端本地文件正文。
 
 OpenAI 路径实现：
 [internal/promptcompat/tool_prompt.go](../internal/promptcompat/tool_prompt.go)
@@ -237,6 +244,14 @@ OpenAI 文件相关实现：
 - 文件 ID 收集：
   [internal/promptcompat/file_refs.go](../internal/promptcompat/file_refs.go)
 
+OpenAI 的文件上传现在不再是“只传文件本体”的通用路径，而是会先根据请求里的 `model` 解析出 DeepSeek 的上传类型，并把它透传到上传接口的 `x-model-type`。当前可见的上传类型就是 `default` / `expert` / `vision`，其中 vision 请求上传图片时必须带上 `vision`，否则下游容易退回到仅文本或 OCR 语义。这个模型类型会同时用于：
+
+- `/v1/files` 这类独立文件上传入口
+- Chat / Responses 的 inline 图片、附件上传
+- current input file 触发时生成的 `DS2API_HISTORY.txt` 上下文文件
+
+也就是说，文件上传和完成请求的 `model_type` 现在是一致的：完成 payload 里仍然是 `model_type`，上传文件则会在 DeepSeek 上传阶段携带同样的模型类型信息。
+
 结论：
 
 - “systemprompt 文字”在 prompt 里
@@ -248,7 +263,7 @@ OpenAI 文件相关实现：
 
 兼容层现在只保留 `current_input_file` 这一种拆分方式；旧的 `history_split` 已废弃，只保留为兼容旧配置的字段，不再参与请求处理。
 
-- `current_input_file` 默认开启；它用于把“完整上下文”合并进 `history.txt` 上下文文件。当最新 user turn 的纯文本长度达到 `current_input_file.min_chars`（默认 `0`）时，兼容层会上传一个文件名为 `history.txt` 的上下文文件，并在 live prompt 中只保留一个中性的 user 消息要求模型直接回答最新请求，不再暴露文件名或要求模型读取本地文件。
+- `current_input_file` 默认开启；它用于把“完整上下文”合并进 `DS2API_HISTORY.txt` 上下文文件。当最新 user turn 的纯文本长度达到 `current_input_file.min_chars`（默认 `0`）时，兼容层会上传一个文件名为 `DS2API_HISTORY.txt` 的上下文文件。文件内容会先做 OpenAI 消息标准化，再序列化成按轮次编号的 `DS2API_HISTORY.txt` 风格 transcript，带有 `# DS2API_HISTORY.txt` 标题和 `=== N. ROLE ===` 分段；live prompt 中则会给出一个 continuation 语气的 user 消息，引导模型从 `DS2API_HISTORY.txt` 的最新状态继续推进，并直接回答最新请求，避免把任务拉回起点。
 - 如果 `current_input_file.enabled=false`，请求会直接透传，不上传任何拆分上下文文件。
 - 旧的 `history_split.enabled` / `history_split.trigger_after_turns` 会被读取进配置对象以保持兼容，但不会触发拆分上传，也不会影响 `current_input_file` 的默认开启。
 - 即使触发 `current_input_file` 后 live prompt 被缩短，对客户端回包里的上下文 token 统计，仍会沿用**拆分前的完整 prompt 语义**做计数，而不是按缩短后的占位 prompt 计算；否则会把真实上下文显著算小。
@@ -262,11 +277,24 @@ OpenAI 文件相关实现：
 - 旧历史拆分兼容壳：
   [internal/httpapi/openai/history/history_split.go](../internal/httpapi/openai/history/history_split.go)
 
-当前输入转文件启用并触发时，上传文件的真实文件名是 `history.txt`，文件内容是完整 `messages` 上下文；它仍会先用 OpenAI 消息标准化和 DeepSeek 角色标记序列化，并直接作为 `history.txt` 的纯文本内容上传（不再注入文件边界标签）：
+当前输入转文件启用并触发时，上传文件的真实文件名是 `DS2API_HISTORY.txt`，文件内容是完整 `messages` 上下文；它仍会先用 OpenAI 消息标准化和 DeepSeek 角色标记序列化，再按轮次编号成 `DS2API_HISTORY.txt` 风格的 transcript（不再注入文件边界标签）：
 
 ```text
-[uploaded filename]: history.txt
-<｜begin▁of▁sentence｜><｜System｜>...<｜User｜>...<｜Assistant｜>...<｜Tool｜>...<｜User｜>...
+[uploaded filename]: DS2API_HISTORY.txt
+# DS2API_HISTORY.txt
+Prior conversation history and tool progress.
+
+=== 1. SYSTEM ===
+...
+
+=== 2. USER ===
+...
+
+=== 3. ASSISTANT ===
+...
+
+=== 4. TOOL ===
+...
 ```
 
 开启后，请求的 live prompt 不再直接内联完整上下文，而是保留一个 user role 的短提示，提示模型基于已提供上下文直接回答最新请求；上传后的 `file_id` 会进入 `ref_file_ids`。
@@ -318,7 +346,7 @@ OpenAI 文件相关实现：
 
 ```json
 {
-  "prompt": "<｜begin▁of▁sentence｜><｜System｜>原 system / developer\n\nYou have access to these tools: ...<｜end▁of▁instructions｜><｜User｜>The current request and prior conversation context have already been provided. Answer the latest user request directly.<｜Assistant｜>",
+  "prompt": "<｜begin▁of▁sentence｜><｜System｜>原 system / developer\n\nYou have access to these tools: ...<｜end▁of▁instructions｜><｜User｜>Continue from the latest state in the attached DS2API_HISTORY.txt context. Treat it as the current working state and answer the latest user request directly.<｜Assistant｜>",
   "ref_file_ids": [
     "file-current-input-ignore",
     "file-systemprompt",
@@ -333,7 +361,7 @@ OpenAI 文件相关实现：
 
 - 大部分结构化语义被压进 `prompt`
 - 文件保持文件
-- 需要时把完整上下文拆进 `history.txt` 上下文文件
+- 需要时把完整上下文拆进 `DS2API_HISTORY.txt` 上下文文件，并按轮次编号成 transcript
 
 ## 12. 修改时必须同步本文档的场景
 
@@ -346,7 +374,7 @@ OpenAI 文件相关实现：
 - tool result 注入方式变更
 - tool prompt 模板或 tool_choice 约束变更
 - inline 文件上传 / 文件引用收集规则变更
-- current input file 触发条件、上传格式、`history.txt` 包装格式变更
+- current input file 触发条件、上传格式、`DS2API_HISTORY.txt` transcript 结构变更
 - 旧 `history_split` 兼容逻辑的读取、忽略或退化行为变更
 - completion payload 字段语义变更
 - Claude / Gemini 对这套统一语义的复用关系变更
