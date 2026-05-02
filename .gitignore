@@ -71,7 +71,11 @@ data/
 
 # Local upgrade/backup artifacts (host-only, never commit)
 .backup-config-*
-.backup-data-*/
+.backup-data-*
+.pre-merge-config-*
+.pre-merge-data-*
+.pre-rebuild-config-*
+.pre-rebuild-data-*
 .upgrade-backup-*
 1panel-*
 *.bak.*
