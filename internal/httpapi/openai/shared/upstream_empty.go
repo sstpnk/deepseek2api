@@ -5,8 +5,8 @@ import (
 	"strings"
 )
 
-func ShouldWriteUpstreamEmptyOutputError(text string) bool {
-	return text == ""
+func ShouldWriteUpstreamEmptyOutputError(text, thinking string) bool {
+	return strings.TrimSpace(text) == ""
 }
 
 // PromoteThinkingWhenTextEmpty returns the text to use as the visible output
@@ -38,7 +38,7 @@ func UpstreamEmptyOutputDetail(contentFilter bool, text, thinking string) (int, 
 }
 
 func WriteUpstreamEmptyOutputError(w http.ResponseWriter, text, thinking string, contentFilter bool) bool {
-	if !ShouldWriteUpstreamEmptyOutputError(text) {
+	if !ShouldWriteUpstreamEmptyOutputError(text, thinking) {
 		return false
 	}
 	status, message, code := UpstreamEmptyOutputDetail(contentFilter, text, thinking)

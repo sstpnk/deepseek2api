@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"ds2api/internal/promptcompat"
 	"ds2api/internal/sse"
 )
 
@@ -89,7 +90,7 @@ func streamFinishReason(frames []map[string]any) string {
 
 func TestChatStreamRuntimeEmitsSeparateFramesForBatchedParts(t *testing.T) {
 	rec := httptest.NewRecorder()
-	streamRuntime := newChatStreamRuntime(rec, nil, false, "cid-batched-order", 123, "deepseek-v4-pro", "prompt", true, false, false, nil, nil, false, false)
+	streamRuntime := newChatStreamRuntime(rec, nil, false, "cid-batched-order", 123, "deepseek-v4-pro", "prompt", true, false, false, nil, nil, promptcompat.DefaultToolChoicePolicy(), false, false)
 
 	decision := streamRuntime.onParsed(sse.LineResult{
 		Parsed: true,
