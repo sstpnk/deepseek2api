@@ -34,12 +34,12 @@ func (h *Handler) handleResponsesStreamWithRetry(w http.ResponseWriter, r *http.
 		}
 		attempts++
 		config.Logger.Info("[openai_empty_retry] attempting synthetic retry", "surface", "responses", "stream", true, "retry_attempt", attempts, "parent_message_id", streamRuntime.responseMessageID)
-		retryPow, powErr := h.DS.GetPow(r.Context(), a, 3)
+		retryPow, powErr := h.DS.GetPow(r.Context(), a, 2)
 		if powErr != nil {
 			config.Logger.Warn("[openai_empty_retry] retry PoW fetch failed, falling back to original PoW", "surface", "responses", "stream", true, "retry_attempt", attempts, "error", powErr)
 			retryPow = pow
 		}
-		nextResp, err := h.DS.CallCompletion(r.Context(), a, clonePayloadForEmptyOutputRetry(payload, streamRuntime.responseMessageID), retryPow, 3)
+		nextResp, err := h.DS.CallCompletion(r.Context(), a, clonePayloadForEmptyOutputRetry(payload, streamRuntime.responseMessageID), retryPow, 2)
 		if err != nil {
 			streamRuntime.failResponse(http.StatusInternalServerError, "Failed to get completion.", "error")
 			config.Logger.Warn("[openai_empty_retry] retry request failed", "surface", "responses", "stream", true, "retry_attempt", attempts, "error", err)

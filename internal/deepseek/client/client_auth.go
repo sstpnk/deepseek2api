@@ -15,6 +15,7 @@ import (
 
 func (c *Client) Login(ctx context.Context, acc config.Account) (string, error) {
 	clients := c.requestClientsForAccount(acc)
+	ctx = withActiveProxyID(ctx, clients.proxyID)
 	payload := map[string]any{
 		"password":  strings.TrimSpace(acc.Password),
 		"device_id": "deepseek_to_api",
@@ -54,15 +55,25 @@ func (c *Client) CreateSession(ctx context.Context, a *auth.RequestAuth, maxAtte
 	if maxAttempts <= 0 {
 		maxAttempts = c.maxRetries
 	}
-	clients := c.requestClientsForAuth(ctx, a)
+	baseCtx := ctx
 	attempts := 0
 	refreshed := false
 	for attempts < maxAttempts {
+		clients := c.requestClientsForAuth(baseCtx, a)
+		ctx := withActiveProxyID(baseCtx, clients.proxyID)
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
 		headers := c.authHeaders(a.DeepSeekToken)
 		resp, status, err := c.postJSONWithStatus(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekCreateSessionURL, headers, map[string]any{"agent": "chat"})
 		if err != nil {
 			config.Logger.Warn("[create_session] request error", "error", err, "account", a.AccountID)
 			attempts++
+			if attempts < maxAttempts {
+				if waitErr := sleepWithCtx(ctx, retryDelay(attempts-1, true)); waitErr != nil {
+					return "", waitErr
+				}
+			}
 			continue
 		}
 		code, bizCode, msg, bizMsg := extractResponseStatus(resp)
@@ -83,10 +94,20 @@ func (c *Client) CreateSession(ctx context.Context, a *auth.RequestAuth, maxAtte
 			if c.Auth.SwitchAccount(ctx, a) {
 				refreshed = false
 				attempts++
+				if attempts < maxAttempts {
+					if waitErr := sleepWithCtx(ctx, retryDelay(attempts-1, false)); waitErr != nil {
+						return "", waitErr
+					}
+				}
 				continue
 			}
 		}
 		attempts++
+		if attempts < maxAttempts {
+			if waitErr := sleepWithCtx(ctx, retryDelay(attempts-1, status >= 500)); waitErr != nil {
+				return "", waitErr
+			}
+		}
 	}
 	return "", errors.New("create session failed")
 }
@@ -103,12 +124,17 @@ func (c *Client) GetPowForTarget(ctx context.Context, a *auth.RequestAuth, targe
 	if targetPath == "" {
 		targetPath = dsprotocol.DeepSeekCompletionTargetPath
 	}
-	clients := c.requestClientsForAuth(ctx, a)
+	baseCtx := ctx
 	attempts := 0
 	refreshed := false
 	lastFailureKind := FailureUnknown
 	lastFailureMessage := ""
 	for attempts < maxAttempts {
+		clients := c.requestClientsForAuth(baseCtx, a)
+		ctx := withActiveProxyID(baseCtx, clients.proxyID)
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
 		headers := c.authHeaders(a.DeepSeekToken)
 		resp, status, err := c.postJSONWithStatus(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekCreatePowURL, headers, map[string]any{"target_path": targetPath})
 		if err != nil {
@@ -116,6 +142,11 @@ func (c *Client) GetPowForTarget(ctx context.Context, a *auth.RequestAuth, targe
 			lastFailureKind = FailureUnknown
 			lastFailureMessage = err.Error()
 			attempts++
+			if attempts < maxAttempts {
+				if waitErr := sleepWithCtx(ctx, retryDelay(attempts-1, true)); waitErr != nil {
+					return "", waitErr
+				}
+			}
 			continue
 		}
 		code, bizCode, msg, bizMsg := extractResponseStatus(resp)
@@ -126,6 +157,11 @@ func (c *Client) GetPowForTarget(ctx context.Context, a *auth.RequestAuth, targe
 			answer, err := ComputePow(ctx, challenge)
 			if err != nil {
 				attempts++
+				if attempts < maxAttempts {
+					if waitErr := sleepWithCtx(ctx, retryDelay(attempts-1, false)); waitErr != nil {
+						return "", waitErr
+					}
+				}
 				continue
 			}
 			return BuildPowHeader(challenge, answer)
@@ -147,10 +183,20 @@ func (c *Client) GetPowForTarget(ctx context.Context, a *auth.RequestAuth, targe
 			if c.Auth.SwitchAccount(ctx, a) {
 				refreshed = false
 				attempts++
+				if attempts < maxAttempts {
+					if waitErr := sleepWithCtx(ctx, retryDelay(attempts-1, false)); waitErr != nil {
+						return "", waitErr
+					}
+				}
 				continue
 			}
 		}
 		attempts++
+		if attempts < maxAttempts {
+			if waitErr := sleepWithCtx(ctx, retryDelay(attempts-1, status >= 500)); waitErr != nil {
+				return "", waitErr
+			}
+		}
 	}
 	if lastFailureKind != FailureUnknown {
 		return "", &RequestFailure{Op: "get pow", Kind: lastFailureKind, Message: lastFailureMessage}

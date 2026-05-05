@@ -22,6 +22,27 @@ type requestClients struct {
 	stream    trans.Doer
 	fallback  *http.Client
 	fallbackS *http.Client
+	proxyID   string
+}
+
+type proxyIDCtxKey struct{}
+
+// withActiveProxyID attaches the proxyID currently in use to ctx so that
+// downstream transport-error sites can mark the right proxy unhealthy
+// (the active proxy may differ from acc.ProxyID after a soft switch).
+func withActiveProxyID(ctx context.Context, proxyID string) context.Context {
+	if ctx == nil || proxyID == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, proxyIDCtxKey{}, proxyID)
+}
+
+func activeProxyIDFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	v, _ := ctx.Value(proxyIDCtxKey{}).(string)
+	return v
 }
 
 type hostLookupFunc func(ctx context.Context, network, host string) ([]string, error)
@@ -139,6 +160,14 @@ func (c *Client) requestClientsForAccount(acc config.Account) requestClients {
 		return c.defaultRequestClients()
 	}
 
+	originalID := proxyCfg.ID
+	if c.proxyOnCooldown(originalID) {
+		if alt, found := c.pickHealthyProxy(originalID); found {
+			config.Logger.Info("[proxy_sticky] switched", "from", originalID, "to", alt.ID, "reason", "cooldown")
+			proxyCfg = alt
+		}
+	}
+
 	key := proxyCacheKey(proxyCfg)
 	c.proxyClientsMu.RLock()
 	cached, ok := c.proxyClients[key]
@@ -158,6 +187,7 @@ func (c *Client) requestClientsForAccount(acc config.Account) requestClients {
 		stream:    trans.NewWithDialContext(0, dialContext),
 		fallback:  trans.NewFallbackClient(60*time.Second, dialContext),
 		fallbackS: trans.NewFallbackClient(0, dialContext),
+		proxyID:   proxyCfg.ID,
 	}
 
 	c.proxyClientsMu.Lock()

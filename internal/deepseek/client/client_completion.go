@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"time"
 
 	"ds2api/internal/auth"
 	"ds2api/internal/config"
@@ -18,16 +17,26 @@ func (c *Client) CallCompletion(ctx context.Context, a *auth.RequestAuth, payloa
 	if maxAttempts <= 0 {
 		maxAttempts = c.maxRetries
 	}
-	clients := c.requestClientsForAuth(ctx, a)
+	baseCtx := ctx
 	headers := c.authHeaders(a.DeepSeekToken)
 	headers["x-ds-pow-response"] = powResp
 	captureSession := c.capture.Start("deepseek_completion", dsprotocol.DeepSeekCompletionURL, a.AccountID, payload)
 	attempts := 0
 	for attempts < maxAttempts {
-		resp, err := c.streamPost(ctx, clients.stream, dsprotocol.DeepSeekCompletionURL, headers, payload)
+		clients := c.requestClientsForAuth(baseCtx, a)
+		ctx = withActiveProxyID(baseCtx, clients.proxyID)
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		resp, err := c.streamPost(ctx, clients.stream, clients.fallbackS, dsprotocol.DeepSeekCompletionURL, headers, payload)
 		if err != nil {
 			attempts++
-			time.Sleep(time.Second)
+			if attempts >= maxAttempts {
+				break
+			}
+			if waitErr := sleepWithCtx(ctx, retryDelay(attempts-1, true)); waitErr != nil {
+				return nil, waitErr
+			}
 			continue
 		}
 		if resp.StatusCode == http.StatusOK {
@@ -40,20 +49,25 @@ func (c *Client) CallCompletion(ctx context.Context, a *auth.RequestAuth, payloa
 		if captureSession != nil {
 			resp.Body = captureSession.WrapBody(resp.Body, resp.StatusCode)
 		}
+		statusCode := resp.StatusCode
 		_ = resp.Body.Close()
 		attempts++
-		time.Sleep(time.Second)
+		if attempts >= maxAttempts {
+			break
+		}
+		if waitErr := sleepWithCtx(ctx, retryDelay(attempts-1, statusCode >= 500)); waitErr != nil {
+			return nil, waitErr
+		}
 	}
 	return nil, errors.New("completion failed")
 }
 
-func (c *Client) streamPost(ctx context.Context, doer trans.Doer, url string, headers map[string]string, payload any) (*http.Response, error) {
+func (c *Client) streamPost(ctx context.Context, doer trans.Doer, fallback trans.Doer, url string, headers map[string]string, payload any) (*http.Response, error) {
 	b, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
 	}
 	headers = c.jsonHeaders(headers)
-	clients := c.requestClientsFromContext(ctx)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(b))
 	if err != nil {
 		return nil, err
@@ -63,6 +77,9 @@ func (c *Client) streamPost(ctx context.Context, doer trans.Doer, url string, he
 	}
 	resp, err := doer.Do(req)
 	if err != nil {
+		if isTransportError(err) {
+			c.markProxyFailure(activeProxyIDFromContext(ctx))
+		}
 		config.Logger.Warn("[deepseek] fingerprint stream request failed, fallback to std transport", "url", url, "error", err)
 		req2, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(b))
 		if reqErr != nil {
@@ -71,7 +88,10 @@ func (c *Client) streamPost(ctx context.Context, doer trans.Doer, url string, he
 		for k, v := range headers {
 			req2.Header.Set(k, v)
 		}
-		return clients.fallbackS.Do(req2)
+		return fallback.Do(req2)
+	}
+	if resp != nil && resp.StatusCode < 500 {
+		c.markProxySuccess(activeProxyIDFromContext(ctx))
 	}
 	return resp, nil
 }

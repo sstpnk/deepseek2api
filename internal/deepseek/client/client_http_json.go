@@ -37,6 +37,9 @@ func (c *Client) postJSONWithStatus(ctx context.Context, doer trans.Doer, fallba
 	}
 	resp, err := doer.Do(req)
 	if err != nil {
+		if isTransportError(err) {
+			c.markProxyFailure(activeProxyIDFromContext(ctx))
+		}
 		config.Logger.Warn("[deepseek] fingerprint request failed, fallback to std transport", "url", url, "error", err)
 		req2, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(b))
 		if reqErr != nil {
@@ -49,6 +52,8 @@ func (c *Client) postJSONWithStatus(ctx context.Context, doer trans.Doer, fallba
 		if err != nil {
 			return nil, 0, err
 		}
+	} else if resp != nil && resp.StatusCode < 500 {
+		c.markProxySuccess(activeProxyIDFromContext(ctx))
 	}
 	defer func() { _ = resp.Body.Close() }()
 	payloadBytes, err := readResponseBody(resp)
@@ -64,8 +69,7 @@ func (c *Client) postJSONWithStatus(ctx context.Context, doer trans.Doer, fallba
 	return out, resp.StatusCode, nil
 }
 
-func (c *Client) getJSONWithStatus(ctx context.Context, doer trans.Doer, url string, headers map[string]string) (map[string]any, int, error) {
-	clients := c.requestClientsFromContext(ctx)
+func (c *Client) getJSONWithStatus(ctx context.Context, doer trans.Doer, fallback trans.Doer, url string, headers map[string]string) (map[string]any, int, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, 0, err
@@ -75,6 +79,9 @@ func (c *Client) getJSONWithStatus(ctx context.Context, doer trans.Doer, url str
 	}
 	resp, err := doer.Do(req)
 	if err != nil {
+		if isTransportError(err) {
+			c.markProxyFailure(activeProxyIDFromContext(ctx))
+		}
 		config.Logger.Warn("[deepseek] fingerprint GET request failed, fallback to std transport", "url", url, "error", err)
 		req2, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		if reqErr != nil {
@@ -83,10 +90,12 @@ func (c *Client) getJSONWithStatus(ctx context.Context, doer trans.Doer, url str
 		for k, v := range headers {
 			req2.Header.Set(k, v)
 		}
-		resp, err = clients.fallback.Do(req2)
+		resp, err = fallback.Do(req2)
 		if err != nil {
 			return nil, 0, err
 		}
+	} else if resp != nil && resp.StatusCode < 500 {
+		c.markProxySuccess(activeProxyIDFromContext(ctx))
 	}
 	defer func() { _ = resp.Body.Close() }()
 	payloadBytes, err := readResponseBody(resp)

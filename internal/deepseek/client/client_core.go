@@ -28,19 +28,23 @@ type Client struct {
 
 	proxyClientsMu sync.RWMutex
 	proxyClients   map[string]requestClients
+
+	proxyHealthMu  sync.Mutex
+	proxyHealthMap map[string]*proxyHealth
 }
 
 func NewClient(store *config.Store, resolver *auth.Resolver) *Client {
 	return &Client{
-		Store:        store,
-		Auth:         resolver,
-		capture:      devcapture.Global(),
-		regular:      trans.New(60 * time.Second),
-		stream:       trans.New(0),
-		fallback:     &http.Client{Timeout: 60 * time.Second},
-		fallbackS:    &http.Client{Timeout: 0},
-		maxRetries:   3,
-		proxyClients: map[string]requestClients{},
+		Store:          store,
+		Auth:           resolver,
+		capture:        devcapture.Global(),
+		regular:        trans.New(60 * time.Second),
+		stream:         trans.New(0),
+		fallback:       &http.Client{Timeout: 60 * time.Second},
+		fallbackS:      &http.Client{Timeout: 0},
+		maxRetries:     2,
+		proxyClients:   map[string]requestClients{},
+		proxyHealthMap: map[string]*proxyHealth{},
 	}
 }
 

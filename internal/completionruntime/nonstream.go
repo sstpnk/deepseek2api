@@ -50,7 +50,7 @@ type StartResult struct {
 func StartCompletion(ctx context.Context, ds DeepSeekCaller, a *auth.RequestAuth, stdReq promptcompat.StandardRequest, opts Options) (StartResult, *assistantturn.OutputError) {
 	maxAttempts := opts.MaxAttempts
 	if maxAttempts <= 0 {
-		maxAttempts = 3
+		maxAttempts = 2
 	}
 	var prepErr *assistantturn.OutputError
 	stdReq, prepErr = prepareCurrentInputFile(ctx, ds, a, stdReq, opts)
@@ -93,7 +93,7 @@ func ExecuteNonStreamWithRetry(ctx context.Context, ds DeepSeekCaller, a *auth.R
 	stdReq = start.Request
 	maxAttempts := opts.MaxAttempts
 	if maxAttempts <= 0 {
-		maxAttempts = 3
+		maxAttempts = 2
 	}
 	sessionID := start.SessionID
 	payload := start.Payload

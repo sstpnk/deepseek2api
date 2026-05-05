@@ -23,7 +23,7 @@ func (c *Client) DeleteSession(ctx context.Context, a *auth.RequestAuth, session
 	if maxAttempts <= 0 {
 		maxAttempts = c.maxRetries
 	}
-	clients := c.requestClientsForAuth(ctx, a)
+	baseCtx := ctx
 
 	result := &DeleteSessionResult{
 		SessionID: sessionID,
@@ -38,6 +38,11 @@ func (c *Client) DeleteSession(ctx context.Context, a *auth.RequestAuth, session
 	refreshed := false
 
 	for attempts < maxAttempts {
+		clients := c.requestClientsForAuth(baseCtx, a)
+		ctx := withActiveProxyID(baseCtx, clients.proxyID)
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
 		headers := c.authHeaders(a.DeepSeekToken)
 
 		payload := map[string]any{
@@ -48,6 +53,11 @@ func (c *Client) DeleteSession(ctx context.Context, a *auth.RequestAuth, session
 		if err != nil {
 			config.Logger.Warn("[delete_session] request error", "error", err, "session_id", sessionID)
 			attempts++
+			if attempts < maxAttempts {
+				if waitErr := sleepWithCtx(ctx, retryDelay(attempts-1, true)); waitErr != nil {
+					return result, waitErr
+				}
+			}
 			continue
 		}
 
@@ -70,10 +80,20 @@ func (c *Client) DeleteSession(ctx context.Context, a *auth.RequestAuth, session
 			if c.Auth.SwitchAccount(ctx, a) {
 				refreshed = false
 				attempts++
+				if attempts < maxAttempts {
+					if waitErr := sleepWithCtx(ctx, retryDelay(attempts-1, false)); waitErr != nil {
+						return result, waitErr
+					}
+				}
 				continue
 			}
 		}
 		attempts++
+		if attempts < maxAttempts {
+			if waitErr := sleepWithCtx(ctx, retryDelay(attempts-1, status >= 500)); waitErr != nil {
+				return result, waitErr
+			}
+		}
 	}
 
 	result.Success = false
@@ -84,6 +104,7 @@ func (c *Client) DeleteSession(ctx context.Context, a *auth.RequestAuth, session
 // DeleteSessionForToken 直接使用 token 删除会话（直通模式）
 func (c *Client) DeleteSessionForToken(ctx context.Context, token string, sessionID string) (*DeleteSessionResult, error) {
 	clients := c.requestClientsFromContext(ctx)
+	ctx = withActiveProxyID(ctx, clients.proxyID)
 	result := &DeleteSessionResult{
 		SessionID: sessionID,
 	}
@@ -118,6 +139,7 @@ func (c *Client) DeleteSessionForToken(ctx context.Context, token string, sessio
 // DeleteAllSessions 删除所有会话（谨慎使用）
 func (c *Client) DeleteAllSessions(ctx context.Context, a *auth.RequestAuth) error {
 	clients := c.requestClientsForAuth(ctx, a)
+	ctx = withActiveProxyID(ctx, clients.proxyID)
 	headers := c.authHeaders(a.DeepSeekToken)
 	payload := map[string]any{}
 
@@ -140,6 +162,7 @@ func (c *Client) DeleteAllSessions(ctx context.Context, a *auth.RequestAuth) err
 // DeleteAllSessionsForToken 直接使用 token 删除所有会话（直通模式）
 func (c *Client) DeleteAllSessionsForToken(ctx context.Context, token string) error {
 	clients := c.requestClientsFromContext(ctx)
+	ctx = withActiveProxyID(ctx, clients.proxyID)
 	headers := c.authHeaders(token)
 	payload := map[string]any{}
 
