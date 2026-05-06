@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"ds2api/internal/config"
 )
 
 func TestProxyDialAddressUsesLocalResolutionForSocks5(t *testing.T) {
@@ -82,5 +84,22 @@ func TestProxyConnectivityStatus(t *testing.T) {
 				t.Fatalf("expected message to contain %q, got %q", tc.wantText, message)
 			}
 		})
+	}
+}
+
+func TestResolveProxyForAccountUsesStoreProxyLookup(t *testing.T) {
+	t.Setenv("DS2API_CONFIG_JSON", `{
+		"proxies":[{"id":"proxy-a","type":"socks5h","host":"127.0.0.1","port":1080}],
+		"accounts":[{"email":"u@example.com","password":"p","proxy_id":"proxy-a"}]
+	}`)
+	store := config.LoadStore()
+	client := NewClient(store, nil)
+
+	proxy, ok := client.resolveProxyForAccount(config.Account{Email: "u@example.com", ProxyID: "proxy-a"})
+	if !ok {
+		t.Fatal("expected proxy-a to resolve")
+	}
+	if proxy.ID != "proxy-a" || proxy.Type != "socks5h" {
+		t.Fatalf("unexpected proxy: %#v", proxy)
 	}
 }

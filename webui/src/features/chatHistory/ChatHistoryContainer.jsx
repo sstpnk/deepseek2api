@@ -75,7 +75,9 @@ export default function ChatHistoryContainer({ authFetch, onMessage }) {
             if (listETagRef.current) {
                 headers['If-None-Match'] = listETagRef.current
             }
-            const res = await apiFetch('/admin/chat-history', { headers })
+            const listLimit = Number(limit) > 0 ? Number(limit) : 0
+            const url = listLimit > 0 ? `/admin/chat-history?limit=${listLimit}` : '/admin/chat-history'
+            const res = await apiFetch(url, { headers })
             if (res.status === 304) {
                 return
             }

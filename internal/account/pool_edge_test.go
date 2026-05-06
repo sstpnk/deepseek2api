@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 // ─── Pool edge cases ─────────────────────────────────────────────────
 
 func TestPoolEmptyNoAccounts(t *testing.T) {
+	t.Setenv("DS2API_RUNTIME_STATS_PATH", filepath.Join(t.TempDir(), "runtime_stats.json"))
 	t.Setenv("DS2API_ACCOUNT_MAX_INFLIGHT", "2")
 	t.Setenv("DS2API_ACCOUNT_MAX_QUEUE", "")
 	t.Setenv("DS2API_CONFIG_JSON", `{"keys":["k1"],"accounts":[]}`)
@@ -74,10 +76,24 @@ func TestPoolStatusFields(t *testing.T) {
 	status := pool.Status()
 
 	// Check all expected fields are present
-	for _, key := range []string{"total", "available", "max_inflight_per_account", "recommended_concurrency", "available_accounts", "in_use_accounts", "waiting", "max_queue_size"} {
+	for _, key := range []string{"total", "available", "max_inflight_per_account", "recommended_concurrency", "available_accounts", "in_use_accounts", "waiting", "max_queue_size", "rpm", "total_requests"} {
 		if _, ok := status[key]; !ok {
 			t.Fatalf("missing status field: %s", key)
 		}
+	}
+}
+
+func TestPoolStatusSummaryOmitsAccountDetails(t *testing.T) {
+	pool := newPoolForTest(t, "2")
+	status := pool.StatusSummary()
+	if _, ok := status["available_accounts"]; ok {
+		t.Fatalf("expected summary to omit available_accounts")
+	}
+	if _, ok := status["in_use_accounts"]; ok {
+		t.Fatalf("expected summary to omit in_use_accounts")
+	}
+	if status["available"] != 2 {
+		t.Fatalf("expected available count=2, got %v", status["available"])
 	}
 }
 
@@ -162,6 +178,7 @@ func TestPoolAcquireWaitTargetAccount(t *testing.T) {
 }
 
 func TestPoolMaxQueueSizeOverride(t *testing.T) {
+	t.Setenv("DS2API_RUNTIME_STATS_PATH", filepath.Join(t.TempDir(), "runtime_stats.json"))
 	t.Setenv("DS2API_ACCOUNT_MAX_INFLIGHT", "1")
 	t.Setenv("DS2API_ACCOUNT_MAX_QUEUE", "5")
 	t.Setenv("DS2API_CONFIG_JSON", `{"keys":["k1"],"accounts":[{"email":"acc1@example.com","token":"t1"}]}`)

@@ -10,15 +10,18 @@ import (
 )
 
 func (h *Handler) getSettings(w http.ResponseWriter, _ *http.Request) {
-	snap := h.Store.Snapshot()
-	recommended := defaultRuntimeRecommended(len(snap.Accounts), h.Store.RuntimeAccountMaxInflight())
-	needsSync := config.IsVercel() && snap.VercelSyncHash != "" && snap.VercelSyncHash != h.computeSyncHash()
+	recommended := defaultRuntimeRecommended(h.Store.RuntimeAccountCount(), h.Store.RuntimeAccountMaxInflight())
+	needsSync := false
+	if config.IsVercel() {
+		snap := h.Store.Snapshot()
+		needsSync = snap.VercelSyncHash != "" && snap.VercelSyncHash != h.computeSyncHash()
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"admin": map[string]any{
-			"has_password_hash":        strings.TrimSpace(snap.Admin.PasswordHash) != "",
+			"has_password_hash":        strings.TrimSpace(h.Store.AdminPasswordHash()) != "",
 			"jwt_expire_hours":         h.Store.AdminJWTExpireHours(),
-			"jwt_valid_after_unix":     snap.Admin.JWTValidAfterUnix,
+			"jwt_valid_after_unix":     h.Store.AdminJWTValidAfterUnix(),
 			"default_password_warning": authn.UsingDefaultAdminKey(h.Store),
 		},
 		"runtime": map[string]any{
@@ -27,9 +30,9 @@ func (h *Handler) getSettings(w http.ResponseWriter, _ *http.Request) {
 			"global_max_inflight":          h.Store.RuntimeGlobalMaxInflight(recommended),
 			"token_refresh_interval_hours": h.Store.RuntimeTokenRefreshIntervalHours(),
 		},
-		"responses":   snap.Responses,
-		"embeddings":  snap.Embeddings,
-		"auto_delete": snap.AutoDelete,
+		"responses":   h.Store.ResponsesConfig(),
+		"embeddings":  h.Store.EmbeddingsConfig(),
+		"auto_delete": h.Store.AutoDeleteConfig(),
 		"current_input_file": map[string]any{
 			"enabled":   h.Store.CurrentInputFileEnabled(),
 			"min_chars": h.Store.CurrentInputFileMinChars(),
@@ -39,7 +42,7 @@ func (h *Handler) getSettings(w http.ResponseWriter, _ *http.Request) {
 			"prompt":         h.Store.ThinkingInjectionPrompt(),
 			"default_prompt": promptcompat.DefaultThinkingInjectionPrompt,
 		},
-		"model_aliases":     snap.ModelAliases,
+		"model_aliases":     h.Store.ConfiguredModelAliases(),
 		"env_backed":        h.Store.IsEnvBacked(),
 		"needs_vercel_sync": needsSync,
 	})

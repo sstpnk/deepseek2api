@@ -1,4 +1,4 @@
-export const LIMIT_OPTIONS = [0, 10, 20, 50, 100, 1000, 10000, 100000]
+export const LIMIT_OPTIONS = [0, 10, 20, 50, 100, 1000, 10000]
 export const DISABLED_LIMIT = 0
 export const MESSAGE_COLLAPSE_AT = 700
 export const VIEW_MODE_KEY = 'ds2api_chat_history_view_mode'

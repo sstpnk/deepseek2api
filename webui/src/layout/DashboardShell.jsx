@@ -191,7 +191,7 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
                         <div className="grid grid-cols-2 gap-2">
                             <div className="bg-background rounded-lg p-3 border border-border shadow-sm">
                                 <div className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider mb-0.5 opacity-70">{t('sidebar.accounts')}</div>
-                                <div className="text-lg font-bold text-foreground leading-tight">{config.accounts?.length || 0}</div>
+                                <div className="text-lg font-bold text-foreground leading-tight">{config.account_total ?? config.accounts?.length ?? 0}</div>
                             </div>
                             <div className="bg-background rounded-lg p-3 border border-border shadow-sm">
                                 <div className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider mb-0.5 opacity-70">{t('sidebar.keys')}</div>

@@ -41,7 +41,7 @@ func proxyResponse(proxy config.Proxy) map[string]any {
 }
 
 func (h *Handler) listProxies(w http.ResponseWriter, _ *http.Request) {
-	proxies := h.Store.Snapshot().Proxies
+	proxies := h.Store.Proxies()
 	items := make([]map[string]any, 0, len(proxies))
 	for _, proxy := range proxies {
 		proxy = config.NormalizeProxy(proxy)
@@ -152,7 +152,14 @@ func (h *Handler) testProxy(w http.ResponseWriter, r *http.Request) {
 	var proxy config.Proxy
 	if proxyID != "" {
 		var ok bool
-		proxy, ok = findProxyByID(h.Store.Snapshot(), proxyID)
+		for _, item := range h.Store.Proxies() {
+			item = config.NormalizeProxy(item)
+			if item.ID == proxyID {
+				proxy = item
+				ok = true
+				break
+			}
+		}
 		if !ok {
 			writeJSON(w, http.StatusNotFound, map[string]any{"detail": "代理不存在"})
 			return

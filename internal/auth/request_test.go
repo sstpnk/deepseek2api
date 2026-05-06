@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 
 func newTestResolver(t *testing.T) *Resolver {
 	t.Helper()
+	t.Setenv("DS2API_RUNTIME_STATS_PATH", filepath.Join(t.TempDir(), "runtime_stats.json"))
 	t.Setenv("DS2API_CONFIG_JSON", `{
 		"keys":["managed-key"],
 		"accounts":[{"email":"acc@example.com","password":"pwd","token":"account-token"}]
@@ -66,6 +68,24 @@ func TestDetermineWithXAPIKeyManagedKeyAcquiresAccount(t *testing.T) {
 	}
 	if auth.CallerID == "" {
 		t.Fatalf("expected caller id to be populated")
+	}
+}
+
+func TestDetermineRecordsRequestStatsOnce(t *testing.T) {
+	r := newTestResolver(t)
+	req, _ := http.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	req.Header.Set("x-api-key", "managed-key")
+
+	before := r.Pool.Status()["total_requests"].(int64)
+	a, err := r.Determine(req)
+	if err != nil {
+		t.Fatalf("determine failed: %v", err)
+	}
+	r.Release(a)
+	r.recordRequest(a)
+	after := r.Pool.Status()["total_requests"].(int64)
+	if after-before != 1 {
+		t.Fatalf("expected exactly one recorded request, before=%d after=%d", before, after)
 	}
 }
 
@@ -198,6 +218,7 @@ func TestDetermineCallerMissingToken(t *testing.T) {
 }
 
 func TestDetermineManagedAccountForcesRefreshEverySixHours(t *testing.T) {
+	t.Setenv("DS2API_RUNTIME_STATS_PATH", filepath.Join(t.TempDir(), "runtime_stats.json"))
 	t.Setenv("DS2API_CONFIG_JSON", `{
 		"keys":["managed-key"],
 		"accounts":[{"email":"acc@example.com","password":"pwd","token":"seed-token"}]
@@ -247,6 +268,7 @@ func TestDetermineManagedAccountForcesRefreshEverySixHours(t *testing.T) {
 }
 
 func TestDetermineManagedAccountUsesUpdatedRefreshInterval(t *testing.T) {
+	t.Setenv("DS2API_RUNTIME_STATS_PATH", filepath.Join(t.TempDir(), "runtime_stats.json"))
 	t.Setenv("DS2API_CONFIG_JSON", `{
 		"keys":["managed-key"],
 		"accounts":[{"email":"acc@example.com","password":"pwd","token":"seed-token"}],
@@ -304,6 +326,7 @@ func TestDetermineManagedAccountUsesUpdatedRefreshInterval(t *testing.T) {
 }
 
 func TestDetermineManagedAccountRetriesOtherAccountOnLoginFailure(t *testing.T) {
+	t.Setenv("DS2API_RUNTIME_STATS_PATH", filepath.Join(t.TempDir(), "runtime_stats.json"))
 	t.Setenv("DS2API_CONFIG_JSON", `{
 		"keys":["managed-key"],
 		"accounts":[
@@ -340,6 +363,7 @@ func TestDetermineManagedAccountRetriesOtherAccountOnLoginFailure(t *testing.T) 
 }
 
 func TestDetermineTargetAccountDoesNotFallbackOnLoginFailure(t *testing.T) {
+	t.Setenv("DS2API_RUNTIME_STATS_PATH", filepath.Join(t.TempDir(), "runtime_stats.json"))
 	t.Setenv("DS2API_CONFIG_JSON", `{
 		"keys":["managed-key"],
 		"accounts":[
@@ -367,6 +391,7 @@ func TestDetermineTargetAccountDoesNotFallbackOnLoginFailure(t *testing.T) {
 }
 
 func TestDetermineManagedAccountReturnsLastEnsureErrorWhenAllFail(t *testing.T) {
+	t.Setenv("DS2API_RUNTIME_STATS_PATH", filepath.Join(t.TempDir(), "runtime_stats.json"))
 	t.Setenv("DS2API_CONFIG_JSON", `{
 		"keys":["managed-key"],
 		"accounts":[

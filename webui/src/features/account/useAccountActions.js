@@ -242,8 +242,8 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
     }
 
     const testAllAccounts = async () => {
-        const allAccounts = config.accounts || []
-        if (allAccounts.length === 0) return
+        const accountTotal = Number(config.account_total ?? config.accounts?.length ?? 0)
+        if (accountTotal === 0) return
 
         const autoDelete = !!refreshOptions.autoDelete
         // Mirror the backend clamp [1, 20] so the UI never sends a value the
@@ -251,97 +251,51 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
         const concurrency = Math.max(1, Math.min(20, parseInt(refreshOptions.concurrency, 10) || 10))
 
         const confirmKey = autoDelete ? 'accountManager.testAllConfirmAutoDelete' : 'accountManager.testAllConfirm'
-        if (!confirm(t(confirmKey, { concurrency, total: allAccounts.length }))) return
+        if (!confirm(t(confirmKey, { concurrency, total: accountTotal }))) return
 
         setTestingAll(true)
-        setBatchProgress({ current: 0, total: allAccounts.length, results: [], quarantined: 0 })
-
-        // Resolve identifiers up front so workers can dequeue without touching
-        // the original config.accounts ordering. Entries with no identifier go
-        // straight to results as a parse failure.
-        const queue = []
-        const results = []
-        for (const acc of allAccounts) {
-            const id = resolveAccountIdentifier(acc)
-            if (!id) {
-                results.push({ id: '-', success: false, message: t('accountManager.invalidIdentifier') })
-            } else {
-                queue.push(id)
+        setBatchProgress({ current: 0, total: accountTotal, results: [], quarantined: 0 })
+        try {
+            const res = await apiFetch('/admin/accounts/test-all', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ auto_delete: autoDelete, concurrency }),
+            })
+            const data = await res.json()
+            if (!res.ok) {
+                onMessage('error', data.detail || t('messages.requestFailed'))
+                return
             }
-        }
-
-        let cursor = 0
-        let successCount = 0
-        let quarantinedCount = 0
-        let completed = results.length
-
-        // Update progress in the React state from a snapshot of the current
-        // closure variables. Called after every worker finishes one account so
-        // the UI reflects per-account completion in real time even though the
-        // workers run in parallel.
-        const flushProgress = () => {
+            const results = Array.isArray(data.results) ? data.results.map(item => ({
+                id: item.account || item.id || '-',
+                success: !!item.success,
+                message: item.message,
+                time: item.response_time,
+                quarantined: !!item.quarantined,
+                verified_unusable: !!item.verified_unusable,
+            })) : []
+            const quarantinedCount = Number(data.quarantined || 0)
             setBatchProgress({
-                current: completed,
-                total: allAccounts.length,
-                results: [...results],
+                current: Number(data.total || results.length || accountTotal),
+                total: Number(data.total || accountTotal),
+                results,
                 quarantined: quarantinedCount,
             })
+            const summaryKey = autoDelete && quarantinedCount > 0
+                ? 'accountManager.testAllCompletedWithQuarantine'
+                : 'accountManager.testAllCompleted'
+            onMessage('success', t(summaryKey, {
+                success: Number(data.success || 0),
+                total: Number(data.total || accountTotal),
+                quarantined: quarantinedCount,
+            }))
+            fetchAccounts()
+            onRefresh()
+        } catch (e) {
+            onMessage('error', t('accountManager.testFailed', { error: e.message }))
+        } finally {
+            setTestingAll(false)
         }
-        flushProgress()
-
-        const runOne = async (id) => {
-            try {
-                const res = await apiFetch('/admin/accounts/test', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ identifier: id, auto_delete: autoDelete }),
-                })
-                const data = await res.json()
-                results.push({
-                    id,
-                    success: !!data.success,
-                    message: data.message,
-                    time: data.response_time,
-                    quarantined: !!data.quarantined,
-                    verified_unusable: !!data.verified_unusable,
-                })
-                if (data.success) successCount++
-                if (data.quarantined) quarantinedCount++
-            } catch (e) {
-                results.push({ id, success: false, message: e.message })
-            }
-            completed++
-            flushProgress()
-        }
-
-        const worker = async () => {
-            // Each worker pulls indices from the shared cursor until the queue
-            // is drained. Closure-captured cursor avoids needing a Mutex/Atomic
-            // in JS — the event loop serializes the reads.
-            while (true) {
-                const idx = cursor
-                if (idx >= queue.length) return
-                cursor = idx + 1
-                await runOne(queue[idx])
-            }
-        }
-
-        const workers = []
-        const workerCount = Math.min(concurrency, queue.length || 1)
-        for (let i = 0; i < workerCount; i++) workers.push(worker())
-        await Promise.all(workers)
-
-        const summaryKey = autoDelete && quarantinedCount > 0
-            ? 'accountManager.testAllCompletedWithQuarantine'
-            : 'accountManager.testAllCompleted'
-        onMessage('success', t(summaryKey, {
-            success: successCount,
-            total: allAccounts.length,
-            quarantined: quarantinedCount,
-        }))
-        fetchAccounts()
-        onRefresh()
-        setTestingAll(false)
     }
 
     const deleteAllSessions = async (identifier) => {

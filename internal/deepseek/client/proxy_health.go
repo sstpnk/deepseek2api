@@ -106,12 +106,12 @@ func (c *Client) pickHealthyProxy(skipID string) (config.Proxy, bool) {
 		return config.Proxy{}, false
 	}
 	skipID = strings.TrimSpace(skipID)
-	snap := c.Store.Snapshot()
-	if len(snap.Proxies) == 0 {
+	proxies := c.Store.Proxies()
+	if len(proxies) == 0 {
 		return config.Proxy{}, false
 	}
-	candidates := make([]config.Proxy, 0, len(snap.Proxies))
-	for _, p := range snap.Proxies {
+	candidates := make([]config.Proxy, 0, len(proxies))
+	for _, p := range proxies {
 		p = config.NormalizeProxy(p)
 		if p.ID == "" || p.ID == skipID {
 			continue

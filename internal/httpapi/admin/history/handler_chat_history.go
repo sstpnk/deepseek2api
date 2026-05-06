@@ -3,6 +3,7 @@ package history
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -34,7 +35,7 @@ func (h *Handler) getChatHistory(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	snapshot, err := store.Snapshot()
+	snapshot, err := store.SnapshotList(chathistory.ListOptions{Limit: intFromQuery(r, "limit", -1)})
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
 			"detail": err.Error(),
@@ -56,6 +57,21 @@ func (h *Handler) getChatHistory(w http.ResponseWriter, r *http.Request) {
 		"items":    snapshot.Items,
 		"path":     store.Path(),
 	})
+}
+
+func intFromQuery(r *http.Request, key string, fallback int) int {
+	if r == nil || r.URL == nil {
+		return fallback
+	}
+	raw := strings.TrimSpace(r.URL.Query().Get(key))
+	if raw == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 0 {
+		return fallback
+	}
+	return n
 }
 
 func (h *Handler) getChatHistoryItem(w http.ResponseWriter, r *http.Request) {

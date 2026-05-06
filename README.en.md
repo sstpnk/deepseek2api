@@ -248,6 +248,7 @@ docker-compose up -d
 
 The default `docker-compose.yml` uses `ghcr.io/cjackhwang/ds2api:latest` and maps host port `6011` to container port `5001`. If you want `5001` exposed directly, set `DS2API_HOST_PORT=5001` (or adjust the `ports` mapping).
 It also mounts `./config.json` to `/data/config.json` and sets `DS2API_CONFIG_PATH=/data/config.json` by default, which avoids runtime token persistence failures caused by read-only `/app`.
+Total-request stats are written to `./data/runtime_stats.json` by default, so Admin counters survive container rebuilds and restarts.
 
 Rebuild after updates: `docker-compose up -d --build`
 

@@ -13,8 +13,13 @@ import (
 type ConfigStore interface {
 	Snapshot() config.Config
 	Keys() []string
+	APIKeys() []config.APIKey
 	Accounts() []config.Account
+	AccountsPage(page, pageSize int, query string) ([]config.Account, int)
 	FindAccount(identifier string) (config.Account, bool)
+	Proxies() []config.Proxy
+	ModelAliases() map[string]string
+	ConfiguredModelAliases() map[string]string
 	UpdateAccountToken(identifier, token string) error
 	UpdateAccountTestStatus(identifier, status string) error
 	AccountTestStatus(identifier string) (string, bool)
@@ -32,6 +37,11 @@ type ConfigStore interface {
 	RuntimeAccountMaxQueue(defaultSize int) int
 	RuntimeGlobalMaxInflight(defaultSize int) int
 	RuntimeTokenRefreshIntervalHours() int
+	RuntimeConfig() config.RuntimeConfig
+	RuntimeAccountCount() int
+	ResponsesConfig() config.ResponsesConfig
+	EmbeddingsConfig() config.EmbeddingsConfig
+	AutoDeleteConfig() config.AutoDeleteConfig
 	AutoDeleteMode() string
 	CurrentInputFileEnabled() bool
 	CurrentInputFileMinChars() int
@@ -43,6 +53,7 @@ type ConfigStore interface {
 type PoolController interface {
 	Reset()
 	Status() map[string]any
+	StatusSummary() map[string]any
 	ApplyRuntimeLimits(maxInflightPerAccount, maxQueueSize, globalMaxInflight int)
 }
 

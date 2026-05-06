@@ -525,6 +525,136 @@ func TestStoreOrdersByCreationTimeNotStreamingUpdates(t *testing.T) {
 	}
 }
 
+func TestStreamingProgressUpdateDoesNotRewriteIndexUntilFinal(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "chat_history.json")
+	store := New(path)
+
+	entry, err := store.Start(StartParams{UserInput: "hello"})
+	if err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat index before progress failed: %v", err)
+	}
+	time.Sleep(2 * time.Millisecond)
+
+	if _, err := store.Update(entry.ID, UpdateParams{Status: "streaming", Content: "partial"}); err != nil {
+		t.Fatalf("progress update failed: %v", err)
+	}
+	afterProgress, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat index after progress failed: %v", err)
+	}
+	if !afterProgress.ModTime().Equal(before.ModTime()) {
+		t.Fatalf("expected progress update to avoid index rewrite: before=%v after=%v", before.ModTime(), afterProgress.ModTime())
+	}
+
+	time.Sleep(2 * time.Millisecond)
+	if _, err := store.Update(entry.ID, UpdateParams{Status: "success", Content: "final", Completed: true}); err != nil {
+		t.Fatalf("final update failed: %v", err)
+	}
+	afterFinal, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat index after final failed: %v", err)
+	}
+	if !afterFinal.ModTime().After(afterProgress.ModTime()) {
+		t.Fatalf("expected final update to rewrite index: progress=%v final=%v", afterProgress.ModTime(), afterFinal.ModTime())
+	}
+}
+
+func TestDeferredStartDoesNotRewriteIndexUntilFinal(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "chat_history.json")
+	store := New(path)
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat index before start failed: %v", err)
+	}
+	time.Sleep(2 * time.Millisecond)
+
+	entry, err := store.Start(StartParams{UserInput: "hello", DeferPersist: true})
+	if err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+	afterStart, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat index after start failed: %v", err)
+	}
+	if !afterStart.ModTime().Equal(before.ModTime()) {
+		t.Fatalf("expected deferred start to avoid index rewrite: before=%v after=%v", before.ModTime(), afterStart.ModTime())
+	}
+	snapshot, err := store.Snapshot()
+	if err != nil {
+		t.Fatalf("snapshot after deferred start failed: %v", err)
+	}
+	if len(snapshot.Items) != 0 {
+		t.Fatalf("expected deferred entry to stay out of persisted list before final update, got %#v", snapshot.Items)
+	}
+
+	time.Sleep(2 * time.Millisecond)
+	if _, err := store.Update(entry.ID, UpdateParams{Status: "success", Content: "final", Completed: true}); err != nil {
+		t.Fatalf("final update failed: %v", err)
+	}
+	afterFinal, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat index after final failed: %v", err)
+	}
+	if !afterFinal.ModTime().After(afterStart.ModTime()) {
+		t.Fatalf("expected final update to rewrite index: start=%v final=%v", afterStart.ModTime(), afterFinal.ModTime())
+	}
+}
+
+func TestStorePrunesMissingDetailFilesOnLoad(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "chat_history.json")
+	store := New(path)
+	entry, err := store.Start(StartParams{UserInput: "hello"})
+	if err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+	if _, err := store.Update(entry.ID, UpdateParams{Status: "success", Content: "world", Completed: true}); err != nil {
+		t.Fatalf("update failed: %v", err)
+	}
+	if err := os.Remove(filepath.Join(store.DetailDir(), entry.ID+".json")); err != nil {
+		t.Fatalf("remove detail failed: %v", err)
+	}
+
+	reloaded := New(path)
+	if err := reloaded.Err(); err != nil {
+		t.Fatalf("expected missing detail to be pruned, got err=%v", err)
+	}
+	snapshot, err := reloaded.Snapshot()
+	if err != nil {
+		t.Fatalf("snapshot failed: %v", err)
+	}
+	if len(snapshot.Items) != 0 {
+		t.Fatalf("expected missing detail entry pruned, got %#v", snapshot.Items)
+	}
+}
+
+func TestSnapshotListLimitsReturnedItemsWithoutPruning(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "chat_history.json")
+	store := New(path)
+	for _, input := range []string{"a", "b", "c"} {
+		if _, err := store.Start(StartParams{UserInput: input}); err != nil {
+			t.Fatalf("start %s failed: %v", input, err)
+		}
+	}
+	limited, err := store.SnapshotList(ListOptions{Limit: 2})
+	if err != nil {
+		t.Fatalf("limited snapshot failed: %v", err)
+	}
+	if len(limited.Items) != 2 {
+		t.Fatalf("expected two limited items, got %d", len(limited.Items))
+	}
+	full, err := store.Snapshot()
+	if err != nil {
+		t.Fatalf("full snapshot failed: %v", err)
+	}
+	if len(full.Items) != 3 {
+		t.Fatalf("expected full snapshot to remain unpruned, got %d", len(full.Items))
+	}
+}
+
 func TestUpdatePreservesContentWhenNewContentIsEmpty(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "chat_history.json")
 	store := New(path)

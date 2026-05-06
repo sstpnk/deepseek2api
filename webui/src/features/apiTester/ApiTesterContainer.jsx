@@ -7,6 +7,8 @@ import { useChatStreamClient } from './useChatStreamClient'
 import ConfigPanel from './ConfigPanel'
 import ChatPanel from './ChatPanel'
 
+const ACCOUNT_SELECTOR_LIMIT = 200
+
 function describeModel(t, modelID) {
     const noThinking = modelID.endsWith('-nothinking')
 
@@ -74,6 +76,7 @@ export default function ApiTesterContainer({ config, onMessage, authFetch }) {
     const { t } = useI18n()
     const [availableModelIDs, setAvailableModelIDs] = useState([])
     const [modelsLoaded, setModelsLoaded] = useState(false)
+    const [accounts, setAccounts] = useState(Array.isArray(config.accounts) ? config.accounts : [])
 
     const {
         model,
@@ -103,7 +106,6 @@ export default function ApiTesterContainer({ config, onMessage, authFetch }) {
         abortControllerRef,
     } = useApiTesterState({ t })
 
-    const accounts = config.accounts || []
     const resolveAccountIdentifier = (acc) => {
         if (!acc || typeof acc !== 'object') return ''
         return String(acc.identifier || acc.email || acc.mobile || '').trim()
@@ -150,6 +152,44 @@ export default function ApiTesterContainer({ config, onMessage, authFetch }) {
             disposed = true
         }
     }, [authFetch])
+
+    useEffect(() => {
+        if (Array.isArray(config.accounts) && config.accounts.length > 0) {
+            setAccounts(config.accounts)
+            return
+        }
+        const total = Number(config.account_total || 0)
+        if (total <= 0 || !authFetch) {
+            setAccounts([])
+            return
+        }
+        if (total > ACCOUNT_SELECTOR_LIMIT) {
+            setAccounts([])
+            return
+        }
+        let disposed = false
+        async function loadAccounts() {
+            try {
+                const pageSize = Math.min(Math.max(total, 1), ACCOUNT_SELECTOR_LIMIT)
+                const res = await authFetch(`/admin/accounts?page=1&page_size=${pageSize}`)
+                if (!res.ok) {
+                    throw new Error(`failed to fetch accounts: ${res.status}`)
+                }
+                const data = await res.json()
+                if (!disposed) {
+                    setAccounts(Array.isArray(data.items) ? data.items : [])
+                }
+            } catch (_err) {
+                if (!disposed) {
+                    setAccounts([])
+                }
+            }
+        }
+        loadAccounts()
+        return () => {
+            disposed = true
+        }
+    }, [authFetch, config.account_total, config.accounts])
 
     const models = useMemo(
         () => availableModelIDs.map((modelID) => decorateModel(t, modelID)),

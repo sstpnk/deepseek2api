@@ -130,14 +130,7 @@ func (c *Client) resolveProxyForAccount(acc config.Account) (config.Proxy, bool)
 	if proxyID == "" {
 		return config.Proxy{}, false
 	}
-	snap := c.Store.Snapshot()
-	for _, proxyCfg := range snap.Proxies {
-		proxyCfg = config.NormalizeProxy(proxyCfg)
-		if proxyCfg.ID == proxyID {
-			return proxyCfg, true
-		}
-	}
-	return config.Proxy{}, false
+	return c.Store.FindProxy(proxyID)
 }
 
 func (c *Client) requestClientsFromContext(ctx context.Context) requestClients {

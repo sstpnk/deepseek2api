@@ -129,7 +129,7 @@ func (h *Handler) validateAccountsForVercelSync(ctx context.Context, enabled boo
 		return 0, nil
 	}
 	validated, failed := 0, []string{}
-	for _, acc := range h.Store.Snapshot().Accounts {
+	for _, acc := range h.Store.Accounts() {
 		if strings.TrimSpace(acc.Token) != "" {
 			continue
 		}

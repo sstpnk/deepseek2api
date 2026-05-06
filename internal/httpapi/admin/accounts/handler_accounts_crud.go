@@ -24,38 +24,21 @@ func (h *Handler) listAccounts(w http.ResponseWriter, r *http.Request) {
 	if pageSize > 5000 {
 		pageSize = 5000
 	}
-	accounts := h.Store.Snapshot().Accounts
-	reverseAccounts(accounts)
 	q := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("q")))
-	if q != "" {
-		filtered := make([]config.Account, 0, len(accounts))
-		for _, acc := range accounts {
-			id := strings.ToLower(acc.Identifier())
-			if strings.Contains(id, q) ||
-				strings.Contains(strings.ToLower(acc.Name), q) ||
-				strings.Contains(strings.ToLower(acc.Remark), q) ||
-				strings.Contains(strings.ToLower(acc.Email), q) ||
-				strings.Contains(strings.ToLower(acc.Mobile), q) {
-				filtered = append(filtered, acc)
-			}
-		}
-		accounts = filtered
-	}
-	total := len(accounts)
+	accounts, total := h.Store.AccountsPage(page, pageSize, q)
 	totalPages := 1
 	if total > 0 {
 		totalPages = (total + pageSize - 1) / pageSize
 	}
-	start := (page - 1) * pageSize
-	if start > total {
-		start = total
+	if page > totalPages {
+		page = totalPages
+		accounts, total = h.Store.AccountsPage(page, pageSize, q)
+		if total > 0 {
+			totalPages = (total + pageSize - 1) / pageSize
+		}
 	}
-	end := start + pageSize
-	if end > total {
-		end = total
-	}
-	items := make([]map[string]any, 0, end-start)
-	for _, acc := range accounts[start:end] {
+	items := make([]map[string]any, 0, len(accounts))
+	for _, acc := range accounts {
 		testStatus, _ := h.Store.AccountTestStatus(acc.Identifier())
 		token := strings.TrimSpace(acc.Token)
 		items = append(items, map[string]any{
@@ -105,7 +88,7 @@ func (h *Handler) addAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.Pool.Reset()
-	writeJSON(w, http.StatusOK, map[string]any{"success": true, "total_accounts": len(h.Store.Snapshot().Accounts)})
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "total_accounts": h.Store.RuntimeAccountCount()})
 }
 
 func (h *Handler) updateAccount(w http.ResponseWriter, r *http.Request) {
@@ -145,7 +128,7 @@ func (h *Handler) updateAccount(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"success": true, "total_accounts": len(h.Store.Snapshot().Accounts)})
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "total_accounts": h.Store.RuntimeAccountCount()})
 }
 
 func (h *Handler) deleteAccount(w http.ResponseWriter, r *http.Request) {
@@ -172,5 +155,5 @@ func (h *Handler) deleteAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.Pool.Reset()
-	writeJSON(w, http.StatusOK, map[string]any{"success": true, "total_accounts": len(h.Store.Snapshot().Accounts)})
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "total_accounts": h.Store.RuntimeAccountCount()})
 }

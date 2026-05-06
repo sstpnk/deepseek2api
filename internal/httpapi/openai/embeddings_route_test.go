@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -17,6 +18,7 @@ import (
 
 func newResolverWithConfigJSON(t *testing.T, cfgJSON string) (*config.Store, *auth.Resolver) {
 	t.Helper()
+	t.Setenv("DS2API_RUNTIME_STATS_PATH", filepath.Join(t.TempDir(), "runtime_stats.json"))
 	t.Setenv("DS2API_CONFIG_JSON", cfgJSON)
 	store := config.LoadStore()
 	pool := account.NewPool(store)

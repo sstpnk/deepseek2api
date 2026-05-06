@@ -35,26 +35,28 @@ func startChatHistory(store *chathistory.Store, r *http.Request, a *auth.Request
 		return nil
 	}
 	entry, err := store.Start(chathistory.StartParams{
-		CallerID:    strings.TrimSpace(a.CallerID),
-		AccountID:   strings.TrimSpace(a.AccountID),
-		Surface:     "openai.chat_completions",
-		Model:       strings.TrimSpace(stdReq.ResponseModel),
-		Stream:      stdReq.Stream,
-		UserInput:   extractSingleUserInput(stdReq.Messages),
-		Messages:    extractAllMessages(stdReq.Messages),
-		HistoryText: stdReq.HistoryText,
-		FinalPrompt: stdReq.FinalPrompt,
+		CallerID:     strings.TrimSpace(a.CallerID),
+		AccountID:    strings.TrimSpace(a.AccountID),
+		Surface:      "openai.chat_completions",
+		Model:        strings.TrimSpace(stdReq.ResponseModel),
+		Stream:       stdReq.Stream,
+		UserInput:    extractSingleUserInput(stdReq.Messages),
+		Messages:     extractAllMessages(stdReq.Messages),
+		HistoryText:  stdReq.HistoryText,
+		FinalPrompt:  stdReq.FinalPrompt,
+		DeferPersist: true,
 	})
 	startParams := chathistory.StartParams{
-		CallerID:    strings.TrimSpace(a.CallerID),
-		AccountID:   strings.TrimSpace(a.AccountID),
-		Surface:     "openai.chat_completions",
-		Model:       strings.TrimSpace(stdReq.ResponseModel),
-		Stream:      stdReq.Stream,
-		UserInput:   extractSingleUserInput(stdReq.Messages),
-		Messages:    extractAllMessages(stdReq.Messages),
-		HistoryText: stdReq.HistoryText,
-		FinalPrompt: stdReq.FinalPrompt,
+		CallerID:     strings.TrimSpace(a.CallerID),
+		AccountID:    strings.TrimSpace(a.AccountID),
+		Surface:      "openai.chat_completions",
+		Model:        strings.TrimSpace(stdReq.ResponseModel),
+		Stream:       stdReq.Stream,
+		UserInput:    extractSingleUserInput(stdReq.Messages),
+		Messages:     extractAllMessages(stdReq.Messages),
+		HistoryText:  stdReq.HistoryText,
+		FinalPrompt:  stdReq.FinalPrompt,
+		DeferPersist: true,
 	}
 	session := &chatHistorySession{
 		store:       store,
@@ -136,6 +138,7 @@ func (s *chatHistorySession) progress(thinking, content string) {
 		Content:          content,
 		StatusCode:       http.StatusOK,
 		ElapsedMs:        time.Since(s.startedAt).Milliseconds(),
+		Persist:          false,
 	})
 }
 
@@ -152,6 +155,7 @@ func (s *chatHistorySession) success(statusCode int, thinking, content, finishRe
 		FinishReason:     finishReason,
 		Usage:            usage,
 		Completed:        true,
+		Persist:          true,
 	})
 }
 
@@ -168,6 +172,7 @@ func (s *chatHistorySession) error(statusCode int, message, finishReason, thinki
 		ElapsedMs:        time.Since(s.startedAt).Milliseconds(),
 		FinishReason:     finishReason,
 		Completed:        true,
+		Persist:          true,
 	})
 }
 
@@ -184,6 +189,7 @@ func (s *chatHistorySession) stopped(thinking, content, finishReason string) {
 		FinishReason:     finishReason,
 		Usage:            openaifmt.BuildChatUsage(s.finalPrompt, thinking, content),
 		Completed:        true,
+		Persist:          true,
 	})
 }
 

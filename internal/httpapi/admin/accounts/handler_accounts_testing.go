@@ -11,14 +11,6 @@ import (
 	"ds2api/internal/config"
 )
 
-type modelAliasSnapshotReader struct {
-	aliases map[string]string
-}
-
-func (m modelAliasSnapshotReader) ModelAliases() map[string]string {
-	return m.aliases
-}
-
 func (h *Handler) testSingleAccount(w http.ResponseWriter, r *http.Request) {
 	var req map[string]any
 	_ = json.NewDecoder(r.Body).Decode(&req)
@@ -128,7 +120,7 @@ func (h *Handler) testAllAccounts(w http.ResponseWriter, r *http.Request) {
 	autoDelete, _ := req["auto_delete"].(bool)
 	concurrency := clampConcurrency(intFromRequest(req, "concurrency", defaultRefreshConcurrency))
 
-	accounts := h.Store.Snapshot().Accounts
+	accounts := h.Store.Accounts()
 	if len(accounts) == 0 {
 		writeJSON(w, http.StatusOK, map[string]any{"total": 0, "success": 0, "failed": 0, "quarantined": 0, "deleted": 0, "results": []any{}, "quarantined_accounts": []any{}, "deleted_accounts": []any{}})
 		return
@@ -231,18 +223,29 @@ func runAccountTestsConcurrently(accounts []config.Account, maxConcurrency int, 
 	if maxConcurrency <= 0 {
 		maxConcurrency = 1
 	}
-	sem := make(chan struct{}, maxConcurrency)
-	results := make([]map[string]any, len(accounts))
-	var wg sync.WaitGroup
-	for i, acc := range accounts {
-		wg.Add(1)
-		go func(idx int, account config.Account) {
-			defer wg.Done()
-			sem <- struct{}{}        // acquire
-			defer func() { <-sem }() // release
-			results[idx] = testFn(idx, account)
-		}(i, acc)
+	workerCount := maxConcurrency
+	if workerCount > len(accounts) {
+		workerCount = len(accounts)
 	}
+	results := make([]map[string]any, len(accounts))
+	if workerCount == 0 {
+		return results
+	}
+	jobs := make(chan int)
+	var wg sync.WaitGroup
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for idx := range jobs {
+				results[idx] = testFn(idx, accounts[idx])
+			}
+		}()
+	}
+	for i := range accounts {
+		jobs <- i
+	}
+	close(jobs)
 	wg.Wait()
 	return results
 }

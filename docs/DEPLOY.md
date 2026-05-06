@@ -130,7 +130,7 @@ docker-compose logs -f
 ```
 
 默认 `docker-compose.yml` 直接使用 `ghcr.io/cjackhwang/ds2api:latest`，并把宿主机 `6011` 映射到容器内的 `5001`。如果你希望直接对外暴露 `5001`，请设置 `DS2API_HOST_PORT=5001`（或者手动调整 `ports` 配置）。
-Compose 模板还会默认设置 `DS2API_CONFIG_PATH=/data/config.json` 并挂载 `./config.json:/data/config.json`，优先避免 `/app` 只读带来的配置持久化问题。
+Compose 模板还会默认设置 `DS2API_CONFIG_PATH=/data/config.json` 并挂载 `./config.json:/data/config.json`，优先避免 `/app` 只读带来的配置持久化问题；同时设置 `DS2API_RUNTIME_STATS_PATH=/app/data/runtime_stats.json`，让管理台累计请求数跟随 `./data` 持久化。
 镜像内会预创建 `/data` 并授权给非 root 的 `ds2api` 用户；如果你使用 bind mount 单文件，请确保宿主机 `config.json` 至少可被容器用户读取/写入，例如 `chmod 644 config.json`，否则 Linux UID/GID 不一致时仍可能出现 `open /data/config.json: permission denied`。
 兼容说明：若未设置 `DS2API_CONFIG_PATH` 且运行目录是 `/app`，新版本会优先使用 `/data/config.json`；当该文件不存在但检测到历史 `/app/config.json` 时，会自动回退读取旧路径，避免升级后“配置丢失”。
 
@@ -303,6 +303,7 @@ VERCEL_TEAM_ID=team_xxxxxxxxxxxx   # 个人账号可留空
 | `VERCEL_PROJECT_ID` | Vercel 项目 ID | — |
 | `VERCEL_TEAM_ID` | Vercel 团队 ID | — |
 | `DS2API_CHAT_HISTORY_PATH` | Chat history 存储路径（Vercel 上必须设为 `/tmp/chat_history.json`，否则因文件系统只读而不可用） | `data/chat_history.json` |
+| `DS2API_RUNTIME_STATS_PATH` | 运行时累计请求数存储路径，用于管理台账号池统计重启后保留 | `data/runtime_stats.json` |
 | `DS2API_VERCEL_PROTECTION_BYPASS` | 部署保护绕过密钥（内部 Node→Go 调用） | — |
 
 ### 3.3 运行时行为配置（通过 Admin API 设置）
@@ -417,6 +418,7 @@ DS2API_CHAT_HISTORY_PATH=/tmp/chat_history.json
 ```
 
 `/tmp` 是 Vercel Serverless 环境中唯一可写的目录。数据在函数冷启动之间不会持久化（ephemeral），但在单个实例生命周期内功能正常。
+流式响应的中间进度默认只在内存中更新，结束或报错时再写入明细文件；如果索引中存在已缺失的明细文件，启动时会自动清理对应索引项。
 
 ### 3.6 仓库不提交构建产物
 

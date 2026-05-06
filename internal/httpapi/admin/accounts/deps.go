@@ -23,7 +23,6 @@ type Handler struct {
 
 var writeJSON = adminshared.WriteJSON
 
-func reverseAccounts(a []config.Account) { adminshared.ReverseAccounts(a) }
 func intFromQuery(r *http.Request, key string, d int) int {
 	return adminshared.IntFromQuery(r, key, d)
 }

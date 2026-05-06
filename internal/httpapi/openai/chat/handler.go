@@ -110,10 +110,6 @@ func upstreamEmptyOutputDetail(contentFilter bool, text, thinking string) (int, 
 	return shared.UpstreamEmptyOutputDetail(contentFilter, text, thinking)
 }
 
-func writeUpstreamEmptyOutputError(w http.ResponseWriter, text, thinking string, contentFilter bool) bool {
-	return shared.WriteUpstreamEmptyOutputError(w, text, thinking, contentFilter)
-}
-
 func promoteThinkingWhenTextEmpty(text, thinking string, contentFilter bool) (string, bool) {
 	return shared.PromoteThinkingWhenTextEmpty(text, thinking, contentFilter)
 }

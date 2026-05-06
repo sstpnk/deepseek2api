@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 
 func newPoolForTest(t *testing.T, maxInflight string) *Pool {
 	t.Helper()
+	t.Setenv("DS2API_RUNTIME_STATS_PATH", filepath.Join(t.TempDir(), "runtime_stats.json"))
 	t.Setenv("DS2API_ACCOUNT_MAX_INFLIGHT", maxInflight)
 	t.Setenv("DS2API_ACCOUNT_MAX_QUEUE", "")
 	t.Setenv("DS2API_CONFIG_JSON", `{
@@ -26,6 +28,7 @@ func newPoolForTest(t *testing.T, maxInflight string) *Pool {
 
 func newSingleAccountPoolForTest(t *testing.T, maxInflight string) *Pool {
 	t.Helper()
+	t.Setenv("DS2API_RUNTIME_STATS_PATH", filepath.Join(t.TempDir(), "runtime_stats.json"))
 	t.Setenv("DS2API_ACCOUNT_MAX_INFLIGHT", maxInflight)
 	t.Setenv("DS2API_ACCOUNT_MAX_QUEUE", "")
 	t.Setenv("DS2API_CONFIG_JSON", `{
@@ -166,7 +169,42 @@ func TestPoolStatusRecommendedConcurrencyRespectsOverride(t *testing.T) {
 	}
 }
 
+func TestPoolRecordRequestUpdatesRPMAndTotal(t *testing.T) {
+	stats := newInMemoryRuntimeStats()
+	pool := newPoolForTest(t, "2")
+	pool.stats = stats
+
+	pool.RecordRequest()
+	pool.RecordRequest()
+
+	status := pool.Status()
+	if got, ok := status["total_requests"].(int64); !ok || got != 2 {
+		t.Fatalf("unexpected total_requests: %#v", status["total_requests"])
+	}
+	if got, ok := status["rpm"].(int64); !ok || got != 2 {
+		t.Fatalf("unexpected rpm: %#v", status["rpm"])
+	}
+}
+
+func TestPoolRecordRequestPersistsTotalRequests(t *testing.T) {
+	statsPath := filepath.Join(t.TempDir(), "runtime_stats.json")
+	stats := newInMemoryRuntimeStats()
+	stats.setPathForTest(statsPath)
+	pool := newPoolForTest(t, "2")
+	pool.stats = stats
+
+	pool.RecordRequest()
+	stats.flush()
+
+	reloaded := newRuntimeStats(statsPath)
+	total, rpm := reloaded.snapshot(time.Now())
+	if total != 1 {
+		t.Fatalf("expected persisted total_requests=1, got total=%d rpm=%d", total, rpm)
+	}
+}
+
 func TestPoolGlobalMaxInflightEnv(t *testing.T) {
+	t.Setenv("DS2API_RUNTIME_STATS_PATH", filepath.Join(t.TempDir(), "runtime_stats.json"))
 	t.Setenv("DS2API_ACCOUNT_MAX_INFLIGHT", "1")
 	t.Setenv("DS2API_GLOBAL_MAX_INFLIGHT", "4")
 	t.Setenv("DS2API_CONFIG_JSON", `{
@@ -191,6 +229,7 @@ func TestPoolGlobalMaxInflightEnv(t *testing.T) {
 }
 
 func TestPoolDropsLegacyTokenOnlyAccountOnLoad(t *testing.T) {
+	t.Setenv("DS2API_RUNTIME_STATS_PATH", filepath.Join(t.TempDir(), "runtime_stats.json"))
 	t.Setenv("DS2API_ACCOUNT_MAX_INFLIGHT", "1")
 	t.Setenv("DS2API_CONFIG_JSON", `{
 		"keys":["k1"],
@@ -212,6 +251,7 @@ func TestPoolDropsLegacyTokenOnlyAccountOnLoad(t *testing.T) {
 }
 
 func TestPoolAcquireRotatesIntoTokenlessAccounts(t *testing.T) {
+	t.Setenv("DS2API_RUNTIME_STATS_PATH", filepath.Join(t.TempDir(), "runtime_stats.json"))
 	t.Setenv("DS2API_ACCOUNT_MAX_INFLIGHT", "1")
 	t.Setenv("DS2API_ACCOUNT_MAX_QUEUE", "")
 	t.Setenv("DS2API_CONFIG_JSON", `{

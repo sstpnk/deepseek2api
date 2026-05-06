@@ -130,7 +130,7 @@ docker-compose logs -f
 ```
 
 The default `docker-compose.yml` directly uses `ghcr.io/cjackhwang/ds2api:latest` and maps host port `6011` to container port `5001`. If you want `5001` exposed directly, set `DS2API_HOST_PORT=5001` (or adjust the `ports` mapping).
-The compose template also defaults to `DS2API_CONFIG_PATH=/data/config.json` with `./config.json:/data/config.json` mounted, so deployments avoid read-only `/app` persistence issues by default.
+The compose template also defaults to `DS2API_CONFIG_PATH=/data/config.json` with `./config.json:/data/config.json` mounted, so deployments avoid read-only `/app` persistence issues by default. It also sets `DS2API_RUNTIME_STATS_PATH=/app/data/runtime_stats.json` so the Admin total-request counter persists through the `./data` bind mount.
 The image pre-creates `/data` and grants it to the non-root `ds2api` user. If you bind-mount a single host file, make sure `config.json` is readable/writable by the container user, for example with `chmod 644 config.json`; otherwise Linux UID/GID mismatches can still cause `open /data/config.json: permission denied`.
 Compatibility note: when `DS2API_CONFIG_PATH` is unset and runtime base dir is `/app`, newer versions prefer `/data/config.json`; if that file is missing but legacy `/app/config.json` exists, DS2API automatically falls back to the legacy path to avoid post-upgrade config loss.
 
@@ -303,6 +303,7 @@ VERCEL_TEAM_ID=team_xxxxxxxxxxxx   # optional for personal accounts
 | `VERCEL_PROJECT_ID` | Vercel project ID | — |
 | `VERCEL_TEAM_ID` | Vercel team ID | — |
 | `DS2API_CHAT_HISTORY_PATH` | Chat history storage path (must be set to `/tmp/chat_history.json` on Vercel, otherwise unavailable due to read-only filesystem) | `data/chat_history.json` |
+| `DS2API_RUNTIME_STATS_PATH` | Runtime total-request counter storage path, used by Admin account-pool stats across restarts | `data/runtime_stats.json` |
 | `DS2API_VERCEL_PROTECTION_BYPASS` | Deployment protection bypass for internal Node→Go calls | — |
 
 ### 3.4 Vercel Architecture
@@ -407,6 +408,7 @@ DS2API_CHAT_HISTORY_PATH=/tmp/chat_history.json
 ```
 
 `/tmp` is the only writable directory in Vercel Serverless. Data is ephemeral (not persisted across cold starts), but the feature works within a single instance lifetime.
+Streaming progress updates are kept in memory and flushed to detail files only when a request finishes or errors. If an index points to a missing detail file, startup prunes that stale index entry automatically.
 
 ### 3.6 Build Artifacts Not Committed
 

@@ -8,36 +8,41 @@ import (
 )
 
 func (h *Handler) getConfig(w http.ResponseWriter, _ *http.Request) {
-	snap := h.Store.Snapshot()
+	accountCount := h.Store.RuntimeAccountCount()
 	safe := map[string]any{
-		"keys":                  snap.Keys,
-		"api_keys":              snap.APIKeys,
+		"keys":                  h.Store.Keys(),
+		"api_keys":              h.Store.APIKeys(),
 		"accounts":              []map[string]any{},
+		"account_total":         accountCount,
 		"proxies":               []map[string]any{},
 		"env_backed":            h.Store.IsEnvBacked(),
 		"env_source_present":    h.Store.HasEnvConfigSource(),
 		"env_writeback_enabled": h.Store.IsEnvWritebackEnabled(),
 		"config_path":           h.Store.ConfigPath(),
-		"model_aliases":         snap.ModelAliases,
+		"model_aliases":         h.Store.ConfiguredModelAliases(),
 	}
-	accounts := make([]map[string]any, 0, len(snap.Accounts))
-	for _, acc := range snap.Accounts {
-		token := strings.TrimSpace(acc.Token)
-		accounts = append(accounts, map[string]any{
-			"identifier":    acc.Identifier(),
-			"name":          acc.Name,
-			"remark":        acc.Remark,
-			"email":         acc.Email,
-			"mobile":        acc.Mobile,
-			"proxy_id":      acc.ProxyID,
-			"has_password":  strings.TrimSpace(acc.Password) != "",
-			"has_token":     token != "",
-			"token_preview": maskSecretPreview(token),
-		})
+	if accountCount <= 200 {
+		storeAccounts := h.Store.Accounts()
+		accountItems := make([]map[string]any, 0, accountCount)
+		for _, acc := range storeAccounts {
+			token := strings.TrimSpace(acc.Token)
+			accountItems = append(accountItems, map[string]any{
+				"identifier":    acc.Identifier(),
+				"name":          acc.Name,
+				"remark":        acc.Remark,
+				"email":         acc.Email,
+				"mobile":        acc.Mobile,
+				"proxy_id":      acc.ProxyID,
+				"has_password":  strings.TrimSpace(acc.Password) != "",
+				"has_token":     token != "",
+				"token_preview": maskSecretPreview(token),
+			})
+		}
+		safe["accounts"] = accountItems
 	}
-	safe["accounts"] = accounts
-	proxies := make([]map[string]any, 0, len(snap.Proxies))
-	for _, proxy := range snap.Proxies {
+	storeProxies := h.Store.Proxies()
+	proxies := make([]map[string]any, 0, len(storeProxies))
+	for _, proxy := range storeProxies {
 		proxy = config.NormalizeProxy(proxy)
 		proxies = append(proxies, map[string]any{
 			"id":           proxy.ID,

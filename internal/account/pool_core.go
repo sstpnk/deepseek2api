@@ -3,6 +3,7 @@ package account
 import (
 	"sort"
 	"sync"
+	"time"
 
 	"ds2api/internal/config"
 )
@@ -17,6 +18,32 @@ type Pool struct {
 	recommendedConcurrency int
 	maxQueueSize           int
 	globalMaxInflight      int
+	stats                  *runtimeStats
+}
+
+type StatusOptions struct {
+	IncludeAccounts bool
+}
+
+var (
+	defaultRuntimeStatsMu       sync.Mutex
+	defaultRuntimeStatsInstance *runtimeStats
+	defaultRuntimeStatsPath     string
+)
+
+func sharedRuntimeStats() *runtimeStats {
+	path := config.RuntimeStatsPath()
+	defaultRuntimeStatsMu.Lock()
+	defer defaultRuntimeStatsMu.Unlock()
+	if defaultRuntimeStatsInstance == nil || defaultRuntimeStatsPath != path {
+		defaultRuntimeStatsInstance = newRuntimeStats(path)
+		defaultRuntimeStatsPath = path
+	}
+	return defaultRuntimeStatsInstance
+}
+
+func RecordDirectRequest() {
+	sharedRuntimeStats().record(time.Now())
 }
 
 func NewPool(store *config.Store) *Pool {
@@ -28,13 +55,20 @@ func NewPool(store *config.Store) *Pool {
 		store:                 store,
 		inUse:                 map[string]int{},
 		maxInflightPerAccount: maxPer,
+		stats:                 sharedRuntimeStats(),
+	}
+	if store == nil {
+		p.stats = newInMemoryRuntimeStats()
 	}
 	p.Reset()
 	return p
 }
 
 func (p *Pool) Reset() {
-	accounts := p.store.Accounts()
+	var accounts []config.Account
+	if p.store != nil {
+		accounts = p.store.Accounts()
+	}
 	sort.SliceStable(accounts, func(i, j int) bool {
 		iHas := accounts[i].Token != ""
 		jHas := accounts[j].Token != ""
@@ -100,33 +134,76 @@ func (p *Pool) Release(accountID string) {
 }
 
 func (p *Pool) Status() map[string]any {
+	return p.StatusWithOptions(StatusOptions{IncludeAccounts: true})
+}
+
+func (p *Pool) StatusSummary() map[string]any {
+	return p.StatusWithOptions(StatusOptions{})
+}
+
+func (p *Pool) StatusWithOptions(opts StatusOptions) map[string]any {
 	p.mu.Lock()
-	defer p.mu.Unlock()
-	available := make([]string, 0, len(p.queue))
+	stats := p.stats
+	if stats == nil {
+		stats = sharedRuntimeStats()
+	}
 	inUseAccounts := make([]string, 0, len(p.inUse))
+	availableAccounts := make([]string, 0)
+	availableSlots := 0
 	inUseSlots := 0
 	for _, id := range p.queue {
-		if p.inUse[id] < p.maxInflightPerAccount {
-			available = append(available, id)
+		if p.inUse[id] >= p.maxInflightPerAccount {
+			continue
+		}
+		availableSlots++
+		if opts.IncludeAccounts {
+			availableAccounts = append(availableAccounts, id)
 		}
 	}
 	for id, count := range p.inUse {
 		if count > 0 {
-			inUseAccounts = append(inUseAccounts, id)
+			if opts.IncludeAccounts {
+				inUseAccounts = append(inUseAccounts, id)
+			}
 			inUseSlots += count
 		}
 	}
-	sort.Strings(inUseAccounts)
-	return map[string]any{
-		"available":                len(available),
+	if opts.IncludeAccounts {
+		sort.Strings(inUseAccounts)
+	}
+	totalAccounts := len(p.queue)
+	store := p.store
+	status := map[string]any{
+		"available":                availableSlots,
 		"in_use":                   inUseSlots,
-		"total":                    len(p.store.Accounts()),
-		"available_accounts":       available,
-		"in_use_accounts":          inUseAccounts,
 		"max_inflight_per_account": p.maxInflightPerAccount,
 		"global_max_inflight":      p.globalMaxInflight,
 		"recommended_concurrency":  p.recommendedConcurrency,
 		"waiting":                  len(p.waiters),
 		"max_queue_size":           p.maxQueueSize,
 	}
+	if opts.IncludeAccounts {
+		status["available_accounts"] = availableAccounts
+		status["in_use_accounts"] = inUseAccounts
+	}
+	p.mu.Unlock()
+	if store != nil {
+		totalAccounts = store.AccountCount()
+	}
+	totalRequests, rpm := stats.snapshot(time.Now())
+	status["total"] = totalAccounts
+	status["rpm"] = rpm
+	status["total_requests"] = totalRequests
+	return status
+}
+
+func (p *Pool) RecordRequest() {
+	if p == nil {
+		return
+	}
+	stats := p.stats
+	if stats == nil {
+		stats = sharedRuntimeStats()
+	}
+	stats.record(time.Now())
 }

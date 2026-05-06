@@ -183,3 +183,39 @@ func TestDeleteAndClearChatHistory(t *testing.T) {
 		t.Fatalf("expected empty items after clear, got %d", len(snapshot.Items))
 	}
 }
+
+func TestGetChatHistoryListLimit(t *testing.T) {
+	h, historyStore := newChatHistoryAdminHarness(t)
+	for _, input := range []string{"a", "b", "c"} {
+		if _, err := historyStore.Start(chathistory.StartParams{UserInput: input}); err != nil {
+			t.Fatalf("start %s failed: %v", input, err)
+		}
+	}
+
+	r := chi.NewRouter()
+	RegisterRoutes(r, h)
+
+	req := httptest.NewRequest(http.MethodGet, "/chat-history?limit=2", nil)
+	req.Header.Set("Authorization", "Bearer admin")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode payload failed: %v", err)
+	}
+	items, _ := payload["items"].([]any)
+	if len(items) != 2 {
+		t.Fatalf("expected two limited items, got %#v", payload["items"])
+	}
+	snapshot, err := historyStore.Snapshot()
+	if err != nil {
+		t.Fatalf("snapshot failed: %v", err)
+	}
+	if len(snapshot.Items) != 3 {
+		t.Fatalf("list limit should not prune stored history, got %d", len(snapshot.Items))
+	}
+}

@@ -39,15 +39,16 @@ func Start(params StartParams) *Session {
 		return nil
 	}
 	startParams := chathistory.StartParams{
-		CallerID:    strings.TrimSpace(params.Auth.CallerID),
-		AccountID:   strings.TrimSpace(params.Auth.AccountID),
-		Surface:     strings.TrimSpace(params.Surface),
-		Model:       strings.TrimSpace(params.Standard.ResponseModel),
-		Stream:      params.Standard.Stream,
-		UserInput:   ExtractSingleUserInput(params.Standard.Messages),
-		Messages:    ExtractAllMessages(params.Standard.Messages),
-		HistoryText: params.Standard.HistoryText,
-		FinalPrompt: params.Standard.FinalPrompt,
+		CallerID:     strings.TrimSpace(params.Auth.CallerID),
+		AccountID:    strings.TrimSpace(params.Auth.AccountID),
+		Surface:      strings.TrimSpace(params.Surface),
+		Model:        strings.TrimSpace(params.Standard.ResponseModel),
+		Stream:       params.Standard.Stream,
+		UserInput:    ExtractSingleUserInput(params.Standard.Messages),
+		Messages:     ExtractAllMessages(params.Standard.Messages),
+		HistoryText:  params.Standard.HistoryText,
+		FinalPrompt:  params.Standard.FinalPrompt,
+		DeferPersist: true,
 	}
 	entry, err := params.Store.Start(startParams)
 	session := &Session{
@@ -132,6 +133,7 @@ func (s *Session) Progress(thinking, content string) {
 		Content:          content,
 		StatusCode:       http.StatusOK,
 		ElapsedMs:        time.Since(s.startedAt).Milliseconds(),
+		Persist:          false,
 	})
 }
 
@@ -148,6 +150,7 @@ func (s *Session) Success(statusCode int, thinking, content, finishReason string
 		FinishReason:     finishReason,
 		Usage:            usage,
 		Completed:        true,
+		Persist:          true,
 	})
 }
 
@@ -164,6 +167,7 @@ func (s *Session) Error(statusCode int, message, finishReason, thinking, content
 		ElapsedMs:        time.Since(s.startedAt).Milliseconds(),
 		FinishReason:     finishReason,
 		Completed:        true,
+		Persist:          true,
 	})
 }
 

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -63,6 +64,7 @@ func (m *testingDSMock) GetSessionCountForToken(_ context.Context, _ string) (*d
 }
 
 func TestTestAccount_BatchModeOnlyCreatesSession(t *testing.T) {
+	t.Setenv("DS2API_RUNTIME_STATS_PATH", filepath.Join(t.TempDir(), "runtime_stats.json"))
 	t.Setenv("DS2API_CONFIG_JSON", `{"accounts":[{"email":"batch@example.com","password":"pwd","token":""}]}`)
 	store := config.LoadStore()
 	ds := &testingDSMock{}
@@ -101,6 +103,7 @@ func TestTestAccount_BatchModeOnlyCreatesSession(t *testing.T) {
 }
 
 func TestDeleteAllSessions_RetryWithReloginOnDeleteFailure(t *testing.T) {
+	t.Setenv("DS2API_RUNTIME_STATS_PATH", filepath.Join(t.TempDir(), "runtime_stats.json"))
 	t.Setenv("DS2API_CONFIG_JSON", `{"accounts":[{"email":"batch@example.com","password":"pwd","token":"expired-token"}]}`)
 	store := config.LoadStore()
 	ds := &testingDSMock{deleteAllSessionsError: errors.New("token expired"), deleteAllSessionsErrorOnce: true}
@@ -168,6 +171,7 @@ func (m *completionPayloadDSMock) GetSessionCountForToken(_ context.Context, _ s
 }
 
 func TestTestAccount_MessageModeUsesExpertModelTypeForExpertModel(t *testing.T) {
+	t.Setenv("DS2API_RUNTIME_STATS_PATH", filepath.Join(t.TempDir(), "runtime_stats.json"))
 	t.Setenv("DS2API_CONFIG_JSON", `{"accounts":[{"email":"batch@example.com","password":"pwd","token":"seed-token"}]}`)
 	store := config.LoadStore()
 	ds := &completionPayloadDSMock{}
@@ -191,6 +195,7 @@ func TestTestAccount_MessageModeUsesExpertModelTypeForExpertModel(t *testing.T) 
 }
 
 func TestTestAccount_MessageModeUsesVisionModelTypeForVisionModel(t *testing.T) {
+	t.Setenv("DS2API_RUNTIME_STATS_PATH", filepath.Join(t.TempDir(), "runtime_stats.json"))
 	t.Setenv("DS2API_CONFIG_JSON", `{"accounts":[{"email":"batch@example.com","password":"pwd","token":"seed-token"}]}`)
 	store := config.LoadStore()
 	ds := &completionPayloadDSMock{}

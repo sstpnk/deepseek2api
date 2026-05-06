@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"net/http"
+	"path/filepath"
 	"testing"
 
 	"ds2api/internal/account"
@@ -26,6 +27,7 @@ func boolFrom(v any) bool                    { return adminsettings.BoolFrom(v) 
 
 func newAdminTestHandler(t *testing.T, raw string) *Handler {
 	t.Helper()
+	t.Setenv("DS2API_RUNTIME_STATS_PATH", filepath.Join(t.TempDir(), "runtime_stats.json"))
 	t.Setenv("DS2API_CONFIG_JSON", raw)
 	store := config.LoadStore()
 	return &Handler{

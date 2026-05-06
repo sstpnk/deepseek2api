@@ -82,9 +82,7 @@ func (h *Handler) testAccount(ctx context.Context, acc config.Account, model, me
 		return result
 	}
 	thinking, search, ok := config.GetModelConfig(model)
-	resolvedModel, resolved := config.ResolveModel(modelAliasSnapshotReader{
-		aliases: h.Store.Snapshot().ModelAliases,
-	}, model)
+	resolvedModel, resolved := config.ResolveModel(h.Store, model)
 	if resolved {
 		model = resolvedModel
 		thinking, search, ok = config.GetModelConfig(model)
@@ -140,7 +138,7 @@ func (h *Handler) testAPI(w http.ResponseWriter, r *http.Request) {
 		message = "你好"
 	}
 	if apiKey == "" {
-		keys := h.Store.Snapshot().Keys
+		keys := h.Store.Keys()
 		if len(keys) == 0 {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "没有可用的 API Key"})
 			return

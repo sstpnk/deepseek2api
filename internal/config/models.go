@@ -310,7 +310,12 @@ func loadModelAliases(store ModelAliasReader) map[string]string {
 	aliases := DefaultModelAliases()
 	if store != nil {
 		for k, v := range store.ModelAliases() {
-			aliases[lower(strings.TrimSpace(k))] = lower(strings.TrimSpace(v))
+			key := lower(strings.TrimSpace(k))
+			val := lower(strings.TrimSpace(v))
+			if key == "" || val == "" {
+				continue
+			}
+			aliases[key] = val
 		}
 	}
 	return aliases

@@ -31,6 +31,7 @@ type RequestAuth struct {
 	Account        config.Account
 	TriedAccounts  map[string]bool
 	resolver       *Resolver
+	recorded       bool
 }
 
 type LoginFunc func(ctx context.Context, acc config.Account) (string, error)
@@ -54,26 +55,32 @@ func NewResolver(store *config.Store, pool *account.Pool, login LoginFunc) *Reso
 }
 
 func (r *Resolver) Determine(req *http.Request) (*RequestAuth, error) {
+	if req == nil {
+		return nil, ErrUnauthorized
+	}
 	callerKey := extractCallerToken(req)
 	if callerKey == "" {
 		return nil, ErrUnauthorized
 	}
 	callerID := callerTokenID(callerKey)
 	ctx := req.Context()
-	if !r.Store.HasAPIKey(callerKey) {
-		return &RequestAuth{
+	if r == nil || r.Store == nil || !r.Store.HasAPIKey(callerKey) {
+		a := &RequestAuth{
 			UseConfigToken: false,
 			DeepSeekToken:  callerKey,
 			CallerID:       callerID,
 			resolver:       r,
 			TriedAccounts:  map[string]bool{},
-		}, nil
+		}
+		r.recordRequest(a)
+		return a, nil
 	}
 	target := strings.TrimSpace(req.Header.Get("X-Ds2-Target-Account"))
 	a, err := r.acquireManagedRequestAuth(ctx, callerID, target)
 	if err != nil {
 		return nil, err
 	}
+	r.recordRequest(a)
 	return a, nil
 }
 
@@ -81,7 +88,7 @@ func (r *Resolver) acquireManagedRequestAuth(ctx context.Context, callerID, targ
 	tried := map[string]bool{}
 	var lastEnsureErr error
 	for {
-		if target == "" && len(tried) >= len(r.Store.Accounts()) {
+		if target == "" && len(tried) >= r.Store.AccountCount() {
 			if lastEnsureErr != nil {
 				return nil, lastEnsureErr
 			}
@@ -185,6 +192,9 @@ func (r *Resolver) SwitchAccount(ctx context.Context, a *RequestAuth) bool {
 	if !a.UseConfigToken {
 		return false
 	}
+	if r == nil || r.Pool == nil {
+		return false
+	}
 	if a.TriedAccounts == nil {
 		a.TriedAccounts = map[string]bool{}
 	}
@@ -208,8 +218,23 @@ func (r *Resolver) SwitchAccount(ctx context.Context, a *RequestAuth) bool {
 	}
 }
 
+func (r *Resolver) recordRequest(a *RequestAuth) {
+	if a == nil || a.recorded {
+		return
+	}
+	a.recorded = true
+	if r != nil && r.Pool != nil {
+		r.Pool.RecordRequest()
+		return
+	}
+	account.RecordDirectRequest()
+}
+
 func (r *Resolver) Release(a *RequestAuth) {
 	if a == nil || !a.UseConfigToken || a.AccountID == "" {
+		return
+	}
+	if r == nil || r.Pool == nil {
 		return
 	}
 	r.Pool.Release(a.AccountID)

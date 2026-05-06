@@ -90,15 +90,16 @@ type File struct {
 }
 
 type StartParams struct {
-	CallerID    string
-	AccountID   string
-	Surface     string
-	Model       string
-	Stream      bool
-	UserInput   string
-	Messages    []Message
-	HistoryText string
-	FinalPrompt string
+	CallerID     string
+	AccountID    string
+	Surface      string
+	Model        string
+	Stream       bool
+	UserInput    string
+	Messages     []Message
+	HistoryText  string
+	FinalPrompt  string
+	DeferPersist bool
 }
 
 type UpdateParams struct {
@@ -111,6 +112,11 @@ type UpdateParams struct {
 	FinishReason     string
 	Usage            map[string]any
 	Completed        bool
+	Persist          bool
+}
+
+type ListOptions struct {
+	Limit int
 }
 
 type detailEnvelope struct {
@@ -197,6 +203,29 @@ func (s *Store) Snapshot() (File, error) {
 		return File{}, s.err
 	}
 	return cloneFile(s.state), nil
+}
+
+func (s *Store) SnapshotList(opts ListOptions) (File, error) {
+	if s == nil {
+		return File{}, errors.New("chat history store is nil")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.err != nil {
+		return File{}, s.err
+	}
+	items := s.state.Items
+	if opts.Limit >= 0 && opts.Limit < len(items) {
+		items = items[:opts.Limit]
+	}
+	out := File{
+		Version:  s.state.Version,
+		Limit:    s.state.Limit,
+		Revision: s.state.Revision,
+		Items:    make([]SummaryEntry, len(items)),
+	}
+	copy(out.Items, items)
+	return out, nil
 }
 
 func (s *Store) Revision() (int64, error) {
@@ -287,9 +316,11 @@ func (s *Store) Start(params StartParams) (Entry, error) {
 	}
 	s.details[entry.ID] = entry
 	s.markDetailDirtyLocked(entry.ID)
-	s.rebuildIndexLocked()
-	if err := s.saveLocked(); err != nil {
-		return cloneEntry(entry), err
+	if !params.DeferPersist {
+		s.rebuildIndexLocked()
+		if err := s.saveLocked(); err != nil {
+			return cloneEntry(entry), err
+		}
 	}
 	return cloneEntry(entry), nil
 }
@@ -335,9 +366,13 @@ func (s *Store) Update(id string, params UpdateParams) (Entry, error) {
 	}
 	s.details[target] = item
 	s.markDetailDirtyLocked(target)
-	s.rebuildIndexLocked()
-	if err := s.saveLocked(); err != nil {
-		return Entry{}, err
+	if params.Persist || params.Completed {
+		s.rebuildIndexLocked()
+		if err := s.saveLocked(); err != nil {
+			return Entry{}, err
+		}
+	} else if len(s.details) > s.state.Limit && s.state.Limit > DisabledLimit && isAllowedLimit(s.state.Limit) {
+		s.rebuildIndexLocked()
 	}
 	return cloneEntry(item), nil
 }
@@ -456,15 +491,24 @@ func (s *Store) loadLocked() error {
 	}
 	s.state = cloneFile(state)
 	s.details = map[string]Entry{}
+	missingDetails := 0
 	for _, item := range state.Items {
 		detail, err := readDetailFile(filepath.Join(s.detailDir, item.ID+".json"))
 		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				missingDetails++
+				continue
+			}
 			return err
 		}
 		s.details[item.ID] = detail
 	}
 	s.initSizeIndexLocked()
 	s.rebuildIndexLocked()
+	if missingDetails > 0 {
+		s.nextRevisionLocked()
+		config.Logger.Warn("[chat_history] pruned missing detail records", "path", s.path, "count", missingDetails)
+	}
 	if saveErr := s.saveLocked(); saveErr != nil {
 		config.Logger.Warn("[chat_history] index rewrite failed", "path", s.path, "error", saveErr)
 	}
@@ -670,6 +714,9 @@ func buildPreview(item Entry) string {
 func readDetailFile(path string) (Entry, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return Entry{}, err
+		}
 		return Entry{}, fmt.Errorf("read chat history detail: %w", err)
 	}
 	var env detailEnvelope

@@ -393,7 +393,7 @@ func findAccountByIdentifier(store ConfigStore, identifier string) (config.Accou
 	if acc, ok := store.FindAccount(id); ok {
 		return acc, true
 	}
-	accounts := store.Snapshot().Accounts
+	accounts := store.Accounts()
 	for _, acc := range accounts {
 		if accountMatchesIdentifier(acc, id) {
 			return acc, true

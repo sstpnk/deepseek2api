@@ -23,7 +23,7 @@ func (h *Handler) updateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if runtimeCfg != nil {
-		if err := validateMergedRuntimeSettings(h.Store.Snapshot().Runtime, runtimeCfg); err != nil {
+		if err := validateMergedRuntimeSettings(h.Store.RuntimeConfig(), runtimeCfg); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"detail": err.Error()})
 			return
 		}

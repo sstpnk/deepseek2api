@@ -1,4 +1,4 @@
-import { CheckCircle2, Server, ShieldCheck } from 'lucide-react'
+import { CheckCircle2, Gauge, Sigma } from 'lucide-react'
 
 export default function QueueCards({ queueStatus, t }) {
     if (!queueStatus) {
@@ -13,28 +13,28 @@ export default function QueueCards({ queueStatus, t }) {
                 </div>
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-widest">{t('accountManager.available')}</p>
                 <div className="mt-2 flex items-baseline gap-2">
-                    <span className="text-3xl font-bold text-foreground">{queueStatus.available}</span>
+                    <span className="text-3xl font-bold text-foreground">{queueStatus.available ?? 0}</span>
                     <span className="text-xs text-muted-foreground">{t('accountManager.accountsUnit')}</span>
                 </div>
             </div>
             <div className="bg-card border border-border rounded-xl p-4 flex flex-col justify-between shadow-sm relative overflow-hidden group">
                 <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                    <Server className="w-16 h-16" />
+                    <Gauge className="w-16 h-16" />
                 </div>
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-widest">{t('accountManager.inUse')}</p>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-widest">{t('accountManager.rpm')}</p>
                 <div className="mt-2 flex items-baseline gap-2">
-                    <span className="text-3xl font-bold text-foreground">{queueStatus.in_use}</span>
-                    <span className="text-xs text-muted-foreground">{t('accountManager.threadsUnit')}</span>
+                    <span className="text-3xl font-bold text-foreground">{queueStatus.rpm ?? 0}</span>
+                    <span className="text-xs text-muted-foreground">{t('accountManager.requestsPerMinuteUnit')}</span>
                 </div>
             </div>
             <div className="bg-card border border-border rounded-xl p-4 flex flex-col justify-between shadow-sm relative overflow-hidden group">
                 <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                    <ShieldCheck className="w-16 h-16" />
+                    <Sigma className="w-16 h-16" />
                 </div>
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-widest">{t('accountManager.totalPool')}</p>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-widest">{t('accountManager.totalRequests')}</p>
                 <div className="mt-2 flex items-baseline gap-2">
-                    <span className="text-3xl font-bold text-foreground">{queueStatus.total}</span>
-                    <span className="text-xs text-muted-foreground">{t('accountManager.accountsUnit')}</span>
+                    <span className="text-3xl font-bold text-foreground">{queueStatus.total_requests ?? 0}</span>
+                    <span className="text-xs text-muted-foreground">{t('accountManager.requestsUnit')}</span>
                 </div>
             </div>
         </div>

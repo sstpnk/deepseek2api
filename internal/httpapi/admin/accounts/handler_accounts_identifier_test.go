@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -16,6 +17,7 @@ import (
 
 func newAdminTestHandler(t *testing.T, raw string) *Handler {
 	t.Helper()
+	t.Setenv("DS2API_RUNTIME_STATS_PATH", filepath.Join(t.TempDir(), "runtime_stats.json"))
 	t.Setenv("DS2API_CONFIG_JSON", raw)
 	store := config.LoadStore()
 	return &Handler{

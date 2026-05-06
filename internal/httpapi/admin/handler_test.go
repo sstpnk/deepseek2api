@@ -2,6 +2,7 @@ package admin
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -80,6 +81,36 @@ func TestGetConfigMasksAccountTokenPreview(t *testing.T) {
 	first, _ := accounts[0].(map[string]any)
 	if got, _ := first["token_preview"].(string); got != "ab****gh" {
 		t.Fatalf("expected masked token preview, got %q", got)
+	}
+}
+
+func TestGetConfigOmitsLargeAccountListButKeepsTotal(t *testing.T) {
+	cfg := `{"accounts":[`
+	for i := 0; i < 201; i++ {
+		if i > 0 {
+			cfg += ","
+		}
+		cfg += fmt.Sprintf(`{"email":"u%d@example.com","password":"pwd"}`, i)
+	}
+	cfg += `]}`
+	h := newAdminTestHandler(t, cfg)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/config", nil)
+	rec := httptest.NewRecorder()
+	h.getConfig(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response failed: %v", err)
+	}
+	if got := int(payload["account_total"].(float64)); got != 201 {
+		t.Fatalf("expected account_total=201, got %d", got)
+	}
+	accounts, _ := payload["accounts"].([]any)
+	if len(accounts) != 0 {
+		t.Fatalf("expected large config response to omit account list, got %d", len(accounts))
 	}
 }
 

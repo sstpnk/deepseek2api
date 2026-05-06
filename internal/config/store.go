@@ -138,12 +138,18 @@ func loadConfigFromFile(path string) (Config, error) {
 }
 
 func (s *Store) Snapshot() Config {
+	if s == nil {
+		return Config{}
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.cfg.Clone()
 }
 
 func (s *Store) HasAPIKey(k string) bool {
+	if s == nil {
+		return false
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	_, ok := s.keyMap[k]
@@ -151,28 +157,168 @@ func (s *Store) HasAPIKey(k string) bool {
 }
 
 func (s *Store) Keys() []string {
+	if s == nil {
+		return nil
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return slices.Clone(s.cfg.Keys)
 }
 
+func (s *Store) APIKeys() []APIKey {
+	if s == nil {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return slices.Clone(s.cfg.APIKeys)
+}
+
 func (s *Store) Accounts() []Account {
+	if s == nil {
+		return nil
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return slices.Clone(s.cfg.Accounts)
 }
 
+func (s *Store) AccountCount() int {
+	if s == nil {
+		return 0
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.cfg.Accounts)
+}
+
 func (s *Store) FindAccount(identifier string) (Account, bool) {
+	if s == nil {
+		return Account{}, false
+	}
 	identifier = strings.TrimSpace(identifier)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if idx, ok := s.findAccountIndexLocked(identifier); ok {
 		return s.cfg.Accounts[idx], true
 	}
+	if looksLikeMobileIdentifier(identifier) {
+		mobile := CanonicalMobileKey(identifier)
+		if idx, ok := s.findAccountIndexLocked(mobile); ok {
+			return s.cfg.Accounts[idx], true
+		}
+	}
 	return Account{}, false
 }
 
+func (s *Store) AccountsPage(page, pageSize int, query string) ([]Account, int) {
+	if s == nil {
+		return nil, 0
+	}
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 1
+	}
+	query = strings.ToLower(strings.TrimSpace(query))
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	total := 0
+	start := (page - 1) * pageSize
+	items := make([]Account, 0, pageSize)
+	for i := len(s.cfg.Accounts) - 1; i >= 0; i-- {
+		acc := s.cfg.Accounts[i]
+		if query != "" && !accountMatchesQuery(acc, query) {
+			continue
+		}
+		if total >= start && len(items) < pageSize {
+			items = append(items, acc)
+		}
+		total++
+	}
+	return items, total
+}
+
+func (s *Store) FindProxy(identifier string) (Proxy, bool) {
+	if s == nil {
+		return Proxy{}, false
+	}
+	identifier = strings.TrimSpace(identifier)
+	if identifier == "" {
+		return Proxy{}, false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, proxyCfg := range s.cfg.Proxies {
+		proxyCfg = NormalizeProxy(proxyCfg)
+		if proxyCfg.ID == identifier {
+			return proxyCfg, true
+		}
+	}
+	return Proxy{}, false
+}
+
+func (s *Store) Proxies() []Proxy {
+	if s == nil {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]Proxy, 0, len(s.cfg.Proxies))
+	for _, proxyCfg := range s.cfg.Proxies {
+		out = append(out, NormalizeProxy(proxyCfg))
+	}
+	return out
+}
+
+func accountMatchesQuery(acc Account, q string) bool {
+	if q == "" {
+		return true
+	}
+	values := []string{
+		acc.Identifier(),
+		acc.Name,
+		acc.Remark,
+		acc.Email,
+		acc.Mobile,
+	}
+	for _, value := range values {
+		if strings.Contains(strings.ToLower(value), q) {
+			return true
+		}
+	}
+	return false
+}
+
+func looksLikeMobileIdentifier(identifier string) bool {
+	identifier = strings.TrimSpace(identifier)
+	if identifier == "" || strings.Contains(identifier, "@") {
+		return false
+	}
+	hasDigit := false
+	digits := 0
+	for _, r := range identifier {
+		if r >= '0' && r <= '9' {
+			hasDigit = true
+			digits++
+			continue
+		}
+		switch r {
+		case '+', ' ', '\t', '\n', '\r', '-', '(', ')', '.', '/':
+			continue
+		default:
+			return false
+		}
+	}
+	return hasDigit && digits >= 6
+}
+
 func (s *Store) UpdateAccountTestStatus(identifier, status string) error {
+	if s == nil {
+		return errors.New("config store is nil")
+	}
 	identifier = strings.TrimSpace(identifier)
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -185,6 +331,9 @@ func (s *Store) UpdateAccountTestStatus(identifier, status string) error {
 }
 
 func (s *Store) AccountTestStatus(identifier string) (string, bool) {
+	if s == nil {
+		return "", false
+	}
 	identifier = strings.TrimSpace(identifier)
 	if identifier == "" {
 		return "", false
@@ -196,6 +345,9 @@ func (s *Store) AccountTestStatus(identifier string) (string, bool) {
 }
 
 func (s *Store) UpdateAccountToken(identifier, token string) error {
+	if s == nil {
+		return errors.New("config store is nil")
+	}
 	identifier = strings.TrimSpace(identifier)
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -221,6 +373,9 @@ func (s *Store) UpdateAccountToken(identifier, token string) error {
 }
 
 func (s *Store) Replace(cfg Config) error {
+	if s == nil {
+		return errors.New("config store is nil")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	cfg.NormalizeCredentials()
@@ -230,6 +385,9 @@ func (s *Store) Replace(cfg Config) error {
 }
 
 func (s *Store) Update(mutator func(*Config) error) error {
+	if s == nil {
+		return errors.New("config store is nil")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	base := s.cfg.Clone()
@@ -245,6 +403,9 @@ func (s *Store) Update(mutator func(*Config) error) error {
 }
 
 func (s *Store) Save() error {
+	if s == nil {
+		return errors.New("config store is nil")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.fromEnv && (IsVercel() || !envWritebackEnabled()) {
@@ -283,12 +444,18 @@ func (s *Store) saveLocked() error {
 }
 
 func (s *Store) IsEnvBacked() bool {
+	if s == nil {
+		return false
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.fromEnv
 }
 
 func (s *Store) SetVercelSync(hash string, ts int64) error {
+	if s == nil {
+		return errors.New("config store is nil")
+	}
 	return s.Update(func(c *Config) error {
 		c.VercelSyncHash = hash
 		c.VercelSyncTime = ts
@@ -297,6 +464,9 @@ func (s *Store) SetVercelSync(hash string, ts int64) error {
 }
 
 func (s *Store) ExportJSONAndBase64() (string, string, error) {
+	if s == nil {
+		return "", "", errors.New("config store is nil")
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	exportCfg := s.cfg.Clone()

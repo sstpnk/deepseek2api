@@ -1,5 +1,7 @@
 package config
 
+import "strings"
+
 // rebuildIndexes must be called with the lock already held (or during init).
 func (s *Store) rebuildIndexes() {
 	prevStatus := s.accTest
@@ -7,7 +9,7 @@ func (s *Store) rebuildIndexes() {
 	for _, k := range s.cfg.Keys {
 		s.keyMap[k] = struct{}{}
 	}
-	s.accMap = make(map[string]int, len(s.cfg.Accounts))
+	s.accMap = make(map[string]int, len(s.cfg.Accounts)*3)
 	s.accTest = make(map[string]string, len(s.cfg.Accounts))
 	for i, acc := range s.cfg.Accounts {
 		id := acc.Identifier()
@@ -16,6 +18,12 @@ func (s *Store) rebuildIndexes() {
 			if status, ok := prevStatus[id]; ok {
 				s.setAccountTestStatusLocked(acc, status, "")
 			}
+		}
+		if email := strings.TrimSpace(acc.Email); email != "" {
+			s.accMap[email] = i
+		}
+		if mobile := CanonicalMobileKey(acc.Mobile); mobile != "" {
+			s.accMap[mobile] = i
 		}
 	}
 }

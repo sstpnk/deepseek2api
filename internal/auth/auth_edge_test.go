@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"path/filepath"
 	"testing"
 
 	"ds2api/internal/account"
@@ -170,6 +171,7 @@ func TestSwitchAccountNotConfigToken(t *testing.T) {
 }
 
 func TestSwitchAccountNilTriedAccounts(t *testing.T) {
+	t.Setenv("DS2API_RUNTIME_STATS_PATH", filepath.Join(t.TempDir(), "runtime_stats.json"))
 	t.Setenv("DS2API_CONFIG_JSON", `{
 		"keys":["managed-key"],
 		"accounts":[
@@ -203,6 +205,7 @@ func TestSwitchAccountNilTriedAccounts(t *testing.T) {
 }
 
 func TestSwitchAccountSkipsLoginFailureAndContinues(t *testing.T) {
+	t.Setenv("DS2API_RUNTIME_STATS_PATH", filepath.Join(t.TempDir(), "runtime_stats.json"))
 	t.Setenv("DS2API_CONFIG_JSON", `{
 		"keys":["managed-key"],
 		"accounts":[
@@ -348,6 +351,7 @@ func TestVerifyAdminRequestBasicAuth(t *testing.T) {
 // ─── Determine with login failure ────────────────────────────────────
 
 func TestDetermineWithLoginFailure(t *testing.T) {
+	t.Setenv("DS2API_RUNTIME_STATS_PATH", filepath.Join(t.TempDir(), "runtime_stats.json"))
 	t.Setenv("DS2API_CONFIG_JSON", `{
 		"keys":["managed-key"],
 		"accounts":[{"email":"acc@test.com","password":"pwd"}]
@@ -369,6 +373,7 @@ func TestDetermineWithLoginFailure(t *testing.T) {
 // ─── Determine with target account ───────────────────────────────────
 
 func TestDetermineWithTargetAccount(t *testing.T) {
+	t.Setenv("DS2API_RUNTIME_STATS_PATH", filepath.Join(t.TempDir(), "runtime_stats.json"))
 	t.Setenv("DS2API_CONFIG_JSON", `{
 		"keys":["managed-key"],
 		"accounts":[

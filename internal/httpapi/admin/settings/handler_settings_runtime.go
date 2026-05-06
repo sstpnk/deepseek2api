@@ -25,7 +25,7 @@ func (h *Handler) applyRuntimeSettings() {
 	if h == nil || h.Store == nil || h.Pool == nil {
 		return
 	}
-	accountCount := len(h.Store.Accounts())
+	accountCount := h.Store.RuntimeAccountCount()
 	maxPer := h.Store.RuntimeAccountMaxInflight()
 	recommended := defaultRuntimeRecommended(accountCount, maxPer)
 	maxQueue := h.Store.RuntimeAccountMaxQueue(recommended)
