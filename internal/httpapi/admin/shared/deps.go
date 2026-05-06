@@ -37,6 +37,7 @@ type ConfigStore interface {
 	RuntimeAccountMaxInflight() int
 	RuntimeAccountMaxQueue(defaultSize int) int
 	RuntimeGlobalMaxInflight(defaultSize int) int
+	RuntimePowMaxConcurrency() int
 	RuntimeTokenRefreshIntervalHours() int
 	RuntimeConfig() config.RuntimeConfig
 	RuntimeAccountCount() int

@@ -35,7 +35,7 @@ func (c Config) MarshalJSON() ([]byte, error) {
 	if strings.TrimSpace(c.Admin.PasswordHash) != "" || c.Admin.JWTExpireHours > 0 || c.Admin.JWTValidAfterUnix > 0 {
 		m["admin"] = c.Admin
 	}
-	if c.Runtime.AccountMaxInflight > 0 || c.Runtime.AccountMaxQueue > 0 || c.Runtime.GlobalMaxInflight > 0 || c.Runtime.TokenRefreshIntervalHours > 0 {
+	if c.Runtime.AccountMaxInflight > 0 || c.Runtime.AccountMaxQueue > 0 || c.Runtime.GlobalMaxInflight > 0 || c.Runtime.PowMaxConcurrency > 0 || c.Runtime.TokenRefreshIntervalHours > 0 {
 		m["runtime"] = c.Runtime
 	}
 	if c.Responses.StoreTTLSeconds > 0 {
@@ -45,7 +45,7 @@ func (c Config) MarshalJSON() ([]byte, error) {
 		m["embeddings"] = c.Embeddings
 	}
 	m["auto_delete"] = c.AutoDelete
-	if c.CurrentInputFile.Enabled != nil || c.CurrentInputFile.MinChars != 0 {
+	if c.CurrentInputFile.Enabled != nil || c.CurrentInputFile.MinCharsSet || c.CurrentInputFile.MinChars != 0 {
 		m["current_input_file"] = c.CurrentInputFile
 	}
 	if c.ThinkingInjection.Enabled != nil || strings.TrimSpace(c.ThinkingInjection.Prompt) != "" {
@@ -131,6 +131,10 @@ func (c *Config) UnmarshalJSON(b []byte) error {
 			if err := json.Unmarshal(v, &c.CurrentInputFile); err != nil {
 				return fmt.Errorf("invalid field %q: %w", k, err)
 			}
+			var raw map[string]json.RawMessage
+			if err := json.Unmarshal(v, &raw); err == nil {
+				_, c.CurrentInputFile.MinCharsSet = raw["min_chars"]
+			}
 		case "thinking_injection":
 			if err := json.Unmarshal(v, &c.ThinkingInjection); err != nil {
 				return fmt.Errorf("invalid field %q: %w", k, err)
@@ -158,6 +162,38 @@ func (c *Config) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+func (c CurrentInputFileConfig) MarshalJSON() ([]byte, error) {
+	m := map[string]any{}
+	if c.Enabled != nil {
+		m["enabled"] = *c.Enabled
+	}
+	if c.MinCharsSet || c.MinChars != 0 {
+		m["min_chars"] = c.MinChars
+	}
+	return json.Marshal(m)
+}
+
+func (c *CurrentInputFileConfig) UnmarshalJSON(b []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	if v, ok := raw["enabled"]; ok {
+		var enabled bool
+		if err := json.Unmarshal(v, &enabled); err != nil {
+			return fmt.Errorf("invalid field %q: %w", "enabled", err)
+		}
+		c.Enabled = &enabled
+	}
+	if v, ok := raw["min_chars"]; ok {
+		if err := json.Unmarshal(v, &c.MinChars); err != nil {
+			return fmt.Errorf("invalid field %q: %w", "min_chars", err)
+		}
+		c.MinCharsSet = true
+	}
+	return nil
+}
+
 func (c Config) Clone() Config {
 	clone := Config{
 		Keys:         slices.Clone(c.Keys),
@@ -172,8 +208,9 @@ func (c Config) Clone() Config {
 		Embeddings:   c.Embeddings,
 		AutoDelete:   c.AutoDelete,
 		CurrentInputFile: CurrentInputFileConfig{
-			Enabled:  cloneBoolPtr(c.CurrentInputFile.Enabled),
-			MinChars: c.CurrentInputFile.MinChars,
+			Enabled:     cloneBoolPtr(c.CurrentInputFile.Enabled),
+			MinChars:    c.CurrentInputFile.MinChars,
+			MinCharsSet: c.CurrentInputFile.MinCharsSet,
 		},
 		ThinkingInjection: ThinkingInjectionConfig{
 			Enabled: cloneBoolPtr(c.ThinkingInjection.Enabled),

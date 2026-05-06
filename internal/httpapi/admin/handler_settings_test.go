@@ -61,8 +61,8 @@ func TestGetSettingsIncludesCurrentInputFileDefaults(t *testing.T) {
 	if got := boolFrom(currentInputFile["enabled"]); !got {
 		t.Fatalf("expected current_input_file.enabled=true, body=%v", body)
 	}
-	if got := intFrom(currentInputFile["min_chars"]); got != 0 {
-		t.Fatalf("expected current_input_file.min_chars=0, got %d body=%v", got, body)
+	if got := intFrom(currentInputFile["min_chars"]); got != 12000 {
+		t.Fatalf("expected current_input_file.min_chars=12000, got %d body=%v", got, body)
 	}
 	thinkingInjection, _ := body["thinking_injection"].(map[string]any)
 	if got := boolFrom(thinkingInjection["enabled"]); !got {
@@ -73,6 +73,25 @@ func TestGetSettingsIncludesCurrentInputFileDefaults(t *testing.T) {
 	}
 	if got, _ := thinkingInjection["default_prompt"].(string); got == "" {
 		t.Fatalf("expected default thinking prompt, body=%v", body)
+	}
+}
+
+func TestGetSettingsIncludesPowMaxConcurrency(t *testing.T) {
+	h := newAdminTestHandler(t, `{
+		"keys":["k1"],
+		"runtime":{"pow_max_concurrency":3}
+	}`)
+	req := httptest.NewRequest(http.MethodGet, "/admin/settings", nil)
+	rec := httptest.NewRecorder()
+	h.getSettings(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var body map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &body)
+	runtime, _ := body["runtime"].(map[string]any)
+	if got := intFrom(runtime["pow_max_concurrency"]); got != 3 {
+		t.Fatalf("expected pow_max_concurrency=3, got %d body=%v", got, body)
 	}
 }
 
@@ -183,6 +202,25 @@ func TestUpdateSettingsWithoutRuntimeSkipsMergedRuntimeValidation(t *testing.T) 
 	}
 }
 
+func TestUpdateSettingsPowMaxConcurrency(t *testing.T) {
+	h := newAdminTestHandler(t, `{"keys":["k1"]}`)
+	payload := map[string]any{
+		"runtime": map[string]any{
+			"pow_max_concurrency": 3,
+		},
+	}
+	b, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPut, "/admin/settings", bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+	h.updateSettings(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := h.Store.RuntimePowMaxConcurrency(); got != 3 {
+		t.Fatalf("pow_max_concurrency=%d want=3", got)
+	}
+}
+
 func TestUpdateSettingsCurrentInputFile(t *testing.T) {
 	h := newAdminTestHandler(t, `{"keys":["k1"],"history_split":{"enabled":true,"trigger_after_turns":2}}`)
 	payload := map[string]any{
@@ -204,6 +242,9 @@ func TestUpdateSettingsCurrentInputFile(t *testing.T) {
 	}
 	if snap.CurrentInputFile.MinChars != 12345 {
 		t.Fatalf("expected current_input_file.min_chars=12345, got %#v", snap.CurrentInputFile)
+	}
+	if !snap.CurrentInputFile.MinCharsSet {
+		t.Fatalf("expected current_input_file.min_chars to be marked explicit, got %#v", snap.CurrentInputFile)
 	}
 	if !h.Store.CurrentInputFileEnabled() {
 		t.Fatal("expected current input file accessor to stay enabled")
@@ -230,6 +271,9 @@ func TestUpdateSettingsCurrentInputFilePartialUpdatePreservesEnabled(t *testing.
 	}
 	if snap.CurrentInputFile.MinChars != 5000 {
 		t.Fatalf("expected current_input_file.min_chars=5000, got %#v", snap.CurrentInputFile)
+	}
+	if !snap.CurrentInputFile.MinCharsSet {
+		t.Fatalf("expected current_input_file.min_chars to be marked explicit, got %#v", snap.CurrentInputFile)
 	}
 }
 
@@ -278,6 +322,9 @@ func TestUpdateSettingsIgnoresHistorySplitPayload(t *testing.T) {
 	snap := h.Store.Snapshot()
 	if snap.CurrentInputFile.Enabled == nil || !*snap.CurrentInputFile.Enabled {
 		t.Fatalf("expected current_input_file to remain enabled, got %#v", snap.CurrentInputFile.Enabled)
+	}
+	if !snap.CurrentInputFile.MinCharsSet || h.Store.CurrentInputFileMinChars() != 0 {
+		t.Fatalf("expected explicit current_input_file.min_chars=0, got snap=%#v accessor=%d", snap.CurrentInputFile, h.Store.CurrentInputFileMinChars())
 	}
 }
 
@@ -390,6 +437,7 @@ func TestUpdateSettingsHotReloadRuntime(t *testing.T) {
 			"account_max_inflight": 3,
 			"account_max_queue":    20,
 			"global_max_inflight":  5,
+			"pow_max_concurrency":  2,
 		},
 	}
 	b, _ := json.Marshal(payload)
@@ -408,6 +456,9 @@ func TestUpdateSettingsHotReloadRuntime(t *testing.T) {
 	}
 	if got := intFrom(status["global_max_inflight"]); got != 5 {
 		t.Fatalf("global_max_inflight=%d want=5", got)
+	}
+	if got := h.Store.RuntimePowMaxConcurrency(); got != 2 {
+		t.Fatalf("pow_max_concurrency=%d want=2", got)
 	}
 }
 

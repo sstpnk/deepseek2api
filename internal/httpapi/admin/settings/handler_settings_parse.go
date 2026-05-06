@@ -68,6 +68,13 @@ func parseSettingsUpdateRequest(req map[string]any) (*config.AdminConfig, *confi
 			}
 			cfg.GlobalMaxInflight = n
 		}
+		if v, exists := raw["pow_max_concurrency"]; exists {
+			n := intFrom(v)
+			if err := config.ValidateIntRange("runtime.pow_max_concurrency", n, 1, 256, true); err != nil {
+				return nil, nil, nil, nil, nil, nil, nil, nil, err
+			}
+			cfg.PowMaxConcurrency = n
+		}
 		if v, exists := raw["token_refresh_interval_hours"]; exists {
 			n := intFrom(v)
 			if err := config.ValidateIntRange("runtime.token_refresh_interval_hours", n, 1, 720, true); err != nil {
@@ -149,6 +156,7 @@ func parseSettingsUpdateRequest(req map[string]any) (*config.AdminConfig, *confi
 				return nil, nil, nil, nil, nil, nil, nil, nil, err
 			}
 			cfg.MinChars = n
+			cfg.MinCharsSet = true
 		}
 		if err := config.ValidateCurrentInputFileConfig(*cfg); err != nil {
 			return nil, nil, nil, nil, nil, nil, nil, nil, err

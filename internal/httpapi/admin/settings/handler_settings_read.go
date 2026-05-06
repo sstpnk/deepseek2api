@@ -28,6 +28,7 @@ func (h *Handler) getSettings(w http.ResponseWriter, _ *http.Request) {
 			"account_max_inflight":         h.Store.RuntimeAccountMaxInflight(),
 			"account_max_queue":            h.Store.RuntimeAccountMaxQueue(recommended),
 			"global_max_inflight":          h.Store.RuntimeGlobalMaxInflight(recommended),
+			"pow_max_concurrency":          h.Store.RuntimePowMaxConcurrency(),
 			"token_refresh_interval_hours": h.Store.RuntimeTokenRefreshIntervalHours(),
 		},
 		"responses":   h.Store.ResponsesConfig(),

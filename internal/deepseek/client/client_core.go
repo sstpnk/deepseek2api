@@ -25,6 +25,7 @@ type Client struct {
 	fallback   *http.Client
 	fallbackS  *http.Client
 	maxRetries int
+	pow        *powRuntime
 
 	proxyClientsMu sync.RWMutex
 	proxyClients   map[string]requestClients
@@ -43,6 +44,7 @@ func NewClient(store *config.Store, resolver *auth.Resolver) *Client {
 		fallback:       &http.Client{Timeout: 60 * time.Second},
 		fallbackS:      &http.Client{Timeout: 0},
 		maxRetries:     2,
+		pow:            newPowRuntime(store),
 		proxyClients:   map[string]requestClients{},
 		proxyHealthMap: map[string]*proxyHealth{},
 	}

@@ -86,6 +86,7 @@ func TestUploadFileUsesUploadTargetPowAndMultipartHeaders(t *testing.T) {
 	var seenBody string
 	call := 0
 	client := &Client{
+		pow: newPowRuntime(nil),
 		regular: doerFunc(func(req *http.Request) (*http.Response, error) {
 			call++
 			bodyBytes, _ := io.ReadAll(req.Body)
@@ -167,6 +168,7 @@ func TestUploadFileWaitsForProcessedFetchFiles(t *testing.T) {
 
 	var call int
 	client := &Client{
+		pow: newPowRuntime(nil),
 		regular: doerFunc(func(req *http.Request) (*http.Response, error) {
 			call++
 			switch call {
@@ -219,5 +221,45 @@ func TestUploadFileWaitsForProcessedFetchFiles(t *testing.T) {
 	}
 	if call != 4 {
 		t.Fatalf("expected 4 requests, got %d", call)
+	}
+}
+
+func TestUploadFileInvalidatesCachedPowOnInvalidPowResponse(t *testing.T) {
+	challengeHash := powpkg.DeepSeekHashV1([]byte(powpkg.BuildPrefix("salt", 1712345678) + "42"))
+	powResponse := `{"code":0,"msg":"ok","data":{"biz_code":0,"biz_data":{"challenge":{"algorithm":"DeepSeekHashV1","challenge":"` + hex.EncodeToString(challengeHash[:]) + `","salt":"salt","expire_at":1712345678,"difficulty":1000,"signature":"sig","target_path":"` + dsprotocol.DeepSeekUploadTargetPath + `"}}}}`
+	invalidPowResponse := `{"code":40301,"msg":"INVALID_POW_RESPONSE","data":{"biz_code":0,"biz_data":{}}}`
+	uploadResponse := `{"code":0,"msg":"ok","data":{"biz_code":0,"biz_data":{"file":{"file_id":"file_789","filename":"demo.txt","bytes":5,"status":"processed","purpose":"assistants","is_image":false}}}}`
+
+	var powRequests int
+	var call int
+	client := &Client{
+		pow: newPowRuntime(nil),
+		regular: doerFunc(func(req *http.Request) (*http.Response, error) {
+			call++
+			bodyBytes, _ := io.ReadAll(req.Body)
+			if strings.Contains(string(bodyBytes), `"target_path":"`+dsprotocol.DeepSeekUploadTargetPath+`"`) {
+				powRequests++
+				return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(powResponse)), Request: req}, nil
+			}
+			if call == 2 {
+				return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(invalidPowResponse)), Request: req}, nil
+			}
+			return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(uploadResponse)), Request: req}, nil
+		}),
+		fallback:   &http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) { return nil, nil })},
+		maxRetries: 3,
+	}
+
+	_, err := client.UploadFile(context.Background(), &auth.RequestAuth{DeepSeekToken: "token", TriedAccounts: map[string]bool{}}, UploadFileRequest{
+		Filename:    "demo.txt",
+		ContentType: "text/plain",
+		Purpose:     "assistants",
+		Data:        []byte("hello"),
+	}, 3)
+	if err != nil {
+		t.Fatalf("UploadFile error: %v", err)
+	}
+	if powRequests != 2 {
+		t.Fatalf("expected invalid pow response to force a new pow request, got %d", powRequests)
 	}
 }

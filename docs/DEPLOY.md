@@ -295,6 +295,7 @@ VERCEL_TEAM_ID=team_xxxxxxxxxxxx   # 个人账号可留空
 | `DS2API_ACCOUNT_MAX_INFLIGHT` | 每账号并发上限 | `2` |
 | `DS2API_ACCOUNT_MAX_QUEUE` | 等待队列上限 | `recommended_concurrency` |
 | `DS2API_GLOBAL_MAX_INFLIGHT` | 全局并发上限 | `recommended_concurrency` |
+| `DS2API_POW_MAX_CONCURRENCY` | 本机同时执行 DeepSeek PoW 求解的上限，用于避免 CPU 被 PoW 打满 | `min(max(GOMAXPROCS/2, 1), 4)` |
 | `DS2API_ENV_WRITEBACK` | 检测到 `DS2API_CONFIG_JSON` 时自动写入 `DS2API_CONFIG_PATH`，并在成功后转为文件模式（`1/true/yes/on`） | 关闭 |
 | `DS2API_VERCEL_INTERNAL_SECRET` | 混合流式内部鉴权 | 回退用 `DS2API_ADMIN_KEY` |
 | `DS2API_VERCEL_STREAM_LEASE_TTL_SECONDS` | 流式 lease TTL | `900` |
@@ -313,6 +314,7 @@ VERCEL_TEAM_ID=team_xxxxxxxxxxxx   # 个人账号可留空
 - **自动删除会话模式** (`auto_delete.mode`)：支持 `none` / `single` / `all`，默认为 `none`。可通过 `PUT /admin/settings` 更新。
 - **每账号并发上限** (`account_max_inflight`)：环境变量已支持，但也可通过 Admin API 热更新。
 - **全局并发上限** (`global_max_inflight`)：同上。
+- **PoW 计算并发上限** (`pow_max_concurrency`)：限制本机 CPU 密集型 PoW 求解数量；高并发部署建议从 `1`-`4` 之间试起。
 
 详细说明参见 [API.md](../API.md#admin-接口) 中 `/admin/settings` 部分。
 

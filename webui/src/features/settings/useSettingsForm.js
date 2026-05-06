@@ -12,11 +12,11 @@ const MAX_AUTO_FETCH_FAILURES = 3
 
 const DEFAULT_FORM = {
     admin: { jwt_expire_hours: 24 },
-    runtime: { account_max_inflight: 2, account_max_queue: 10, global_max_inflight: 10, token_refresh_interval_hours: 6 },
+    runtime: { account_max_inflight: 2, account_max_queue: 10, global_max_inflight: 10, pow_max_concurrency: 2, token_refresh_interval_hours: 6 },
     responses: { store_ttl_seconds: 900 },
     embeddings: { provider: '' },
     auto_delete: { mode: 'none' },
-    current_input_file: { enabled: true, min_chars: 0 },
+    current_input_file: { enabled: true, min_chars: 12000 },
     thinking_injection: { enabled: true, prompt: '', default_prompt: '' },
     model_aliases_text: '{}',
 }
@@ -57,6 +57,7 @@ function fromServerForm(data) {
             account_max_inflight: Number(data.runtime?.account_max_inflight || 2),
             account_max_queue: Number(data.runtime?.account_max_queue || 10),
             global_max_inflight: Number(data.runtime?.global_max_inflight || 10),
+            pow_max_concurrency: Number(data.runtime?.pow_max_concurrency || 2),
             token_refresh_interval_hours: Number(data.runtime?.token_refresh_interval_hours || 6),
         },
         responses: {
@@ -70,7 +71,7 @@ function fromServerForm(data) {
         },
         current_input_file: {
             enabled: currentInputFileEnabled,
-            min_chars: Number(data.current_input_file?.min_chars ?? 0),
+            min_chars: Number(data.current_input_file?.min_chars ?? 12000),
         },
         thinking_injection: {
             enabled: data.thinking_injection?.enabled ?? true,
@@ -89,6 +90,7 @@ function toServerPayload(form) {
             account_max_inflight: Number(form.runtime.account_max_inflight),
             account_max_queue: Number(form.runtime.account_max_queue),
             global_max_inflight: Number(form.runtime.global_max_inflight),
+            pow_max_concurrency: Number(form.runtime.pow_max_concurrency),
             token_refresh_interval_hours: Number(form.runtime.token_refresh_interval_hours),
         },
         responses: { store_ttl_seconds: Number(form.responses.store_ttl_seconds) },

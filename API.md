@@ -755,10 +755,10 @@ data: {"type":"message_stop"}
 
 - `success`
 - `admin`（`has_password_hash`、`jwt_expire_hours`、`jwt_valid_after_unix`、`default_password_warning`）
-- `runtime`（`account_max_inflight`、`account_max_queue`、`global_max_inflight`、`token_refresh_interval_hours`）
+- `runtime`（`account_max_inflight`、`account_max_queue`、`global_max_inflight`、`pow_max_concurrency`、`token_refresh_interval_hours`）
 - `responses` / `embeddings`
 - `auto_delete`（`mode`：`none` / `single` / `all`；旧配置 `sessions=true` 仍按 `all` 处理）
-- `current_input_file`（`enabled` 默认返回 `true`、`min_chars`）
+- `current_input_file`（`enabled` 默认返回 `true`、普通模型 `min_chars` 默认 `12000`；显式设为 `0` 表示任意非空输入都上传，`-rp` 模型开启后始终上传）
 - `model_aliases`
 - `env_backed`、`needs_vercel_sync`
 - `toolcall` 策略已固定为 `feature_match + high`，不再通过 settings 返回或修改
@@ -768,7 +768,7 @@ data: {"type":"message_stop"}
 热更新运行时设置。支持更新：
 
 - `admin.jwt_expire_hours`
-- `runtime.account_max_inflight` / `runtime.account_max_queue` / `runtime.global_max_inflight` / `runtime.token_refresh_interval_hours`
+- `runtime.account_max_inflight` / `runtime.account_max_queue` / `runtime.global_max_inflight` / `runtime.pow_max_concurrency` / `runtime.token_refresh_interval_hours`
 - `responses.store_ttl_seconds`
 - `embeddings.provider`
 - `auto_delete.mode`

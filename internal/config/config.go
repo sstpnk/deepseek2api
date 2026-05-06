@@ -27,6 +27,8 @@ type Config struct {
 	AdditionalFields  map[string]any          `json:"-"`
 }
 
+const DefaultCurrentInputFileMinChars = 12000
+
 // QuarantinedAccount is an account that failed an auto-delete verification but
 // has not yet been confirmed dead. The background sweeper re-verifies it every
 // quarantineSweepInterval; on three consecutive failures (Failures >= 3) it is
@@ -194,6 +196,7 @@ type RuntimeConfig struct {
 	AccountMaxInflight        int `json:"account_max_inflight,omitempty"`
 	AccountMaxQueue           int `json:"account_max_queue,omitempty"`
 	GlobalMaxInflight         int `json:"global_max_inflight,omitempty"`
+	PowMaxConcurrency         int `json:"pow_max_concurrency,omitempty"`
 	TokenRefreshIntervalHours int `json:"token_refresh_interval_hours,omitempty"`
 }
 
@@ -211,8 +214,9 @@ type AutoDeleteConfig struct {
 }
 
 type CurrentInputFileConfig struct {
-	Enabled  *bool `json:"enabled,omitempty"`
-	MinChars int   `json:"min_chars,omitempty"`
+	Enabled     *bool `json:"enabled,omitempty"`
+	MinChars    int   `json:"min_chars,omitempty"`
+	MinCharsSet bool  `json:"-"`
 }
 
 type ThinkingInjectionConfig struct {

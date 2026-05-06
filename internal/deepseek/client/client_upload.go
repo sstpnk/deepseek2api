@@ -115,7 +115,9 @@ func (c *Client) UploadFile(ctx context.Context, a *auth.RequestAuth, req Upload
 			resp.Body = captureSession.WrapBody(resp.Body, resp.StatusCode)
 		}
 		payloadBytes, readErr := readResponseBody(resp)
-		_ = resp.Body.Close()
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			config.Logger.Warn("[upload_file] response body close failed", "error", closeErr)
+		}
 		if readErr != nil {
 			powHeader = ""
 			attempts++
@@ -158,6 +160,9 @@ func (c *Client) UploadFile(ctx context.Context, a *auth.RequestAuth, req Upload
 			return result, nil
 		}
 		config.Logger.Warn("[upload_file] failed", "status", resp.StatusCode, "code", code, "biz_code", bizCode, "msg", msg, "biz_msg", bizMsg, "account", a.AccountID, "filename", filename)
+		if isInvalidPowResponse(code, bizCode, msg, bizMsg) {
+			c.invalidatePowHeader(a, dsprotocol.DeepSeekUploadTargetPath)
+		}
 		powHeader = ""
 		lastFailureMessage = failureMessage(msg, bizMsg, "upload file failed")
 		if isTokenInvalid(resp.StatusCode, code, bizCode, msg, bizMsg) || isAuthIndicativeBizFailure(msg, bizMsg) {

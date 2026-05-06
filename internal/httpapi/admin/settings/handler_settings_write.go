@@ -49,6 +49,9 @@ func (h *Handler) updateSettings(w http.ResponseWriter, r *http.Request) {
 			if runtimeCfg.GlobalMaxInflight > 0 {
 				c.Runtime.GlobalMaxInflight = runtimeCfg.GlobalMaxInflight
 			}
+			if runtimeCfg.PowMaxConcurrency > 0 {
+				c.Runtime.PowMaxConcurrency = runtimeCfg.PowMaxConcurrency
+			}
 			if runtimeCfg.TokenRefreshIntervalHours > 0 {
 				c.Runtime.TokenRefreshIntervalHours = runtimeCfg.TokenRefreshIntervalHours
 			}
@@ -69,6 +72,7 @@ func (h *Handler) updateSettings(w http.ResponseWriter, r *http.Request) {
 			}
 			if currentInputMinCharsSet {
 				c.CurrentInputFile.MinChars = currentInputCfg.MinChars
+				c.CurrentInputFile.MinCharsSet = true
 			}
 		}
 		if thinkingInjCfg != nil {

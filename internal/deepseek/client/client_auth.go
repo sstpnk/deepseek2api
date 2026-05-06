@@ -124,6 +124,9 @@ func (c *Client) GetPowForTarget(ctx context.Context, a *auth.RequestAuth, targe
 	if targetPath == "" {
 		targetPath = dsprotocol.DeepSeekCompletionTargetPath
 	}
+	if header, ok := c.cachedPowHeader(a, targetPath); ok {
+		return header, nil
+	}
 	baseCtx := ctx
 	attempts := 0
 	refreshed := false
@@ -154,7 +157,7 @@ func (c *Client) GetPowForTarget(ctx context.Context, a *auth.RequestAuth, targe
 			data, _ := resp["data"].(map[string]any)
 			bizData, _ := data["biz_data"].(map[string]any)
 			challenge, _ := bizData["challenge"].(map[string]any)
-			answer, err := ComputePow(ctx, challenge)
+			header, err := c.solvePowHeader(ctx, a, targetPath, challenge)
 			if err != nil {
 				attempts++
 				if attempts < maxAttempts {
@@ -164,9 +167,12 @@ func (c *Client) GetPowForTarget(ctx context.Context, a *auth.RequestAuth, targe
 				}
 				continue
 			}
-			return BuildPowHeader(challenge, answer)
+			return header, nil
 		}
 		config.Logger.Warn("[get_pow] failed", "status", status, "code", code, "biz_code", bizCode, "msg", msg, "biz_msg", bizMsg, "use_config_token", a.UseConfigToken, "account", a.AccountID, "target_path", targetPath)
+		if isInvalidPowResponse(code, bizCode, msg, bizMsg) {
+			c.invalidatePowHeader(a, targetPath)
+		}
 		lastFailureMessage = failureMessage(msg, bizMsg, "get pow failed")
 		if isTokenInvalid(status, code, bizCode, msg, bizMsg) || isAuthIndicativeBizFailure(msg, bizMsg) {
 			lastFailureKind = authFailureKind(a.UseConfigToken)

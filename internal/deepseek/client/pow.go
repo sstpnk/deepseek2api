@@ -5,8 +5,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"ds2api/pow"
+
+	"ds2api/internal/auth"
+	dsprotocol "ds2api/internal/deepseek/protocol"
 )
 
 // ComputePow 使用纯 Go 实现求解 PoW challenge (DeepSeekHashV1)。
@@ -38,6 +42,57 @@ func BuildPowHeader(challenge map[string]any, answer int64) (string, error) {
 		return "", err
 	}
 	return base64.StdEncoding.EncodeToString(b), nil
+}
+
+func (c *Client) solvePowHeader(ctx context.Context, a *auth.RequestAuth, targetPath string, challenge map[string]any) (string, error) {
+	if c == nil || c.pow == nil {
+		return solvePowHeaderDirect(ctx, challenge)
+	}
+	if strings.TrimSpace(targetPath) != dsprotocol.DeepSeekUploadTargetPath {
+		return c.pow.computeUncached(ctx, challenge)
+	}
+	return c.pow.compute(ctx, powCachePrefix(a, targetPath), challenge)
+}
+
+func (c *Client) invalidatePowHeader(a *auth.RequestAuth, targetPath string) {
+	if c == nil || c.pow == nil {
+		return
+	}
+	c.pow.invalidatePrefix(powCachePrefix(a, targetPath))
+}
+
+func (c *Client) cachedPowHeader(a *auth.RequestAuth, targetPath string) (string, bool) {
+	if c == nil || c.pow == nil {
+		return "", false
+	}
+	return c.pow.getCached(powCachePrefix(a, targetPath))
+}
+
+func powCachePrefix(a *auth.RequestAuth, targetPath string) string {
+	token := ""
+	accountID := ""
+	if a != nil {
+		token = strings.TrimSpace(a.DeepSeekToken)
+		accountID = strings.TrimSpace(a.AccountID)
+	}
+	targetPath = strings.TrimSpace(targetPath)
+	if token != "" {
+		return token + "|" + targetPath
+	}
+	if accountID != "" {
+		return accountID + "|" + targetPath
+	}
+	return targetPath
+}
+
+func isInvalidPowResponse(code, bizCode int, msg, bizMsg string) bool {
+	if code == 40301 || bizCode == 40301 {
+		return true
+	}
+	combined := strings.ToLower(strings.TrimSpace(msg) + " " + strings.TrimSpace(bizMsg))
+	return strings.Contains(combined, "invalid_pow") ||
+		strings.Contains(combined, "invalid pow") ||
+		strings.Contains(combined, "pow_response")
 }
 
 func toFloat64(v any, d float64) float64 {

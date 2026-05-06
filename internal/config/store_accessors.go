@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -213,6 +214,34 @@ func (s *Store) RuntimeGlobalMaxInflight(defaultSize int) int {
 	return defaultSize
 }
 
+func (s *Store) RuntimePowMaxConcurrency() int {
+	if s == nil {
+		return DefaultPowMaxConcurrency()
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.cfg.Runtime.PowMaxConcurrency > 0 {
+		return s.cfg.Runtime.PowMaxConcurrency
+	}
+	if raw := strings.TrimSpace(os.Getenv("DS2API_POW_MAX_CONCURRENCY")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			return n
+		}
+	}
+	return DefaultPowMaxConcurrency()
+}
+
+func DefaultPowMaxConcurrency() int {
+	n := runtime.GOMAXPROCS(0) / 2
+	if n < 1 {
+		return 1
+	}
+	if n > 4 {
+		return 4
+	}
+	return n
+}
+
 func (s *Store) RuntimeTokenRefreshIntervalHours() int {
 	if s == nil {
 		return 6
@@ -259,10 +288,13 @@ func (s *Store) CurrentInputFileEnabled() bool {
 
 func (s *Store) CurrentInputFileMinChars() int {
 	if s == nil {
-		return 0
+		return DefaultCurrentInputFileMinChars
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	if !s.cfg.CurrentInputFile.MinCharsSet && s.cfg.CurrentInputFile.MinChars == 0 {
+		return DefaultCurrentInputFileMinChars
+	}
 	return s.cfg.CurrentInputFile.MinChars
 }
 

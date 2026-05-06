@@ -326,9 +326,9 @@ Common fields:
 - `keys` / `api_keys`: client API keys; `api_keys` adds `name` and `remark` metadata while `keys` remains compatible.
 - `accounts`: managed DeepSeek accounts, supporting `email` or `mobile` login plus proxy/name/remark metadata.
 - `model_aliases`: one shared alias map for OpenAI / Claude / Gemini model names.
-- `runtime`: account concurrency, queueing, and token refresh behavior, hot-reloadable via Admin Settings.
+- `runtime`: account concurrency, queueing, local PoW concurrency, and token refresh behavior, hot-reloadable via Admin Settings.
 - `auto_delete.mode`: remote session cleanup after each request, supporting `none` / `single` / `all`.
-- `current_input_file`: the global context split/upload mode; it is enabled by default and uploads the full context as a `DS2API_HISTORY.txt` context file once the character threshold is reached.
+- `current_input_file`: the global context split/upload mode; it is enabled by default and uploads the full context as a `DS2API_HISTORY.txt` context file once the character threshold is reached. Ordinary models default to `12000` characters; `-rp` models still always upload while enabled.
 - If you turn off `current_input_file`, requests pass through directly without uploading any split context file.
 
 For the full environment variable list, see [docs/DEPLOY.en.md](docs/DEPLOY.en.md). For auth behavior, see [API.en.md](API.en.md#authentication).

@@ -50,7 +50,21 @@ func (c *Client) CallCompletion(ctx context.Context, a *auth.RequestAuth, payloa
 			resp.Body = captureSession.WrapBody(resp.Body, resp.StatusCode)
 		}
 		statusCode := resp.StatusCode
-		_ = resp.Body.Close()
+		body, readErr := readResponseBody(resp)
+		if readErr == nil {
+			parsed := map[string]any{}
+			if len(body) > 0 {
+				if err := json.Unmarshal(body, &parsed); err == nil {
+					code, bizCode, msg, bizMsg := extractResponseStatus(parsed)
+					if isInvalidPowResponse(code, bizCode, msg, bizMsg) {
+						c.invalidatePowHeader(a, dsprotocol.DeepSeekCompletionTargetPath)
+					}
+				}
+			}
+		}
+		if err := resp.Body.Close(); err != nil {
+			config.Logger.Warn("[completion] response body close failed", "error", err)
+		}
 		attempts++
 		if attempts >= maxAttempts {
 			break

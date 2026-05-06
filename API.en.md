@@ -744,10 +744,10 @@ Reads runtime settings and status, including:
 
 - `success`
 - `admin` (`has_password_hash`, `jwt_expire_hours`, `jwt_valid_after_unix`, `default_password_warning`)
-- `runtime` (`account_max_inflight`, `account_max_queue`, `global_max_inflight`, `token_refresh_interval_hours`)
+- `runtime` (`account_max_inflight`, `account_max_queue`, `global_max_inflight`, `pow_max_concurrency`, `token_refresh_interval_hours`)
 - `responses` / `embeddings`
 - `auto_delete` (`mode`: `none` / `single` / `all`; legacy `sessions=true` is still treated as `all`)
-- `current_input_file` (`enabled` defaults to `true`, plus `min_chars`)
+- `current_input_file` (`enabled` defaults to `true`; ordinary-model `min_chars` defaults to `12000`; set it explicitly to `0` to upload any non-empty input, while `-rp` models always upload when enabled)
 - `model_aliases`
 - `env_backed`, `needs_vercel_sync`
 - `toolcall` policy is fixed to `feature_match + high` and is no longer returned or editable via settings
@@ -757,7 +757,7 @@ Reads runtime settings and status, including:
 Hot-updates runtime settings. Supported fields:
 
 - `admin.jwt_expire_hours`
-- `runtime.account_max_inflight` / `runtime.account_max_queue` / `runtime.global_max_inflight` / `runtime.token_refresh_interval_hours`
+- `runtime.account_max_inflight` / `runtime.account_max_queue` / `runtime.global_max_inflight` / `runtime.pow_max_concurrency` / `runtime.token_refresh_interval_hours`
 - `responses.store_ttl_seconds`
 - `embeddings.provider`
 - `auto_delete.mode`

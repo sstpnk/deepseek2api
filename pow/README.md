@@ -21,7 +21,15 @@ header = base64(json({algorithm, challenge, salt, answer, signature, target_path
 
 - `pow/deepseek_hash.go`：DeepSeekHashV1 / Keccak-f[1600] rounds 1..23。
 - `pow/deepseek_pow.go`：`SolvePow`、`BuildPowHeader`、`SolveAndBuildHeader`。
-- `internal/deepseek/pow.go`：服务侧适配层，校验 `algorithm == DeepSeekHashV1` 并调用 `pow.SolvePow`。
+- `internal/deepseek/client/pow.go`：服务侧适配层，校验 `algorithm == DeepSeekHashV1` 并调用 `pow.SolvePow`。
+- `internal/deepseek/client/pow_runtime.go`：运行时 CPU 保护层，限制本地 PoW 并发；上传目标会短时间缓存并合并同账号同目标的并发求解，生成目标只限流不复用。
+
+## 运行时保护
+
+- `runtime.pow_max_concurrency` 控制本地 PoW 求解并发；未配置时默认约为 `GOMAXPROCS/2`，上限 4。
+- `DS2API_POW_MAX_CONCURRENCY` 可通过环境变量覆盖默认值。
+- 上传文件目标的 PoW 响应缓存有效期很短，遇到上游 `INVALID_POW_RESPONSE` / `40301` 会立即失效，避免重复上传上下文文件时反复烧 CPU。
+- 聊天生成目标仍每次请求获取并计算自己的 PoW，只经过并发阀门，避免复用导致生成链路被上游拒绝。
 
 ## 测试
 

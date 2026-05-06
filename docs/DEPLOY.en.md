@@ -295,6 +295,7 @@ VERCEL_TEAM_ID=team_xxxxxxxxxxxx   # optional for personal accounts
 | `DS2API_ACCOUNT_MAX_INFLIGHT` | Per-account inflight limit | `2` |
 | `DS2API_ACCOUNT_MAX_QUEUE` | Waiting queue limit | `recommended_concurrency` |
 | `DS2API_GLOBAL_MAX_INFLIGHT` | Global inflight limit | `recommended_concurrency` |
+| `DS2API_POW_MAX_CONCURRENCY` | Maximum local DeepSeek PoW solvers running at once, to prevent CPU saturation | `min(max(GOMAXPROCS/2, 1), 4)` |
 | `DS2API_ENV_WRITEBACK` | When `DS2API_CONFIG_JSON` is present, auto-write to `DS2API_CONFIG_PATH` and switch to file-backed mode after success (`1/true/yes/on`) | Disabled |
 | `DS2API_VERCEL_INTERNAL_SECRET` | Hybrid streaming internal auth | Falls back to `DS2API_ADMIN_KEY` |
 | `DS2API_VERCEL_STREAM_LEASE_TTL_SECONDS` | Stream lease TTL | `900` |
@@ -305,6 +306,14 @@ VERCEL_TEAM_ID=team_xxxxxxxxxxxx   # optional for personal accounts
 | `DS2API_CHAT_HISTORY_PATH` | Chat history storage path (must be set to `/tmp/chat_history.json` on Vercel, otherwise unavailable due to read-only filesystem) | `data/chat_history.json` |
 | `DS2API_RUNTIME_STATS_PATH` | Runtime total-request counter storage path, used by Admin account-pool stats across restarts | `data/runtime_stats.json` |
 | `DS2API_VERCEL_PROTECTION_BYPASS` | Deployment protection bypass for internal Node→Go calls | — |
+
+### Runtime behavior settings
+
+Some runtime behavior can also be changed after deployment through `PUT /admin/settings`:
+
+- **Per-account inflight limit** (`account_max_inflight`): also available as an environment variable.
+- **Global inflight limit** (`global_max_inflight`): also available as an environment variable.
+- **PoW concurrency limit** (`pow_max_concurrency`): limits CPU-bound local PoW solvers; start with `1`-`4` for high-concurrency deployments.
 
 ### 3.4 Vercel Architecture
 

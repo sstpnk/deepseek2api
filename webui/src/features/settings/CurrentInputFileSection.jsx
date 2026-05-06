@@ -30,7 +30,7 @@ export default function CurrentInputFileSection({ t, form, setForm }) {
                         type="number"
                         min={0}
                         max={100000000}
-                        value={form.current_input_file?.min_chars ?? 0}
+                        value={form.current_input_file?.min_chars ?? 12000}
                         onChange={(e) => setForm((prev) => ({
                             ...prev,
                             current_input_file: {

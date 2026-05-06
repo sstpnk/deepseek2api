@@ -7,12 +7,12 @@ func TestStoreCurrentInputFileAccessors(t *testing.T) {
 	if !store.CurrentInputFileEnabled() {
 		t.Fatal("expected current input file enabled by default")
 	}
-	if got := store.CurrentInputFileMinChars(); got != 0 {
-		t.Fatalf("default current input file min_chars=%d want=0", got)
+	if got := store.CurrentInputFileMinChars(); got != DefaultCurrentInputFileMinChars {
+		t.Fatalf("default current input file min_chars=%d want=%d", got, DefaultCurrentInputFileMinChars)
 	}
 
 	enabled := false
-	store.cfg.CurrentInputFile = CurrentInputFileConfig{Enabled: &enabled, MinChars: 12345}
+	store.cfg.CurrentInputFile = CurrentInputFileConfig{Enabled: &enabled, MinChars: 12345, MinCharsSet: true}
 	if store.CurrentInputFileEnabled() {
 		t.Fatal("expected current input file disabled")
 	}
@@ -24,6 +24,11 @@ func TestStoreCurrentInputFileAccessors(t *testing.T) {
 	}
 	if got := store.CurrentInputFileMinChars(); got != 12345 {
 		t.Fatalf("current input file min_chars=%d want=12345", got)
+	}
+
+	store.cfg.CurrentInputFile = CurrentInputFileConfig{MinChars: 0, MinCharsSet: true}
+	if got := store.CurrentInputFileMinChars(); got != 0 {
+		t.Fatalf("explicit current input file min_chars=%d want=0", got)
 	}
 }
 
@@ -42,6 +47,19 @@ func TestStoreThinkingInjectionAccessors(t *testing.T) {
 	store.cfg.ThinkingInjection.Prompt = "  custom thinking prompt  "
 	if got := store.ThinkingInjectionPrompt(); got != "custom thinking prompt" {
 		t.Fatalf("thinking injection prompt=%q want custom thinking prompt", got)
+	}
+}
+
+func TestStoreRuntimePowMaxConcurrencyAccessor(t *testing.T) {
+	store := &Store{cfg: Config{Runtime: RuntimeConfig{PowMaxConcurrency: 3}}}
+	if got := store.RuntimePowMaxConcurrency(); got != 3 {
+		t.Fatalf("pow max concurrency=%d want=3", got)
+	}
+
+	t.Setenv("DS2API_POW_MAX_CONCURRENCY", "2")
+	store.cfg.Runtime.PowMaxConcurrency = 0
+	if got := store.RuntimePowMaxConcurrency(); got != 2 {
+		t.Fatalf("env pow max concurrency=%d want=2", got)
 	}
 }
 
