@@ -24,7 +24,7 @@ func (s thinkingInjectionStore) CurrentInputFileMinChars() int       { return 0 
 func (s thinkingInjectionStore) ThinkingInjectionEnabled() bool      { return s.enabled }
 func (s thinkingInjectionStore) ThinkingInjectionPrompt() string     { return s.prompt }
 
-func TestApplyThinkingInjectionRoleplayDefaultPrompt(t *testing.T) {
+func TestApplyThinkingInjectionRoleplayUsesStandardDefaultPrompt(t *testing.T) {
 	stdReq := promptcompat.StandardRequest{
 		ResolvedModel: "deepseek-v4-flash-rp",
 		Messages:      []any{map[string]any{"role": "user", "content": "continue"}},
@@ -34,13 +34,12 @@ func TestApplyThinkingInjectionRoleplayDefaultPrompt(t *testing.T) {
 
 	out := ApplyThinkingInjection(thinkingInjectionStore{enabled: true}, stdReq)
 
-	for _, want := range []string{
-		promptcompat.ThinkingInjectionMarker,
-		"SillyTavern",
-		"roleplay presets",
-	} {
-		if !strings.Contains(out.FinalPrompt, want) {
-			t.Fatalf("expected RP thinking injection to contain %q, got %q", want, out.FinalPrompt)
+	if !strings.Contains(out.FinalPrompt, promptcompat.ThinkingInjectionMarker) {
+		t.Fatalf("expected standard thinking injection, got %q", out.FinalPrompt)
+	}
+	for _, forbidden := range []string{"SillyTavern", "roleplay presets"} {
+		if strings.Contains(out.FinalPrompt, forbidden) {
+			t.Fatalf("expected RP thinking injection to use standard default and omit %q, got %q", forbidden, out.FinalPrompt)
 		}
 	}
 }
@@ -78,8 +77,8 @@ func TestApplyThinkingInjectionRoleplayCustomPromptWins(t *testing.T) {
 	if !strings.Contains(out.FinalPrompt, "custom thinking prompt") {
 		t.Fatalf("expected custom prompt, got %q", out.FinalPrompt)
 	}
-	if strings.Contains(out.FinalPrompt, "SillyTavern") {
-		t.Fatalf("expected custom prompt to replace RP default, got %q", out.FinalPrompt)
+	if strings.Contains(out.FinalPrompt, promptcompat.ThinkingInjectionMarker) {
+		t.Fatalf("expected custom prompt to replace default, got %q", out.FinalPrompt)
 	}
 }
 

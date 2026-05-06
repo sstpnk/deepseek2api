@@ -222,7 +222,7 @@ OpenAI `/v1/*` 仍是规范路径。对于只配置 DS2API 根地址的客户端
 }
 ```
 
-> 说明：`/v1/models` 返回的是规范化后的 DeepSeek 原生模型 ID；常见 alias 仅用于请求入参解析，不会在该接口中单独展开返回。带 `-nothinking` 后缀的模型表示无论请求里是否显式开启 thinking / reasoning，都会强制关闭思考输出。带 `-rp` 后缀的模型是 reduced-prompt / roleplay 变体，会跳过工具 schema 与 DSML 工具调用规则提示词注入；current input file 触发时会用 RP live anchor 重复最新用户输入来强化当前回合焦点；thinking 开启且 `thinking_injection.prompt` 留空时会使用 RP 专用默认 thinking prompt。`thinking_enabled`、`model_type` 和工具输出解析保持对应基础模型行为。
+> 说明：`/v1/models` 返回的是规范化后的 DeepSeek 原生模型 ID；常见 alias 仅用于请求入参解析，不会在该接口中单独展开返回。带 `-nothinking` 后缀的模型表示无论请求里是否显式开启 thinking / reasoning，都会强制关闭思考输出。OpenAI-compatible Chat / Responses 支持带 `-rp` 后缀的 reduced-prompt / roleplay 变体，会跳过工具 schema 与 DSML 工具调用规则提示词注入；current input file 开启时会始终上传完整 `DS2API_HISTORY.txt` 上下文，并使用精简 live prompt：边界句、最新用户输入、RP continuation 约束、可选 thinking injection。Claude-compatible / Gemini-compatible 原生入口不支持 `-rp`。`thinking_enabled`、`model_type` 和工具输出解析保持对应基础模型行为。
 
 ### 模型 alias 解析策略
 

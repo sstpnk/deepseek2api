@@ -1,7 +1,6 @@
 package shared
 
 import (
-	"ds2api/internal/config"
 	"ds2api/internal/promptcompat"
 )
 
@@ -10,9 +9,6 @@ func ApplyThinkingInjection(store ConfigReader, stdReq promptcompat.StandardRequ
 		return stdReq
 	}
 	defaultPrompt := promptcompat.DefaultThinkingInjectionPrompt
-	if config.IsRoleplayPromptModel(stdReq.ResolvedModel) {
-		defaultPrompt = promptcompat.DefaultRoleplayThinkingInjectionPrompt
-	}
 	messages, changed := promptcompat.AppendThinkingInjectionPromptToLatestUserWithDefault(stdReq.Messages, store.ThinkingInjectionPrompt(), defaultPrompt)
 	if !changed {
 		return stdReq

@@ -218,7 +218,7 @@ No auth required. Returns the currently supported DeepSeek native model list.
 }
 ```
 
-> Note: `/v1/models` returns normalized DeepSeek native model IDs. Common aliases are accepted only as request input and are not expanded as separate items in this endpoint. Models with `-rp` are reduced-prompt / roleplay variants: they skip tool schema and DSML tool-call instruction injection, use an RP live anchor that repeats the latest user input when current input file is triggered, and use the RP default thinking prompt when thinking is enabled and `thinking_injection.prompt` is empty. `thinking_enabled`, `model_type`, and tool output parsing remain aligned with the matching base model.
+> Note: `/v1/models` returns normalized DeepSeek native model IDs. Common aliases are accepted only as request input and are not expanded as separate items in this endpoint. OpenAI-compatible Chat / Responses support models with `-rp` as reduced-prompt / roleplay variants: they skip tool schema and DSML tool-call instruction injection; when current input file is enabled, they always upload the full `DS2API_HISTORY.txt` context and use a compact live prompt: boundary sentence, latest user input, RP continuation constraint, and optional thinking injection. Native Claude-compatible / Gemini-compatible endpoints do not support `-rp`. `thinking_enabled`, `model_type`, and tool output parsing remain aligned with the matching base model.
 
 ### Model Alias Resolution
 

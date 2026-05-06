@@ -29,7 +29,17 @@ func MessagesPrepare(messages []map[string]any) string {
 }
 
 func MessagesPrepareWithThinking(messages []map[string]any, _ bool) string {
-	messages = prependOutputIntegrityGuard(messages)
+	return MessagesPrepareWithOptions(messages, PrepareOptions{})
+}
+
+type PrepareOptions struct {
+	SuppressOutputIntegrityGuard bool
+}
+
+func MessagesPrepareWithOptions(messages []map[string]any, opts PrepareOptions) string {
+	if !opts.SuppressOutputIntegrityGuard {
+		messages = prependOutputIntegrityGuard(messages)
+	}
 
 	type block struct {
 		Role string

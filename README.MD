@@ -177,7 +177,7 @@ OpenAI `/v1/*` 仍是推荐的规范路径；同时支持 `/models`、`/chat/com
 | vision | `deepseek-v4-vision` | 默认开启，可由请求参数控制 | ❌ |
 | vision | `deepseek-v4-vision-nothinking` | 永久关闭，不受请求参数影响 | ❌ |
 
-除原生模型外，也支持常见 alias 输入（如 `gpt-4.1`、`gpt-5`、`gpt-5-codex`、`o3`、`claude-*`、`gemini-*` 等），但 `/v1/models` 返回的是规范化后的 DeepSeek 原生模型 ID。若 alias 名本身追加 `-nothinking` 后缀，也会映射到对应的强制关思考模型；追加 `-rp` 会映射到 reduced-prompt / roleplay 变体。`-rp` 会跳过工具 schema 与 DSML 工具调用规则提示词注入，同时在 current input file 触发时使用 RP live anchor 重复最新用户输入以强化当前回合焦点；thinking 开启且未自定义 `thinking_injection.prompt` 时会使用 RP 专用默认 thinking prompt。`thinking_enabled`、`model_type` 和工具输出解析仍保持对应基础模型行为。完整 alias 行为以 [API.md](API.md#模型-alias-解析策略) 和 `config.example.json` 为准。
+除原生模型外，也支持常见 alias 输入（如 `gpt-4.1`、`gpt-5`、`gpt-5-codex`、`o3`、`claude-*`、`gemini-*` 等），但 `/v1/models` 返回的是规范化后的 DeepSeek 原生模型 ID。OpenAI-compatible Chat / Responses 中，若 alias 名本身追加 `-nothinking` 后缀，也会映射到对应的强制关思考模型；追加 `-rp` 会映射到 reduced-prompt / roleplay 变体。`-rp` 会跳过工具 schema 与 DSML 工具调用规则提示词注入；current input file 开启时会始终上传完整 `DS2API_HISTORY.txt` 上下文，并使用精简 live prompt：边界句、最新用户输入、RP continuation 约束、可选 thinking injection。Claude-compatible / Gemini-compatible 原生入口不支持 `-rp`。`thinking_enabled`、`model_type` 和工具输出解析仍保持对应基础模型行为。完整 alias 行为以 [API.md](API.md#模型-alias-解析策略) 和 `config.example.json` 为准。
 当前上游视觉模型只暴露 `vision` 通道，不提供独立的联网搜索视觉变体。
 
 ### Claude 接口（`GET /anthropic/v1/models`）

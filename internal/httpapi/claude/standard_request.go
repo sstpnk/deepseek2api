@@ -15,11 +15,19 @@ type claudeNormalizedRequest struct {
 	NormalizedMessages []any
 }
 
+func isUnsupportedClaudeRoleplayModel(model string) bool {
+	model = strings.ToLower(strings.TrimSpace(model))
+	return strings.HasSuffix(model, "-rp")
+}
+
 func normalizeClaudeRequest(store ConfigReader, req map[string]any) (claudeNormalizedRequest, error) {
 	model, _ := req["model"].(string)
 	messagesRaw, _ := req["messages"].([]any)
 	if strings.TrimSpace(model) == "" || len(messagesRaw) == 0 {
 		return claudeNormalizedRequest{}, fmt.Errorf("request must include 'model' and 'messages'")
+	}
+	if isUnsupportedClaudeRoleplayModel(model) {
+		return claudeNormalizedRequest{}, fmt.Errorf("model %q is not supported on the Claude-compatible endpoint; use the OpenAI-compatible endpoint for -rp models", strings.TrimSpace(model))
 	}
 	if _, ok := req["max_tokens"]; !ok {
 		req["max_tokens"] = 8192
@@ -31,6 +39,9 @@ func normalizeClaudeRequest(store ConfigReader, req map[string]any) (claudeNorma
 
 	dsPayload := convertClaudeToDeepSeek(payload, store)
 	dsModel, _ := dsPayload["model"].(string)
+	if config.IsRoleplayPromptModel(dsModel) {
+		return claudeNormalizedRequest{}, fmt.Errorf("model %q is not supported on the Claude-compatible endpoint; use the OpenAI-compatible endpoint for -rp models", strings.TrimSpace(model))
+	}
 	defaultThinkingEnabled, searchEnabled, ok := config.GetModelConfig(dsModel)
 	if !ok {
 		searchEnabled = false
@@ -39,11 +50,8 @@ func normalizeClaudeRequest(store ConfigReader, req map[string]any) (claudeNorma
 	if config.IsNoThinkingModel(dsModel) {
 		thinkingEnabled = false
 	}
-	suppressToolPrompt := config.IsReducedPromptModel(dsModel)
-	if !suppressToolPrompt {
-		payload["messages"] = injectClaudeToolPrompt(payload, normalizedMessages, toolsRequested)
-		dsPayload = convertClaudeToDeepSeek(payload, store)
-	}
+	payload["messages"] = injectClaudeToolPrompt(payload, normalizedMessages, toolsRequested)
+	dsPayload = convertClaudeToDeepSeek(payload, store)
 	finalPrompt := prompt.MessagesPrepareWithThinking(toMessageMaps(dsPayload["messages"]), thinkingEnabled)
 	toolNames := extractClaudeToolNames(toolsRequested)
 	if len(toolNames) == 0 && len(toolsRequested) > 0 {
@@ -61,7 +69,7 @@ func normalizeClaudeRequest(store ConfigReader, req map[string]any) (claudeNorma
 			ToolsRaw:           toolsRequested,
 			FinalPrompt:        finalPrompt,
 			ToolNames:          toolNames,
-			SuppressToolPrompt: suppressToolPrompt,
+			SuppressToolPrompt: false,
 			Stream:             util.ToBool(req["stream"]),
 			Thinking:           thinkingEnabled,
 			Search:             searchEnabled,

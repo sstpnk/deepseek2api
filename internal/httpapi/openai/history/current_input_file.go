@@ -24,6 +24,11 @@ type CurrentInputConfigReader interface {
 	CurrentInputFileMinChars() int
 }
 
+type ThinkingInjectionConfigReader interface {
+	ThinkingInjectionEnabled() bool
+	ThinkingInjectionPrompt() string
+}
+
 type CurrentInputUploader interface {
 	UploadFile(ctx context.Context, a *auth.RequestAuth, req dsclient.UploadFileRequest, maxAttempts int) (*dsclient.UploadFileResult, error)
 }
@@ -37,13 +42,14 @@ func (s Service) ApplyCurrentInputFile(ctx context.Context, a *auth.RequestAuth,
 	if stdReq.CurrentInputFileApplied || s.DS == nil || s.Store == nil || a == nil || !s.Store.CurrentInputFileEnabled() {
 		return stdReq, nil
 	}
+	isRoleplayPrompt := isOpenAIRoleplayPromptRequest(stdReq)
 	threshold := s.Store.CurrentInputFileMinChars()
 
 	index, text := latestUserInputForFile(stdReq.Messages)
 	if index < 0 {
 		return stdReq, nil
 	}
-	if len([]rune(text)) < threshold {
+	if !isRoleplayPrompt && len([]rune(text)) < threshold {
 		return stdReq, nil
 	}
 	liveLatestUserText := strings.TrimSpace(stdReq.LatestUserInputText)
@@ -73,10 +79,11 @@ func (s Service) ApplyCurrentInputFile(ctx context.Context, a *auth.RequestAuth,
 		return stdReq, errors.New("upload current user input file returned empty file id")
 	}
 
+	livePrompt := openAICurrentInputFilePrompt(stdReq, liveLatestUserText, roleplayLiveThinkingPrompt(s.Store, stdReq))
 	messages := []any{
 		map[string]any{
 			"role":    "user",
-			"content": currentInputFilePrompt(stdReq.ResolvedModel, liveLatestUserText),
+			"content": livePrompt,
 		},
 	}
 
@@ -84,7 +91,10 @@ func (s Service) ApplyCurrentInputFile(ctx context.Context, a *auth.RequestAuth,
 	stdReq.HistoryText = fileText
 	stdReq.CurrentInputFileApplied = true
 	stdReq.RefFileIDs = prependUniqueRefFileID(stdReq.RefFileIDs, fileID)
-	stdReq.FinalPrompt, stdReq.ToolNames = promptcompat.BuildOpenAIPromptWithOptions(messages, stdReq.ToolsRaw, "", stdReq.ToolChoice, stdReq.Thinking, promptcompat.PromptBuildOptions{SuppressToolPrompt: stdReq.SuppressToolPrompt})
+	stdReq.FinalPrompt, stdReq.ToolNames = promptcompat.BuildOpenAIPromptWithOptions(messages, stdReq.ToolsRaw, "", stdReq.ToolChoice, stdReq.Thinking, promptcompat.PromptBuildOptions{
+		SuppressToolPrompt:           stdReq.SuppressToolPrompt,
+		SuppressOutputIntegrityGuard: isRoleplayPrompt,
+	})
 	// Token accounting must reflect the actual downstream context:
 	// the uploaded DS2API_HISTORY.txt file content + the continuation live prompt.
 	stdReq.PromptTokenText = fileText + "\n" + stdReq.FinalPrompt
@@ -110,26 +120,53 @@ func latestUserInputForFile(messages []any) (int, string) {
 	return -1, ""
 }
 
-func currentInputFilePrompt(model, latestUserText string) string {
-	if config.IsRoleplayPromptModel(model) {
-		return roleplayCurrentInputFilePrompt(latestUserText)
+func isOpenAIRoleplayPromptRequest(stdReq promptcompat.StandardRequest) bool {
+	switch stdReq.Surface {
+	case "openai_chat", "openai_responses":
+		return config.IsRoleplayPromptModel(stdReq.ResolvedModel)
+	default:
+		return false
 	}
+}
+
+func openAICurrentInputFilePrompt(stdReq promptcompat.StandardRequest, latestUserText, thinkingPrompt string) string {
+	if isOpenAIRoleplayPromptRequest(stdReq) {
+		return roleplayCurrentInputFilePrompt(latestUserText, thinkingPrompt)
+	}
+	return standardCurrentInputFilePrompt()
+}
+
+func standardCurrentInputFilePrompt() string {
 	return "Continue from the latest state in the attached DS2API_HISTORY.txt context. Treat it as the current working state and answer the latest user request directly."
 }
 
-func roleplayCurrentInputFilePrompt(latestUserText string) string {
+func roleplayCurrentInputFilePrompt(latestUserText, thinkingPrompt string) string {
 	latestUserText = strings.TrimSpace(latestUserText)
-	return "Continue the ongoing roleplay/story from the attached DS2API_HISTORY.txt context. Treat the attached file as the complete current state, including all SillyTavern presets, character cards, world/lore entries, author notes, injection-depth prompts, output format rules, prior dialogue, and the latest user turn.\n\n" +
-		"The latest user input is repeated below only to make the current turn focus explicit. Do not treat it as a new separate message; answer it as the next turn of the same ongoing scene.\n\n" +
-		"<<<LATEST_USER_INPUT\n" +
-		latestUserText + "\n" +
-		"LATEST_USER_INPUT>>>\n\n" +
-		"RP Continuation Requirements:\n" +
-		"- Strictly follow the attached context's roleplay presets, character definitions, world rules, author notes, style rules, output format, and any thinking/inner-monologue format instructions.\n" +
-		"- If instructions conflict, prefer the more specific, later, or closer-to-the-latest-user-turn instruction, while preserving character/world consistency.\n" +
-		"- Do not restart, summarize, explain rules, mention files, or step out of character unless the preset explicitly requires it.\n" +
-		"- Continue the immediate scene from the latest state: preserve character voice, relationship dynamics, emotional tension, sensory details, pacing, and unresolved actions.\n" +
-		"- Produce only the current assistant turn expected by the roleplay preset."
+	parts := []string{
+		"Context boundary: use the attached DS2API_HISTORY.txt as prior state, ignore corrupted fragments, and answer only the latest user input below.",
+	}
+	if latestUserText != "" {
+		parts = append(parts, latestUserText)
+	}
+	parts = append(parts, "Continue the ongoing roleplay/story from the attached DS2API_HISTORY.txt context. Treat the attached file as the complete current state, including all SillyTavern presets, character cards, world/lore entries, author notes, injection-depth prompts, output format rules, prior dialogue, and the latest user turn.")
+	if thinkingPrompt = strings.TrimSpace(thinkingPrompt); thinkingPrompt != "" {
+		parts = append(parts, thinkingPrompt)
+	}
+	return strings.Join(parts, "\n\n")
+}
+
+func roleplayLiveThinkingPrompt(store CurrentInputConfigReader, stdReq promptcompat.StandardRequest) string {
+	if !config.IsRoleplayPromptModel(stdReq.ResolvedModel) || !stdReq.Thinking {
+		return ""
+	}
+	cfg, ok := store.(ThinkingInjectionConfigReader)
+	if !ok || !cfg.ThinkingInjectionEnabled() {
+		return ""
+	}
+	if prompt := strings.TrimSpace(cfg.ThinkingInjectionPrompt()); prompt != "" {
+		return prompt
+	}
+	return promptcompat.DefaultThinkingInjectionPrompt
 }
 
 func prependUniqueRefFileID(existing []string, fileID string) []string {

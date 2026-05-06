@@ -105,7 +105,7 @@ DS2API 当前的核心思路，不是把客户端传来的 `messages`、`tools`�
 - `prompt` 才是对话上下文主载体。
 - `ref_file_ids` 只承载文件引用，不承载普通文本消息。
 - `tools` 不会作为“原生工具 schema”直接下发给下游，而是被改写进 `prompt`。
-- 如果最终解析出的 DeepSeek 模型名带 `-rp` 后缀，则会走 reduced-prompt / roleplay 路径：仍保留请求中的 tool schema 用于后续工具输出解析、schema 归一和流式 sieve，但不会把工具 schema、`You have access to these tools:` 或 DSML 工具调用格式约束注入到下游 prompt。该后缀目前只支持 `deepseek-v4-flash` / `deepseek-v4-pro` 及其 `-nothinking` 组合，不改变 `thinking_enabled`、`search_enabled` 或上游 `model_type`。触发 current input file 时，`-rp` 模型还会使用 RP 专用 live anchor：完整上下文仍上传到 `DS2API_HISTORY.txt`，live prompt 会重复最新 user turn 作为当前回合焦点，并明确说明这不是一条新的重复用户消息。
+- OpenAI-compatible Chat / Responses 如果最终解析出的 DeepSeek 模型名带 `-rp` 后缀，则会走 reduced-prompt / roleplay 路径：仍保留请求中的 tool schema 用于后续工具输出解析、schema 归一和流式 sieve，但不会把工具 schema、`You have access to these tools:` 或 DSML 工具调用格式约束注入到下游 prompt。该后缀目前只支持 `deepseek-v4-flash` / `deepseek-v4-pro` 及其 `-nothinking` 组合，不改变 `thinking_enabled`、`search_enabled` 或上游 `model_type`。current input file 开启时，`-rp` 模型会始终上传完整上下文到 `DS2API_HISTORY.txt`；live prompt 只包含一条简短边界句、最新 user turn 原文、RP continuation 约束，以及启用 thinking 时的 thinking injection。Claude-compatible / Gemini-compatible 原生入口不支持 `-rp`，如需 RP 链路必须使用 OpenAI-compatible endpoint。
 - 对外返回给客户端的 `prompt_tokens` / `input_tokens` / `promptTokenCount` 不再按“最后一条消息”或字符粗估近似返回，而是基于**完整上下文 prompt**做 tokenizer 计数；为了避免上下文实际超限但客户端误以为还能塞下，请求侧上下文 token 会额外保守上浮一点，宁可略大也不低估。
 - 当前 `/v1/chat/completions` 业务路径仍是“每次请求新建一个远端 `chat_session_id`，并默认发送 `parent_message_id: null`”；因此 DS2API 对外默认表现为“新会话 + prompt 拼历史”，而不是复用 DeepSeek 原生会话树。
 - 但 DeepSeek 远端本身支持同一 `chat_session_id` 的跨轮次持续对话。2026-04-27 已用项目内现有 DeepSeek client 做过一次不改业务代码的双轮实测：同一 `chat_session_id` 下，第 1 轮返回 `request_message_id=1` / `response_message_id=2` / 文本 `SESSION_TEST_ONE`；第 2 轮重新获取一次 PoW，并发送 `parent_message_id=2` 后，成功返回 `request_message_id=3` / `response_message_id=4` / 文本 `SESSION_TEST_TWO`。这说明“同远端会话持续聊天”能力存在，且每轮需要携带正确的 parent/message 链接信息，同时重新获取对应轮次可用的 PoW。
@@ -121,17 +121,19 @@ DS2API 当前的核心思路，不是把客户端传来的 `messages`、`tools`�
 
 ## 5. prompt 是怎么拼出来的
 
-OpenAI Chat / Responses 在标准化后、current input file 之前，会默认执行 `thinking_injection` 增强。它参考 DeepSeek V4 “把控制指令放在 user 消息末尾更稳定”的用法，在最新 user message 后追加思考增强提示词。当前内置默认提示词以 `Reasoning Effort: Absolute maximum with no shortcuts permitted.` 开头，并继续要求模型充分分解问题、覆盖潜在路径与边界条件、把完整推演过程显式写出。`deepseek-v4-flash-rp` / `deepseek-v4-pro-rp` 在 thinking 开启且 `thinking_injection.prompt` 留空时，会改用 RP 专用默认 thinking prompt：同样以最大思考强度开头，但额外要求重建剧情状态、角色目标、关系张力、SillyTavern 预设、角色卡、世界书、作者注、injection-depth 指令、输出格式和 thinking/inner-monologue 格式要求。`-nothinking-rp` 因 thinking 被强制关闭，不会注入这段默认 RP thinking prompt。该开关默认启用，可通过 `thinking_injection.enabled=false` 关闭；也可以通过 `thinking_injection.prompt` 自定义提示词，非空自定义内容始终优先于普通默认和 RP 默认。
+OpenAI Chat / Responses 会默认执行 `thinking_injection` 增强。它参考 DeepSeek V4 “把控制指令放在 user 消息末尾更稳定”的用法，在最新 user message 后追加思考增强提示词。当前内置默认提示词以 `Reasoning Effort: Absolute maximum with no shortcuts permitted.` 开头，并继续要求模型充分分解问题、覆盖潜在路径与边界条件、把完整推演过程显式写出。OpenAI-compatible 的 `deepseek-v4-flash-rp` / `deepseek-v4-pro-rp` 在 current input file 触发时不会把 thinking injection 写入 `DS2API_HISTORY.txt`，而是把同一段 thinking injection 放在 live prompt 最后；`-nothinking-rp` 因 thinking 被强制关闭，不会注入 thinking prompt。该开关默认启用，可通过 `thinking_injection.enabled=false` 关闭；也可以通过 `thinking_injection.prompt` 自定义提示词，非空自定义内容始终优先于内置默认。
 
 这段增强属于 prompt 可见上下文：
 
 - 普通请求会直接出现在最终 `prompt` 的最新 user block 末尾。
-- 如果触发 current input file，它会进入完整上下文文件中。
+- 非 RP 请求触发 current input file 时，它会进入完整上下文文件中。
+- `-rp` 请求触发 current input file 时，完整上下文文件只保留原始上下文与最新 user turn；thinking injection 位于 live prompt 最后。
 
-另外，`MessagesPrepareWithThinking` 还会在最终 prompt 的最前面预置一段固定的 system 级“输出完整性约束（Output integrity guard）”：
+另外，普通 prompt 构建会在最终 prompt 的最前面预置一段固定的 system 级“输出完整性约束（Output integrity guard）”：
 
 - 如果上游上下文、工具输出或解析后的文本出现乱码、损坏、部分解析、重复或其他畸形片段，不要模仿、不要回显，只输出给用户的正确内容。
 - 这段约束位于普通 system / tool prompt 之前，因此是当前最终 prompt 里的最高优先级前置指令。
+- `-rp` current input file live prompt 不再注入这段完整 system guard；它改用一条短边界句表达“使用附件上下文、忽略损坏片段、只回答下方最新输入”，避免系统标记和冗长约束污染 RP 上下文。
 
 ### 5.1 角色标记
 
@@ -275,7 +277,7 @@ OpenAI 的文件上传现在不再是“只传文件本体”的通用路径，�
 
 兼容层现在只保留 `current_input_file` 这一种拆分方式；旧的 `history_split` 配置字段已移除，读取旧配置时会忽略它且不会再写回。
 
-- `current_input_file` 默认开启；它在统一 completion runtime 入口全局生效，用于把“完整上下文”合并进 `DS2API_HISTORY.txt` 上下文文件。当最新 user turn 的纯文本长度达到 `current_input_file.min_chars`（默认 `0`）时，runtime 会上传一个文件名为 `DS2API_HISTORY.txt` 的上下文文件。文件内容会先经过各协议入口的标准化，再序列化成按轮次编号的 `DS2API_HISTORY.txt` 风格 transcript，带有 `# DS2API_HISTORY.txt` 标题和 `=== N. ROLE ===` 分段；普通模型的 live prompt 中会给出一个 continuation 语气的 user 消息，引导模型从 `DS2API_HISTORY.txt` 的最新状态继续推进，并直接回答最新请求，避免把任务拉回起点。`-rp` 模型的文件内容仍是同一份完整上下文，但 live prompt 会换成 RP 专用 anchor，重复最新 user input 以强化当前回合焦点，并明确该重复只是 focus anchor，不是一条新的用户请求。
+- `current_input_file` 默认开启；它在统一 completion runtime 入口全局生效，用于把“完整上下文”合并进 `DS2API_HISTORY.txt` 上下文文件。当最新 user turn 的纯文本长度达到 `current_input_file.min_chars`（默认 `0`）时，runtime 会上传一个文件名为 `DS2API_HISTORY.txt` 的上下文文件。`-rp` 模型只要 `current_input_file.enabled=true` 就忽略 `min_chars` 阈值并始终上传。文件内容会先经过各协议入口的标准化，再序列化成按轮次编号的 `DS2API_HISTORY.txt` 风格 transcript，带有 `# DS2API_HISTORY.txt` 标题和 `=== N. ROLE ===` 分段；普通模型的 live prompt 中会给出一个 continuation 语气的 user 消息，引导模型从 `DS2API_HISTORY.txt` 的最新状态继续推进，并直接回答最新请求，避免把任务拉回起点。`-rp` 模型的文件内容仍是同一份完整上下文与最新 user turn，但 live prompt 会换成 RP 专用结构：短边界句、最新 user turn 原文、RP continuation 约束、thinking injection。
 - 如果 `current_input_file.enabled=false`，请求会直接透传，不上传任何拆分上下文文件。
 - 即使触发 `current_input_file` 后 live prompt 被缩短，对客户端回包里的上下文 token 统计，仍会沿用**拆分前的完整 prompt 语义**做计数，而不是按缩短后的占位 prompt 计算；否则会把真实上下文显著算小。
 
@@ -308,7 +310,7 @@ Prior conversation history and tool progress.
 ...
 ```
 
-开启后，请求的 live prompt 不再直接内联完整上下文，而是保留一个 user role 的短提示，提示模型基于已提供上下文直接回答最新请求；上传后的 `file_id` 会进入 `ref_file_ids`。对 `-rp` 模型，这个短提示是 RP 专用 live anchor，并包含 `<<<LATEST_USER_INPUT ... LATEST_USER_INPUT>>>` 块和 `RP Continuation Requirements`，同时仍继续抑制工具提示词注入。
+开启后，请求的 live prompt 不再直接内联完整上下文，而是保留一个 user role 的短提示，提示模型基于已提供上下文直接回答最新请求；上传后的 `file_id` 会进入 `ref_file_ids`。对 OpenAI-compatible `-rp` 模型，这个短提示不使用 `<<<LATEST_USER_INPUT ... LATEST_USER_INPUT>>>` 等额外分隔标签，而是按顺序包含：一条边界句、最新 user turn 原文、`Continue the ongoing roleplay/story...` 约束、可选 thinking injection；同时仍继续抑制工具提示词注入。
 
 ## 10. 各协议入口的差异
 

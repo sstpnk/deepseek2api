@@ -30,7 +30,7 @@ func TestNormalizeGeminiRequestNoThinkingModelForcesThinkingOff(t *testing.T) {
 	}
 }
 
-func TestNormalizeGeminiRequestReducedPromptOmitsToolInstructions(t *testing.T) {
+func TestNormalizeGeminiRequestRejectsReducedPromptModel(t *testing.T) {
 	req := map[string]any{
 		"contents": []any{
 			map[string]any{
@@ -52,20 +52,8 @@ func TestNormalizeGeminiRequestReducedPromptOmitsToolInstructions(t *testing.T) 
 			},
 		},
 	}
-	out, err := normalizeGeminiRequest(testGeminiConfig{}, "gemini-2.5-flash-rp", req, false)
-	if err != nil {
-		t.Fatalf("normalizeGeminiRequest error: %v", err)
-	}
-	if out.ResolvedModel != "deepseek-v4-flash-rp" {
-		t.Fatalf("resolved model mismatch: got=%q", out.ResolvedModel)
-	}
-	if !out.SuppressToolPrompt {
-		t.Fatal("expected reduced prompt model to suppress tool prompt injection")
-	}
-	if len(out.ToolNames) != 1 || out.ToolNames[0] != "search" {
-		t.Fatalf("expected tool names to remain available, got %#v", out.ToolNames)
-	}
-	if strings.Contains(out.FinalPrompt, "You have access to these tools:") || strings.Contains(out.FinalPrompt, "TOOL CALL FORMAT") {
-		t.Fatalf("reduced prompt should omit tool instructions, got %q", out.FinalPrompt)
+	_, err := normalizeGeminiRequest(testGeminiConfig{}, "gemini-2.5-flash-rp", req, false)
+	if err == nil || !strings.Contains(err.Error(), "OpenAI-compatible endpoint for -rp models") {
+		t.Fatalf("expected Gemini endpoint to reject -rp model, got %v", err)
 	}
 }

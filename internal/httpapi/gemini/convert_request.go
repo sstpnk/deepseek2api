@@ -20,12 +20,14 @@ func normalizeGeminiRequest(store ConfigReader, routeModel string, req map[strin
 	if !ok {
 		return promptcompat.StandardRequest{}, fmt.Errorf("model %q is not available", requestedModel)
 	}
+	if config.IsRoleplayPromptModel(resolvedModel) {
+		return promptcompat.StandardRequest{}, fmt.Errorf("model %q is not supported on the Gemini-compatible endpoint; use the OpenAI-compatible endpoint for -rp models", requestedModel)
+	}
 	defaultThinkingEnabled, searchEnabled, _ := config.GetModelConfig(resolvedModel)
 	thinkingEnabled := util.ResolveThinkingEnabled(req, defaultThinkingEnabled)
 	if config.IsNoThinkingModel(resolvedModel) {
 		thinkingEnabled = false
 	}
-	suppressToolPrompt := config.IsReducedPromptModel(resolvedModel)
 
 	messagesRaw := geminiMessagesFromRequest(req)
 	if len(messagesRaw) == 0 {
@@ -33,9 +35,7 @@ func normalizeGeminiRequest(store ConfigReader, routeModel string, req map[strin
 	}
 
 	toolsRaw := convertGeminiTools(req["tools"])
-	finalPrompt, toolNames := promptcompat.BuildOpenAIPromptWithOptions(messagesRaw, toolsRaw, "", promptcompat.DefaultToolChoicePolicy(), thinkingEnabled, promptcompat.PromptBuildOptions{
-		SuppressToolPrompt: suppressToolPrompt,
-	})
+	finalPrompt, toolNames := promptcompat.BuildOpenAIPromptWithOptions(messagesRaw, toolsRaw, "", promptcompat.DefaultToolChoicePolicy(), thinkingEnabled, promptcompat.PromptBuildOptions{})
 	if len(toolNames) == 0 && len(toolsRaw) > 0 {
 		toolNames = []string{"__any_tool__"}
 	}
@@ -51,7 +51,7 @@ func normalizeGeminiRequest(store ConfigReader, routeModel string, req map[strin
 		ToolsRaw:           toolsRaw,
 		FinalPrompt:        finalPrompt,
 		ToolNames:          toolNames,
-		SuppressToolPrompt: suppressToolPrompt,
+		SuppressToolPrompt: false,
 		Stream:             stream,
 		Thinking:           thinkingEnabled,
 		Search:             searchEnabled,

@@ -5,7 +5,8 @@ import (
 )
 
 type PromptBuildOptions struct {
-	SuppressToolPrompt bool
+	SuppressToolPrompt           bool
+	SuppressOutputIntegrityGuard bool
 }
 
 func buildOpenAIFinalPrompt(messagesRaw []any, toolsRaw any, traceID string, thinkingEnabled bool) (string, []string) {
@@ -26,7 +27,9 @@ func BuildOpenAIPromptWithOptions(messagesRaw []any, toolsRaw any, traceID strin
 			toolNames = extractDeclaredToolNamesForPolicy(tools, toolPolicy)
 		}
 	}
-	return prompt.MessagesPrepareWithThinking(messages, thinkingEnabled), toolNames
+	return prompt.MessagesPrepareWithOptions(messages, prompt.PrepareOptions{
+		SuppressOutputIntegrityGuard: opts.SuppressOutputIntegrityGuard,
+	}), toolNames
 }
 
 // BuildOpenAIPromptForAdapter exposes the OpenAI-compatible prompt building flow so

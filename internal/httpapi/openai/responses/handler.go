@@ -7,6 +7,7 @@ import (
 
 	"ds2api/internal/auth"
 	"ds2api/internal/chathistory"
+	"ds2api/internal/config"
 	"ds2api/internal/httpapi/openai/files"
 	"ds2api/internal/httpapi/openai/history"
 	"ds2api/internal/httpapi/openai/shared"
@@ -36,6 +37,14 @@ func stripReferenceMarkersEnabled() bool {
 func (h *Handler) applyCurrentInputFile(ctx context.Context, a *auth.RequestAuth, stdReq promptcompat.StandardRequest) (promptcompat.StandardRequest, error) {
 	if h == nil {
 		return stdReq, nil
+	}
+	if config.IsRoleplayPromptModel(stdReq.ResolvedModel) {
+		svc := history.Service{Store: h.Store, DS: h.DS}
+		out, err := svc.ApplyCurrentInputFile(ctx, a, stdReq)
+		if err != nil || out.CurrentInputFileApplied {
+			return out, err
+		}
+		return shared.ApplyThinkingInjection(h.Store, out), nil
 	}
 	stdReq = shared.ApplyThinkingInjection(h.Store, stdReq)
 	svc := history.Service{Store: h.Store, DS: h.DS}

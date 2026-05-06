@@ -374,9 +374,6 @@ func TestApplyCurrentInputFileReducedPromptDoesNotReinjectToolInstructions(t *te
 	if len(ds.uploadCalls) != 1 {
 		t.Fatalf("expected 1 current input upload, got %d", len(ds.uploadCalls))
 	}
-	if !strings.Contains(out.PromptTokenText, promptcompat.ThinkingInjectionMarker) {
-		t.Fatalf("expected thinking injection to remain in token context, got %q", out.PromptTokenText)
-	}
 	if strings.Contains(out.FinalPrompt, "You have access to these tools:") || strings.Contains(out.FinalPrompt, "TOOL CALL FORMAT") || strings.Contains(out.FinalPrompt, "Read-tool cache guard") {
 		t.Fatalf("reduced prompt live prompt should not include tool instructions, got %s", out.FinalPrompt)
 	}
@@ -452,32 +449,75 @@ func TestApplyCurrentInputFileRoleplayReducedPromptUsesLiveAnchor(t *testing.T) 
 			t.Fatalf("expected uploaded file to contain %q, got %q", want, fileText)
 		}
 	}
-	if !strings.Contains(fileText, promptcompat.DefaultRoleplayThinkingInjectionPrompt) {
-		t.Fatalf("expected uploaded file to contain RP thinking injection, got %q", fileText)
+	if strings.Contains(fileText, promptcompat.ThinkingInjectionMarker) {
+		t.Fatalf("expected uploaded file to keep only conversation context, got %q", fileText)
 	}
 	for _, want := range []string{
-		"<<<LATEST_USER_INPUT",
+		"Context boundary: use the attached DS2API_HISTORY.txt as prior state",
 		"latest user turn",
-		"RP Continuation Requirements",
-		"Do not treat it as a new separate message",
+		"Continue the ongoing roleplay/story from the attached DS2API_HISTORY.txt context.",
+		promptcompat.DefaultThinkingInjectionPrompt,
 	} {
 		if !strings.Contains(out.FinalPrompt, want) {
 			t.Fatalf("expected RP live prompt to contain %q, got %q", want, out.FinalPrompt)
 		}
 	}
-	for _, forbidden := range []string{"You have access to these tools:", "TOOL CALL FORMAT"} {
+	for _, forbidden := range []string{"Output integrity guard", "<<<LATEST_USER_INPUT", "LATEST_USER_INPUT>>>", "RP Continuation Requirements", "You have access to these tools:", "TOOL CALL FORMAT"} {
 		if strings.Contains(out.FinalPrompt, forbidden) {
 			t.Fatalf("reduced prompt live prompt should not include %q, got %s", forbidden, out.FinalPrompt)
 		}
 	}
-	if strings.Contains(out.FinalPrompt, "You MUST perform deep, comprehensive internal reasoning") {
-		t.Fatalf("expected RP live anchor to repeat only the latest user input, got %s", out.FinalPrompt)
+	boundaryIdx := strings.Index(out.FinalPrompt, "Context boundary:")
+	latestIdx := strings.Index(out.FinalPrompt, "latest user turn")
+	rpIdx := strings.Index(out.FinalPrompt, "Continue the ongoing roleplay/story")
+	thinkingIdx := strings.Index(out.FinalPrompt, promptcompat.ThinkingInjectionMarker)
+	if boundaryIdx < 0 || latestIdx < 0 || rpIdx < 0 || thinkingIdx < 0 || boundaryIdx >= latestIdx || latestIdx >= rpIdx || rpIdx >= thinkingIdx {
+		t.Fatalf("expected RP live prompt order boundary -> latest user -> RP constraint -> thinking, got %s", out.FinalPrompt)
 	}
 	if !strings.Contains(out.PromptTokenText, fileText) || !strings.Contains(out.PromptTokenText, out.FinalPrompt) {
 		t.Fatalf("expected prompt token text to include file text and live prompt, got %q", out.PromptTokenText)
 	}
 	if len(out.ToolNames) != 1 || out.ToolNames[0] != "read_file" {
 		t.Fatalf("expected tool names to remain available, got %#v", out.ToolNames)
+	}
+}
+
+func TestApplyCurrentInputFileRoleplayIgnoresMinCharsThreshold(t *testing.T) {
+	ds := &inlineUploadDSStub{}
+	h := &openAITestSurface{
+		Store: mockOpenAIConfig{
+			currentInputEnabled: true,
+			currentInputMin:     999,
+		},
+		DS: ds,
+	}
+	req := map[string]any{
+		"model": "deepseek-v4-pro-rp",
+		"messages": []any{
+			map[string]any{"role": "user", "content": "short"},
+		},
+	}
+	stdReq, err := promptcompat.NormalizeOpenAIChatRequest(h.Store, req, "")
+	if err != nil {
+		t.Fatalf("normalize failed: %v", err)
+	}
+
+	out, err := h.applyCurrentInputFile(context.Background(), &auth.RequestAuth{DeepSeekToken: "token"}, stdReq)
+	if err != nil {
+		t.Fatalf("apply current input file failed: %v", err)
+	}
+	if len(ds.uploadCalls) != 1 {
+		t.Fatalf("expected RP current input upload despite min_chars threshold, got %d", len(ds.uploadCalls))
+	}
+	if !out.CurrentInputFileApplied {
+		t.Fatalf("expected RP current input file to apply")
+	}
+	fileText := string(ds.uploadCalls[0].Data)
+	if !strings.Contains(fileText, "short") {
+		t.Fatalf("expected uploaded RP context to include latest user turn, got %q", fileText)
+	}
+	if !strings.Contains(out.FinalPrompt, "short") {
+		t.Fatalf("expected RP live prompt to repeat latest user turn, got %q", out.FinalPrompt)
 	}
 }
 

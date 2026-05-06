@@ -41,6 +41,13 @@ func TestResolveModelAliasNoThinkingReducedPrompt(t *testing.T) {
 	}
 }
 
+func TestResolveModelGeminiReducedPromptAlias(t *testing.T) {
+	got, ok := ResolveModel(nil, "gemini-2.5-flash-rp")
+	if !ok || got != "deepseek-v4-flash-rp" {
+		t.Fatalf("expected alias gemini-2.5-flash-rp -> deepseek-v4-flash-rp, got ok=%v model=%q", ok, got)
+	}
+}
+
 func TestResolveModelRejectsUnsupportedReducedPromptTarget(t *testing.T) {
 	if got, ok := ResolveModel(nil, "o3-deep-research-rp"); ok {
 		t.Fatalf("expected search rp alias to be rejected, got %q", got)
