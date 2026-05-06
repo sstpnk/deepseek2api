@@ -111,6 +111,11 @@ func IsReducedPromptModel(model string) bool {
 	return reducedPrompt
 }
 
+func IsRoleplayPromptModel(model string) bool {
+	baseModel, _, reducedPrompt := splitDeepSeekVariant(model)
+	return reducedPrompt && supportsReducedPromptBaseModel(baseModel)
+}
+
 func supportsReducedPromptBaseModel(baseModel string) bool {
 	switch baseModel {
 	case "deepseek-v4-flash", "deepseek-v4-pro":

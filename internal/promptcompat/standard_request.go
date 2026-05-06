@@ -8,6 +8,7 @@ type StandardRequest struct {
 	ResolvedModel           string
 	ResponseModel           string
 	Messages                []any
+	LatestUserInputText     string
 	HistoryText             string
 	PromptTokenText         string
 	CurrentInputFileApplied bool

@@ -320,6 +320,9 @@ func TestApplyCurrentInputFileUploadsFirstTurnWithNumberedHistoryTranscript(t *t
 	if !strings.Contains(out.FinalPrompt, "Continue from the latest state in the attached DS2API_HISTORY.txt context.") {
 		t.Fatalf("expected continuation-oriented prompt in live prompt, got %s", out.FinalPrompt)
 	}
+	if strings.Contains(out.FinalPrompt, "<<<LATEST_USER_INPUT") || strings.Contains(out.FinalPrompt, "RP Continuation Requirements") {
+		t.Fatalf("expected non-RP current input file prompt to stay neutral, got %s", out.FinalPrompt)
+	}
 	if len(out.RefFileIDs) != 1 || out.RefFileIDs[0] != "file-inline-1" {
 		t.Fatalf("expected current input file id in ref_file_ids, got %#v", out.RefFileIDs)
 	}
@@ -379,6 +382,99 @@ func TestApplyCurrentInputFileReducedPromptDoesNotReinjectToolInstructions(t *te
 	}
 	if strings.Contains(out.PromptTokenText, "You have access to these tools:") || strings.Contains(out.PromptTokenText, "TOOL CALL FORMAT") || strings.Contains(out.PromptTokenText, "Read-tool cache guard") {
 		t.Fatalf("reduced prompt token context should not include tool instructions, got %s", out.PromptTokenText)
+	}
+	if len(out.ToolNames) != 1 || out.ToolNames[0] != "read_file" {
+		t.Fatalf("expected tool names to remain available, got %#v", out.ToolNames)
+	}
+}
+
+func TestApplyCurrentInputFileRoleplayReducedPromptUsesLiveAnchor(t *testing.T) {
+	ds := &inlineUploadDSStub{}
+	h := &openAITestSurface{
+		Store: mockOpenAIConfig{
+			currentInputEnabled: true,
+			currentInputMin:     0,
+			thinkingInjection:   boolPtr(true),
+		},
+		DS: ds,
+	}
+	req := map[string]any{
+		"model": "deepseek-v4-flash-rp",
+		"messages": []any{
+			map[string]any{"role": "system", "content": "SillyTavern preset and character card"},
+			map[string]any{"role": "user", "content": "first user turn"},
+			map[string]any{"role": "assistant", "content": "first assistant turn"},
+			map[string]any{"role": "user", "content": "latest user turn"},
+		},
+		"tools": []any{
+			map[string]any{
+				"type": "function",
+				"function": map[string]any{
+					"name":        "read_file",
+					"description": "Read a file",
+					"parameters":  map[string]any{"type": "object"},
+				},
+			},
+		},
+	}
+	stdReq, err := promptcompat.NormalizeOpenAIChatRequest(h.Store, req, "")
+	if err != nil {
+		t.Fatalf("normalize failed: %v", err)
+	}
+	if !stdReq.SuppressToolPrompt {
+		t.Fatal("expected reduced prompt model to suppress tool prompt")
+	}
+
+	out, err := h.applyCurrentInputFile(context.Background(), &auth.RequestAuth{DeepSeekToken: "token"}, stdReq)
+	if err != nil {
+		t.Fatalf("apply current input file failed: %v", err)
+	}
+	if len(ds.uploadCalls) != 1 {
+		t.Fatalf("expected 1 current input upload, got %d", len(ds.uploadCalls))
+	}
+	upload := ds.uploadCalls[0]
+	if upload.Filename != "DS2API_HISTORY.txt" {
+		t.Fatalf("expected DS2API_HISTORY.txt upload, got %q", upload.Filename)
+	}
+	fileText := string(upload.Data)
+	for _, want := range []string{
+		"# DS2API_HISTORY.txt",
+		"=== 1. SYSTEM ===",
+		"=== 2. USER ===",
+		"=== 3. ASSISTANT ===",
+		"=== 4. USER ===",
+		"SillyTavern preset and character card",
+		"first user turn",
+		"first assistant turn",
+		"latest user turn",
+	} {
+		if !strings.Contains(fileText, want) {
+			t.Fatalf("expected uploaded file to contain %q, got %q", want, fileText)
+		}
+	}
+	if !strings.Contains(fileText, promptcompat.DefaultRoleplayThinkingInjectionPrompt) {
+		t.Fatalf("expected uploaded file to contain RP thinking injection, got %q", fileText)
+	}
+	for _, want := range []string{
+		"<<<LATEST_USER_INPUT",
+		"latest user turn",
+		"RP Continuation Requirements",
+		"Do not treat it as a new separate message",
+	} {
+		if !strings.Contains(out.FinalPrompt, want) {
+			t.Fatalf("expected RP live prompt to contain %q, got %q", want, out.FinalPrompt)
+		}
+	}
+	for _, forbidden := range []string{"You have access to these tools:", "TOOL CALL FORMAT"} {
+		if strings.Contains(out.FinalPrompt, forbidden) {
+			t.Fatalf("reduced prompt live prompt should not include %q, got %s", forbidden, out.FinalPrompt)
+		}
+	}
+	if strings.Contains(out.FinalPrompt, "You MUST perform deep, comprehensive internal reasoning") {
+		t.Fatalf("expected RP live anchor to repeat only the latest user input, got %s", out.FinalPrompt)
+	}
+	if !strings.Contains(out.PromptTokenText, fileText) || !strings.Contains(out.PromptTokenText, out.FinalPrompt) {
+		t.Fatalf("expected prompt token text to include file text and live prompt, got %q", out.PromptTokenText)
 	}
 	if len(out.ToolNames) != 1 || out.ToolNames[0] != "read_file" {
 		t.Fatalf("expected tool names to remain available, got %#v", out.ToolNames)

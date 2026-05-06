@@ -46,6 +46,10 @@ func (s Service) ApplyCurrentInputFile(ctx context.Context, a *auth.RequestAuth,
 	if len([]rune(text)) < threshold {
 		return stdReq, nil
 	}
+	liveLatestUserText := strings.TrimSpace(stdReq.LatestUserInputText)
+	if liveLatestUserText == "" {
+		liveLatestUserText = text
+	}
 	fileText := promptcompat.BuildOpenAICurrentInputContextTranscript(stdReq.Messages)
 	if strings.TrimSpace(fileText) == "" {
 		return stdReq, errors.New("current user input file produced empty transcript")
@@ -72,7 +76,7 @@ func (s Service) ApplyCurrentInputFile(ctx context.Context, a *auth.RequestAuth,
 	messages := []any{
 		map[string]any{
 			"role":    "user",
-			"content": currentInputFilePrompt(),
+			"content": currentInputFilePrompt(stdReq.ResolvedModel, liveLatestUserText),
 		},
 	}
 
@@ -106,8 +110,26 @@ func latestUserInputForFile(messages []any) (int, string) {
 	return -1, ""
 }
 
-func currentInputFilePrompt() string {
+func currentInputFilePrompt(model, latestUserText string) string {
+	if config.IsRoleplayPromptModel(model) {
+		return roleplayCurrentInputFilePrompt(latestUserText)
+	}
 	return "Continue from the latest state in the attached DS2API_HISTORY.txt context. Treat it as the current working state and answer the latest user request directly."
+}
+
+func roleplayCurrentInputFilePrompt(latestUserText string) string {
+	latestUserText = strings.TrimSpace(latestUserText)
+	return "Continue the ongoing roleplay/story from the attached DS2API_HISTORY.txt context. Treat the attached file as the complete current state, including all SillyTavern presets, character cards, world/lore entries, author notes, injection-depth prompts, output format rules, prior dialogue, and the latest user turn.\n\n" +
+		"The latest user input is repeated below only to make the current turn focus explicit. Do not treat it as a new separate message; answer it as the next turn of the same ongoing scene.\n\n" +
+		"<<<LATEST_USER_INPUT\n" +
+		latestUserText + "\n" +
+		"LATEST_USER_INPUT>>>\n\n" +
+		"RP Continuation Requirements:\n" +
+		"- Strictly follow the attached context's roleplay presets, character definitions, world rules, author notes, style rules, output format, and any thinking/inner-monologue format instructions.\n" +
+		"- If instructions conflict, prefer the more specific, later, or closer-to-the-latest-user-turn instruction, while preserving character/world consistency.\n" +
+		"- Do not restart, summarize, explain rules, mention files, or step out of character unless the preset explicitly requires it.\n" +
+		"- Continue the immediate scene from the latest state: preserve character voice, relationship dynamics, emotional tension, sensory details, pacing, and unresolved actions.\n" +
+		"- Produce only the current assistant turn expected by the roleplay preset."
 }
 
 func prependUniqueRefFileID(existing []string, fileID string) []string {

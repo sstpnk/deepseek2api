@@ -40,6 +40,9 @@ func TestGetModelConfigDeepSeekReducedPrompt(t *testing.T) {
 	if !IsReducedPromptModel("deepseek-v4-pro-rp") {
 		t.Fatal("expected deepseek-v4-pro-rp to be marked reduced-prompt")
 	}
+	if !IsRoleplayPromptModel("deepseek-v4-pro-rp") {
+		t.Fatal("expected deepseek-v4-pro-rp to be marked roleplay prompt")
+	}
 	modelType, ok := GetModelType("deepseek-v4-pro-rp")
 	if !ok || modelType != "expert" {
 		t.Fatalf("expected expert model_type for deepseek-v4-pro-rp, got ok=%v type=%q", ok, modelType)
@@ -62,6 +65,9 @@ func TestGetModelConfigDeepSeekReducedPromptNoThinking(t *testing.T) {
 func TestGetModelConfigSearchReducedPromptUnsupported(t *testing.T) {
 	if _, _, ok := GetModelConfig("deepseek-v4-pro-search-rp"); ok {
 		t.Fatal("expected search rp model to be unsupported")
+	}
+	if IsRoleplayPromptModel("deepseek-v4-pro-search-rp") {
+		t.Fatal("expected unsupported search rp model not to be marked roleplay prompt")
 	}
 }
 

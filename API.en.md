@@ -218,7 +218,7 @@ No auth required. Returns the currently supported DeepSeek native model list.
 }
 ```
 
-> Note: `/v1/models` returns normalized DeepSeek native model IDs. Common aliases are accepted only as request input and are not expanded as separate items in this endpoint. Models with `-rp` are reduced-prompt variants: they skip tool schema and DSML tool-call instruction injection only; thinking prompts, `thinking_enabled`, `model_type`, and tool output parsing remain aligned with the matching base model.
+> Note: `/v1/models` returns normalized DeepSeek native model IDs. Common aliases are accepted only as request input and are not expanded as separate items in this endpoint. Models with `-rp` are reduced-prompt / roleplay variants: they skip tool schema and DSML tool-call instruction injection, use an RP live anchor that repeats the latest user input when current input file is triggered, and use the RP default thinking prompt when thinking is enabled and `thinking_injection.prompt` is empty. `thinking_enabled`, `model_type`, and tool output parsing remain aligned with the matching base model.
 
 ### Model Alias Resolution
 

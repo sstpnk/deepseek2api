@@ -37,25 +37,27 @@ func NormalizeOpenAIChatRequest(store ConfigReader, req map[string]any, traceID 
 	toolNames = ensureToolDetectionEnabled(toolNames, req["tools"])
 	passThrough := collectOpenAIChatPassThrough(req)
 	refFileIDs := CollectOpenAIRefFileIDs(req)
+	latestUserText := latestUserTextForStandardRequest(messagesRaw)
 
 	return StandardRequest{
-		Surface:            "openai_chat",
-		RequestedModel:     strings.TrimSpace(model),
-		ResolvedModel:      resolvedModel,
-		ResponseModel:      responseModel,
-		Messages:           messagesRaw,
-		PromptTokenText:    finalPrompt,
-		ToolsRaw:           req["tools"],
-		FinalPrompt:        finalPrompt,
-		ToolNames:          toolNames,
-		SuppressToolPrompt: suppressToolPrompt,
-		ToolChoice:         toolPolicy,
-		Stream:             util.ToBool(req["stream"]),
-		Thinking:           thinkingEnabled,
-		Search:             searchEnabled,
-		RefFileIDs:         refFileIDs,
-		RefFileTokens:      estimateInlineFileTokens(req),
-		PassThrough:        passThrough,
+		Surface:             "openai_chat",
+		RequestedModel:      strings.TrimSpace(model),
+		ResolvedModel:       resolvedModel,
+		ResponseModel:       responseModel,
+		Messages:            messagesRaw,
+		LatestUserInputText: latestUserText,
+		PromptTokenText:     finalPrompt,
+		ToolsRaw:            req["tools"],
+		FinalPrompt:         finalPrompt,
+		ToolNames:           toolNames,
+		SuppressToolPrompt:  suppressToolPrompt,
+		ToolChoice:          toolPolicy,
+		Stream:              util.ToBool(req["stream"]),
+		Thinking:            thinkingEnabled,
+		Search:              searchEnabled,
+		RefFileIDs:          refFileIDs,
+		RefFileTokens:       estimateInlineFileTokens(req),
+		PassThrough:         passThrough,
 	}, nil
 }
 
@@ -91,26 +93,43 @@ func NormalizeOpenAIResponsesRequest(store ConfigReader, req map[string]any, tra
 	}
 	passThrough := collectOpenAIChatPassThrough(req)
 	refFileIDs := CollectOpenAIRefFileIDs(req)
+	latestUserText := latestUserTextForStandardRequest(messagesRaw)
 
 	return StandardRequest{
-		Surface:            "openai_responses",
-		RequestedModel:     model,
-		ResolvedModel:      resolvedModel,
-		ResponseModel:      model,
-		Messages:           messagesRaw,
-		PromptTokenText:    finalPrompt,
-		ToolsRaw:           req["tools"],
-		FinalPrompt:        finalPrompt,
-		ToolNames:          toolNames,
-		SuppressToolPrompt: suppressToolPrompt,
-		ToolChoice:         toolPolicy,
-		Stream:             util.ToBool(req["stream"]),
-		Thinking:           thinkingEnabled,
-		Search:             searchEnabled,
-		RefFileIDs:         refFileIDs,
-		RefFileTokens:      estimateInlineFileTokens(req),
-		PassThrough:        passThrough,
+		Surface:             "openai_responses",
+		RequestedModel:      model,
+		ResolvedModel:       resolvedModel,
+		ResponseModel:       model,
+		Messages:            messagesRaw,
+		LatestUserInputText: latestUserText,
+		PromptTokenText:     finalPrompt,
+		ToolsRaw:            req["tools"],
+		FinalPrompt:         finalPrompt,
+		ToolNames:           toolNames,
+		SuppressToolPrompt:  suppressToolPrompt,
+		ToolChoice:          toolPolicy,
+		Stream:              util.ToBool(req["stream"]),
+		Thinking:            thinkingEnabled,
+		Search:              searchEnabled,
+		RefFileIDs:          refFileIDs,
+		RefFileTokens:       estimateInlineFileTokens(req),
+		PassThrough:         passThrough,
 	}, nil
+}
+
+func latestUserTextForStandardRequest(messages []any) string {
+	for i := len(messages) - 1; i >= 0; i-- {
+		msg, ok := messages[i].(map[string]any)
+		if !ok {
+			continue
+		}
+		role := strings.ToLower(strings.TrimSpace(asString(msg["role"])))
+		if role != "user" {
+			continue
+		}
+		return NormalizeOpenAIContentForPrompt(msg["content"])
+	}
+	return ""
 }
 
 func ensureToolDetectionEnabled(toolNames []string, toolsRaw any) []string {
