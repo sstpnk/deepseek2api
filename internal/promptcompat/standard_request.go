@@ -14,6 +14,7 @@ type StandardRequest struct {
 	ToolsRaw                any
 	FinalPrompt             string
 	ToolNames               []string
+	SuppressToolPrompt      bool
 	ToolChoice              ToolChoicePolicy
 	Stream                  bool
 	Thinking                bool

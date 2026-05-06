@@ -27,33 +27,35 @@ func NormalizeOpenAIChatRequest(store ConfigReader, req map[string]any, traceID 
 	if config.IsNoThinkingModel(resolvedModel) {
 		thinkingEnabled = false
 	}
+	suppressToolPrompt := config.IsReducedPromptModel(resolvedModel)
 	responseModel := strings.TrimSpace(model)
 	if responseModel == "" {
 		responseModel = resolvedModel
 	}
 	toolPolicy := DefaultToolChoicePolicy()
-	finalPrompt, toolNames := BuildOpenAIPrompt(messagesRaw, req["tools"], traceID, toolPolicy, thinkingEnabled)
+	finalPrompt, toolNames := BuildOpenAIPromptWithOptions(messagesRaw, req["tools"], traceID, toolPolicy, thinkingEnabled, PromptBuildOptions{SuppressToolPrompt: suppressToolPrompt})
 	toolNames = ensureToolDetectionEnabled(toolNames, req["tools"])
 	passThrough := collectOpenAIChatPassThrough(req)
 	refFileIDs := CollectOpenAIRefFileIDs(req)
 
 	return StandardRequest{
-		Surface:         "openai_chat",
-		RequestedModel:  strings.TrimSpace(model),
-		ResolvedModel:   resolvedModel,
-		ResponseModel:   responseModel,
-		Messages:        messagesRaw,
-		PromptTokenText: finalPrompt,
-		ToolsRaw:        req["tools"],
-		FinalPrompt:     finalPrompt,
-		ToolNames:       toolNames,
-		ToolChoice:      toolPolicy,
-		Stream:          util.ToBool(req["stream"]),
-		Thinking:        thinkingEnabled,
-		Search:          searchEnabled,
-		RefFileIDs:      refFileIDs,
-		RefFileTokens:   estimateInlineFileTokens(req),
-		PassThrough:     passThrough,
+		Surface:            "openai_chat",
+		RequestedModel:     strings.TrimSpace(model),
+		ResolvedModel:      resolvedModel,
+		ResponseModel:      responseModel,
+		Messages:           messagesRaw,
+		PromptTokenText:    finalPrompt,
+		ToolsRaw:           req["tools"],
+		FinalPrompt:        finalPrompt,
+		ToolNames:          toolNames,
+		SuppressToolPrompt: suppressToolPrompt,
+		ToolChoice:         toolPolicy,
+		Stream:             util.ToBool(req["stream"]),
+		Thinking:           thinkingEnabled,
+		Search:             searchEnabled,
+		RefFileIDs:         refFileIDs,
+		RefFileTokens:      estimateInlineFileTokens(req),
+		PassThrough:        passThrough,
 	}, nil
 }
 
@@ -72,6 +74,7 @@ func NormalizeOpenAIResponsesRequest(store ConfigReader, req map[string]any, tra
 	if config.IsNoThinkingModel(resolvedModel) {
 		thinkingEnabled = false
 	}
+	suppressToolPrompt := config.IsReducedPromptModel(resolvedModel)
 
 	messagesRaw := ResponsesMessagesFromRequest(req)
 	if len(messagesRaw) == 0 {
@@ -81,7 +84,7 @@ func NormalizeOpenAIResponsesRequest(store ConfigReader, req map[string]any, tra
 	if err != nil {
 		return StandardRequest{}, err
 	}
-	finalPrompt, toolNames := BuildOpenAIPrompt(messagesRaw, req["tools"], traceID, toolPolicy, thinkingEnabled)
+	finalPrompt, toolNames := BuildOpenAIPromptWithOptions(messagesRaw, req["tools"], traceID, toolPolicy, thinkingEnabled, PromptBuildOptions{SuppressToolPrompt: suppressToolPrompt})
 	toolNames = ensureToolDetectionEnabled(toolNames, req["tools"])
 	if !toolPolicy.IsNone() {
 		toolPolicy.Allowed = namesToSet(toolNames)
@@ -90,22 +93,23 @@ func NormalizeOpenAIResponsesRequest(store ConfigReader, req map[string]any, tra
 	refFileIDs := CollectOpenAIRefFileIDs(req)
 
 	return StandardRequest{
-		Surface:         "openai_responses",
-		RequestedModel:  model,
-		ResolvedModel:   resolvedModel,
-		ResponseModel:   model,
-		Messages:        messagesRaw,
-		PromptTokenText: finalPrompt,
-		ToolsRaw:        req["tools"],
-		FinalPrompt:     finalPrompt,
-		ToolNames:       toolNames,
-		ToolChoice:      toolPolicy,
-		Stream:          util.ToBool(req["stream"]),
-		Thinking:        thinkingEnabled,
-		Search:          searchEnabled,
-		RefFileIDs:      refFileIDs,
-		RefFileTokens:   estimateInlineFileTokens(req),
-		PassThrough:     passThrough,
+		Surface:            "openai_responses",
+		RequestedModel:     model,
+		ResolvedModel:      resolvedModel,
+		ResponseModel:      model,
+		Messages:           messagesRaw,
+		PromptTokenText:    finalPrompt,
+		ToolsRaw:           req["tools"],
+		FinalPrompt:        finalPrompt,
+		ToolNames:          toolNames,
+		SuppressToolPrompt: suppressToolPrompt,
+		ToolChoice:         toolPolicy,
+		Stream:             util.ToBool(req["stream"]),
+		Thinking:           thinkingEnabled,
+		Search:             searchEnabled,
+		RefFileIDs:         refFileIDs,
+		RefFileTokens:      estimateInlineFileTokens(req),
+		PassThrough:        passThrough,
 	}, nil
 }
 
@@ -308,6 +312,13 @@ func extractDeclaredToolNames(toolsRaw any) []string {
 	if !ok || len(tools) == 0 {
 		return nil
 	}
+	return extractDeclaredToolNamesForPolicy(tools, DefaultToolChoicePolicy())
+}
+
+func extractDeclaredToolNamesForPolicy(tools []any, policy ToolChoicePolicy) []string {
+	if policy.IsNone() || len(tools) == 0 {
+		return nil
+	}
 	out := make([]string, 0, len(tools))
 	seen := map[string]struct{}{}
 	for _, t := range tools {
@@ -321,6 +332,9 @@ func extractDeclaredToolNames(toolsRaw any) []string {
 		}
 		name := strings.TrimSpace(asString(fn["name"]))
 		if name == "" {
+			continue
+		}
+		if !policy.Allows(name) {
 			continue
 		}
 		if _, ok := seen[name]; ok {

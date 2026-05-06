@@ -25,6 +25,7 @@ func normalizeGeminiRequest(store ConfigReader, routeModel string, req map[strin
 	if config.IsNoThinkingModel(resolvedModel) {
 		thinkingEnabled = false
 	}
+	suppressToolPrompt := config.IsReducedPromptModel(resolvedModel)
 
 	messagesRaw := geminiMessagesFromRequest(req)
 	if len(messagesRaw) == 0 {
@@ -32,25 +33,28 @@ func normalizeGeminiRequest(store ConfigReader, routeModel string, req map[strin
 	}
 
 	toolsRaw := convertGeminiTools(req["tools"])
-	finalPrompt, toolNames := promptcompat.BuildOpenAIPromptForAdapter(messagesRaw, toolsRaw, "", thinkingEnabled)
+	finalPrompt, toolNames := promptcompat.BuildOpenAIPromptWithOptions(messagesRaw, toolsRaw, "", promptcompat.DefaultToolChoicePolicy(), thinkingEnabled, promptcompat.PromptBuildOptions{
+		SuppressToolPrompt: suppressToolPrompt,
+	})
 	if len(toolNames) == 0 && len(toolsRaw) > 0 {
 		toolNames = []string{"__any_tool__"}
 	}
 	passThrough := collectGeminiPassThrough(req)
 
 	return promptcompat.StandardRequest{
-		Surface:         "google_gemini",
-		RequestedModel:  requestedModel,
-		ResolvedModel:   resolvedModel,
-		ResponseModel:   requestedModel,
-		Messages:        messagesRaw,
-		PromptTokenText: finalPrompt,
-		ToolsRaw:        toolsRaw,
-		FinalPrompt:     finalPrompt,
-		ToolNames:       toolNames,
-		Stream:          stream,
-		Thinking:        thinkingEnabled,
-		Search:          searchEnabled,
-		PassThrough:     passThrough,
+		Surface:            "google_gemini",
+		RequestedModel:     requestedModel,
+		ResolvedModel:      resolvedModel,
+		ResponseModel:      requestedModel,
+		Messages:           messagesRaw,
+		PromptTokenText:    finalPrompt,
+		ToolsRaw:           toolsRaw,
+		FinalPrompt:        finalPrompt,
+		ToolNames:          toolNames,
+		SuppressToolPrompt: suppressToolPrompt,
+		Stream:             stream,
+		Thinking:           thinkingEnabled,
+		Search:             searchEnabled,
+		PassThrough:        passThrough,
 	}, nil
 }

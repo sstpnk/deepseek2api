@@ -1,6 +1,9 @@
 package claude
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 type mockClaudeConfig struct {
 	aliases map[string]string
@@ -112,5 +115,39 @@ func TestNormalizeClaudeRequestPrefersGlobalAliasMapping(t *testing.T) {
 	}
 	if out.Standard.ResolvedModel != "deepseek-v4-flash" {
 		t.Fatalf("expected global alias to win for explicit model, got=%q", out.Standard.ResolvedModel)
+	}
+}
+
+func TestNormalizeClaudeRequestReducedPromptOmitsToolInstructions(t *testing.T) {
+	req := map[string]any{
+		"model": "claude-sonnet-4-6-rp",
+		"messages": []any{
+			map[string]any{"role": "user", "content": "hello"},
+		},
+		"tools": []any{
+			map[string]any{
+				"name":        "search",
+				"description": "Search docs",
+				"input_schema": map[string]any{
+					"type": "object",
+				},
+			},
+		},
+	}
+	out, err := normalizeClaudeRequest(mockClaudeConfig{}, req)
+	if err != nil {
+		t.Fatalf("normalizeClaudeRequest error: %v", err)
+	}
+	if out.Standard.ResolvedModel != "deepseek-v4-flash-rp" {
+		t.Fatalf("resolved model mismatch: got=%q", out.Standard.ResolvedModel)
+	}
+	if !out.Standard.SuppressToolPrompt {
+		t.Fatal("expected reduced prompt model to suppress tool prompt injection")
+	}
+	if len(out.Standard.ToolNames) != 1 || out.Standard.ToolNames[0] != "search" {
+		t.Fatalf("expected tool names to remain available, got %#v", out.Standard.ToolNames)
+	}
+	if strings.Contains(out.Standard.FinalPrompt, "You have access to these tools:") || strings.Contains(out.Standard.FinalPrompt, "TOOL CALL FORMAT") {
+		t.Fatalf("reduced prompt should omit tool instructions, got %q", out.Standard.FinalPrompt)
 	}
 }

@@ -28,7 +28,6 @@ func normalizeClaudeRequest(store ConfigReader, req map[string]any) (claudeNorma
 	payload := cloneMap(req)
 	payload["messages"] = normalizedMessages
 	toolsRequested, _ := req["tools"].([]any)
-	payload["messages"] = injectClaudeToolPrompt(payload, normalizedMessages, toolsRequested)
 
 	dsPayload := convertClaudeToDeepSeek(payload, store)
 	dsModel, _ := dsPayload["model"].(string)
@@ -40,6 +39,11 @@ func normalizeClaudeRequest(store ConfigReader, req map[string]any) (claudeNorma
 	if config.IsNoThinkingModel(dsModel) {
 		thinkingEnabled = false
 	}
+	suppressToolPrompt := config.IsReducedPromptModel(dsModel)
+	if !suppressToolPrompt {
+		payload["messages"] = injectClaudeToolPrompt(payload, normalizedMessages, toolsRequested)
+		dsPayload = convertClaudeToDeepSeek(payload, store)
+	}
 	finalPrompt := prompt.MessagesPrepareWithThinking(toMessageMaps(dsPayload["messages"]), thinkingEnabled)
 	toolNames := extractClaudeToolNames(toolsRequested)
 	if len(toolNames) == 0 && len(toolsRequested) > 0 {
@@ -48,18 +52,19 @@ func normalizeClaudeRequest(store ConfigReader, req map[string]any) (claudeNorma
 
 	return claudeNormalizedRequest{
 		Standard: promptcompat.StandardRequest{
-			Surface:         "anthropic_messages",
-			RequestedModel:  strings.TrimSpace(model),
-			ResolvedModel:   dsModel,
-			ResponseModel:   strings.TrimSpace(model),
-			Messages:        payload["messages"].([]any),
-			PromptTokenText: finalPrompt,
-			ToolsRaw:        toolsRequested,
-			FinalPrompt:     finalPrompt,
-			ToolNames:       toolNames,
-			Stream:          util.ToBool(req["stream"]),
-			Thinking:        thinkingEnabled,
-			Search:          searchEnabled,
+			Surface:            "anthropic_messages",
+			RequestedModel:     strings.TrimSpace(model),
+			ResolvedModel:      dsModel,
+			ResponseModel:      strings.TrimSpace(model),
+			Messages:           payload["messages"].([]any),
+			PromptTokenText:    finalPrompt,
+			ToolsRaw:           toolsRequested,
+			FinalPrompt:        finalPrompt,
+			ToolNames:          toolNames,
+			SuppressToolPrompt: suppressToolPrompt,
+			Stream:             util.ToBool(req["stream"]),
+			Thinking:           thinkingEnabled,
+			Search:             searchEnabled,
 		},
 		NormalizedMessages: normalizedMessages,
 	}, nil

@@ -12,7 +12,9 @@ func TestStandardRequestCompletionPayloadSetsModelTypeFromResolvedModel(t *testi
 	}{
 		{name: "default", model: "deepseek-v4-flash", thinking: false, search: false, modelType: "default"},
 		{name: "default_nothinking", model: "deepseek-v4-flash-nothinking", thinking: false, search: false, modelType: "default"},
+		{name: "default_reduced_prompt", model: "deepseek-v4-flash-rp", thinking: true, search: false, modelType: "default"},
 		{name: "expert", model: "deepseek-v4-pro", thinking: true, search: false, modelType: "expert"},
+		{name: "expert_nothinking_reduced_prompt", model: "deepseek-v4-pro-nothinking-rp", thinking: false, search: false, modelType: "expert"},
 		{name: "vision", model: "deepseek-v4-vision", thinking: true, search: false, modelType: "vision"},
 	}
 

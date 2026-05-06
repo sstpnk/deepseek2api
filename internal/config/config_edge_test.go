@@ -29,6 +29,42 @@ func TestGetModelConfigDeepSeekChatNoThinking(t *testing.T) {
 	}
 }
 
+func TestGetModelConfigDeepSeekReducedPrompt(t *testing.T) {
+	thinking, search, ok := GetModelConfig("deepseek-v4-pro-rp")
+	if !ok {
+		t.Fatal("expected ok for deepseek-v4-pro-rp")
+	}
+	if !thinking || search {
+		t.Fatalf("expected thinking=true search=false for deepseek-v4-pro-rp, got thinking=%v search=%v", thinking, search)
+	}
+	if !IsReducedPromptModel("deepseek-v4-pro-rp") {
+		t.Fatal("expected deepseek-v4-pro-rp to be marked reduced-prompt")
+	}
+	modelType, ok := GetModelType("deepseek-v4-pro-rp")
+	if !ok || modelType != "expert" {
+		t.Fatalf("expected expert model_type for deepseek-v4-pro-rp, got ok=%v type=%q", ok, modelType)
+	}
+}
+
+func TestGetModelConfigDeepSeekReducedPromptNoThinking(t *testing.T) {
+	thinking, search, ok := GetModelConfig("deepseek-v4-flash-nothinking-rp")
+	if !ok {
+		t.Fatal("expected ok for deepseek-v4-flash-nothinking-rp")
+	}
+	if thinking || search {
+		t.Fatalf("expected thinking=false search=false for deepseek-v4-flash-nothinking-rp, got thinking=%v search=%v", thinking, search)
+	}
+	if !IsNoThinkingModel("deepseek-v4-flash-nothinking-rp") {
+		t.Fatal("expected deepseek-v4-flash-nothinking-rp to be marked nothinking")
+	}
+}
+
+func TestGetModelConfigSearchReducedPromptUnsupported(t *testing.T) {
+	if _, _, ok := GetModelConfig("deepseek-v4-pro-search-rp"); ok {
+		t.Fatal("expected search rp model to be unsupported")
+	}
+}
+
 func TestGetModelConfigDeepSeekReasoner(t *testing.T) {
 	thinking, search, ok := GetModelConfig("deepseek-v4-pro")
 	if !ok {
@@ -685,8 +721,12 @@ func TestOpenAIModelsResponse(t *testing.T) {
 	expected := map[string]bool{
 		"deepseek-v4-flash":                   false,
 		"deepseek-v4-flash-nothinking":        false,
+		"deepseek-v4-flash-rp":                false,
+		"deepseek-v4-flash-nothinking-rp":     false,
 		"deepseek-v4-pro":                     false,
 		"deepseek-v4-pro-nothinking":          false,
+		"deepseek-v4-pro-rp":                  false,
+		"deepseek-v4-pro-nothinking-rp":       false,
 		"deepseek-v4-flash-search":            false,
 		"deepseek-v4-flash-search-nothinking": false,
 		"deepseek-v4-pro-search":              false,

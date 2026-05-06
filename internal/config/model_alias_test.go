@@ -20,6 +20,33 @@ func TestResolveModelDirectDeepSeekNoThinking(t *testing.T) {
 	}
 }
 
+func TestResolveModelDirectDeepSeekReducedPrompt(t *testing.T) {
+	got, ok := ResolveModel(nil, "deepseek-v4-pro-rp")
+	if !ok || got != "deepseek-v4-pro-rp" {
+		t.Fatalf("expected deepseek-v4-pro-rp, got ok=%v model=%q", ok, got)
+	}
+}
+
+func TestResolveModelAliasReducedPrompt(t *testing.T) {
+	got, ok := ResolveModel(nil, "gpt-5.5-rp")
+	if !ok || got != "deepseek-v4-flash-rp" {
+		t.Fatalf("expected alias gpt-5.5-rp -> deepseek-v4-flash-rp, got ok=%v model=%q", ok, got)
+	}
+}
+
+func TestResolveModelAliasNoThinkingReducedPrompt(t *testing.T) {
+	got, ok := ResolveModel(nil, "claude-opus-4-6-nothinking-rp")
+	if !ok || got != "deepseek-v4-pro-nothinking-rp" {
+		t.Fatalf("expected alias claude-opus-4-6-nothinking-rp -> deepseek-v4-pro-nothinking-rp, got ok=%v model=%q", ok, got)
+	}
+}
+
+func TestResolveModelRejectsUnsupportedReducedPromptTarget(t *testing.T) {
+	if got, ok := ResolveModel(nil, "o3-deep-research-rp"); ok {
+		t.Fatalf("expected search rp alias to be rejected, got %q", got)
+	}
+}
+
 func TestResolveModelAlias(t *testing.T) {
 	got, ok := ResolveModel(nil, "gpt-4.1")
 	if !ok || got != "deepseek-v4-flash" {
@@ -141,6 +168,15 @@ func TestResolveModelCustomAliasToVision(t *testing.T) {
 	}, "my-vision-model")
 	if !ok || got != "deepseek-v4-vision" {
 		t.Fatalf("expected alias -> deepseek-v4-vision, got ok=%v model=%q", ok, got)
+	}
+}
+
+func TestResolveModelIgnoresUnsupportedCustomAliasValue(t *testing.T) {
+	got, ok := ResolveModel(mockModelAliasReader{
+		"my-search-rp": "deepseek-v4-pro-search-rp",
+	}, "my-search-rp")
+	if ok {
+		t.Fatalf("expected unsupported custom alias value to fail resolve, got %q", got)
 	}
 }
 

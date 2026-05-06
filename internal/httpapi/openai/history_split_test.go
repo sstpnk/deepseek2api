@@ -184,6 +184,52 @@ func TestApplyThinkingInjectionUsesCustomPrompt(t *testing.T) {
 	}
 }
 
+func TestApplyThinkingInjectionReducedPromptDoesNotReinjectToolInstructions(t *testing.T) {
+	ds := &inlineUploadDSStub{}
+	h := &openAITestSurface{
+		Store: mockOpenAIConfig{
+			thinkingInjection: boolPtr(true),
+		},
+		DS: ds,
+	}
+	req := map[string]any{
+		"model": "deepseek-v4-flash-rp",
+		"messages": []any{
+			map[string]any{"role": "user", "content": "hello"},
+		},
+		"tools": []any{
+			map[string]any{
+				"type": "function",
+				"function": map[string]any{
+					"name":        "search",
+					"description": "Search docs",
+					"parameters": map[string]any{
+						"type": "object",
+					},
+				},
+			},
+		},
+	}
+	stdReq, err := promptcompat.NormalizeOpenAIChatRequest(h.Store, req, "")
+	if err != nil {
+		t.Fatalf("normalize failed: %v", err)
+	}
+
+	out, err := h.applyCurrentInputFile(context.Background(), &auth.RequestAuth{DeepSeekToken: "token"}, stdReq)
+	if err != nil {
+		t.Fatalf("apply thinking injection failed: %v", err)
+	}
+	if !strings.Contains(out.FinalPrompt, promptcompat.ThinkingInjectionMarker) {
+		t.Fatalf("expected thinking injection to remain, got %s", out.FinalPrompt)
+	}
+	if strings.Contains(out.FinalPrompt, "You have access to these tools:") || strings.Contains(out.FinalPrompt, "TOOL CALL FORMAT") {
+		t.Fatalf("reduced prompt should not regain tool instructions, got %s", out.FinalPrompt)
+	}
+	if len(out.ToolNames) != 1 || out.ToolNames[0] != "search" {
+		t.Fatalf("expected tool names to remain available, got %#v", out.ToolNames)
+	}
+}
+
 func TestApplyCurrentInputFileDisabledPassThrough(t *testing.T) {
 	ds := &inlineUploadDSStub{}
 	h := &openAITestSurface{
@@ -282,6 +328,60 @@ func TestApplyCurrentInputFileUploadsFirstTurnWithNumberedHistoryTranscript(t *t
 	}
 	if !strings.Contains(out.PromptTokenText, "# DS2API_HISTORY.txt") || !strings.Contains(out.PromptTokenText, "=== 1. USER ===") {
 		t.Fatalf("expected prompt token text to include numbered history transcript, got %q", out.PromptTokenText)
+	}
+}
+
+func TestApplyCurrentInputFileReducedPromptDoesNotReinjectToolInstructions(t *testing.T) {
+	ds := &inlineUploadDSStub{}
+	h := &openAITestSurface{
+		Store: mockOpenAIConfig{
+			currentInputEnabled: true,
+			currentInputMin:     0,
+			thinkingInjection:   boolPtr(true),
+		},
+		DS: ds,
+	}
+	req := map[string]any{
+		"model": "deepseek-v4-pro-rp",
+		"messages": []any{
+			map[string]any{"role": "user", "content": "first turn content that is long enough"},
+		},
+		"tools": []any{
+			map[string]any{
+				"type": "function",
+				"function": map[string]any{
+					"name":        "read_file",
+					"description": "Read a file",
+					"parameters": map[string]any{
+						"type": "object",
+					},
+				},
+			},
+		},
+	}
+	stdReq, err := promptcompat.NormalizeOpenAIChatRequest(h.Store, req, "")
+	if err != nil {
+		t.Fatalf("normalize failed: %v", err)
+	}
+
+	out, err := h.applyCurrentInputFile(context.Background(), &auth.RequestAuth{DeepSeekToken: "token"}, stdReq)
+	if err != nil {
+		t.Fatalf("apply current input file failed: %v", err)
+	}
+	if len(ds.uploadCalls) != 1 {
+		t.Fatalf("expected 1 current input upload, got %d", len(ds.uploadCalls))
+	}
+	if !strings.Contains(out.PromptTokenText, promptcompat.ThinkingInjectionMarker) {
+		t.Fatalf("expected thinking injection to remain in token context, got %q", out.PromptTokenText)
+	}
+	if strings.Contains(out.FinalPrompt, "You have access to these tools:") || strings.Contains(out.FinalPrompt, "TOOL CALL FORMAT") || strings.Contains(out.FinalPrompt, "Read-tool cache guard") {
+		t.Fatalf("reduced prompt live prompt should not include tool instructions, got %s", out.FinalPrompt)
+	}
+	if strings.Contains(out.PromptTokenText, "You have access to these tools:") || strings.Contains(out.PromptTokenText, "TOOL CALL FORMAT") || strings.Contains(out.PromptTokenText, "Read-tool cache guard") {
+		t.Fatalf("reduced prompt token context should not include tool instructions, got %s", out.PromptTokenText)
+	}
+	if len(out.ToolNames) != 1 || out.ToolNames[0] != "read_file" {
+		t.Fatalf("expected tool names to remain available, got %#v", out.ToolNames)
 	}
 }
 

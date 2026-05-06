@@ -160,12 +160,18 @@ OpenAI `/v1/*` routes remain canonical, and DS2API also accepts root shortcuts s
 | Family | Model ID | thinking | search |
 | --- | --- | --- | --- |
 | default | `deepseek-v4-flash` | enabled by default, request-controlled | ❌ |
+| default | `deepseek-v4-flash-nothinking` | permanently disabled | ❌ |
+| default | `deepseek-v4-flash-rp` | enabled by default, request-controlled; no tool prompt injection | ❌ |
+| default | `deepseek-v4-flash-nothinking-rp` | permanently disabled; no tool prompt injection | ❌ |
 | expert | `deepseek-v4-pro` | enabled by default, request-controlled | ❌ |
+| expert | `deepseek-v4-pro-nothinking` | permanently disabled | ❌ |
+| expert | `deepseek-v4-pro-rp` | enabled by default, request-controlled; no tool prompt injection | ❌ |
+| expert | `deepseek-v4-pro-nothinking-rp` | permanently disabled; no tool prompt injection | ❌ |
 | default | `deepseek-v4-flash-search` | enabled by default, request-controlled | ✅ |
 | expert | `deepseek-v4-pro-search` | enabled by default, request-controlled | ✅ |
 | vision | `deepseek-v4-vision` | enabled by default, request-controlled | ❌ |
 
-Besides native IDs, DS2API also accepts common aliases as input (for example `gpt-4.1`, `gpt-5`, `gpt-5-codex`, `o3`, `claude-*`, `gemini-*`), but `/v1/models` returns normalized DeepSeek native model IDs. The complete alias behavior is documented in [API.en.md](API.en.md#model-alias-resolution) and `config.example.json`.
+Besides native IDs, DS2API also accepts common aliases as input (for example `gpt-4.1`, `gpt-5`, `gpt-5-codex`, `o3`, `claude-*`, `gemini-*`), but `/v1/models` returns normalized DeepSeek native model IDs. Adding `-rp` to a supported text alias resolves to a reduced-prompt variant. These variants skip only tool schema and DSML tool-call instruction injection; thinking prompts, `thinking_enabled`, `model_type`, and tool output parsing remain aligned with the matching base model. The complete alias behavior is documented in [API.en.md](API.en.md#model-alias-resolution) and `config.example.json`.
 Current upstream vision support exposes only the `vision` lane and does not provide a separate search-enabled vision variant.
 
 ### Claude Endpoint (`GET /anthropic/v1/models`)

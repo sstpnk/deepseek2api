@@ -14,7 +14,10 @@ type ModelAliasReader interface {
 	ModelAliases() map[string]string
 }
 
-const noThinkingModelSuffix = "-nothinking"
+const (
+	noThinkingModelSuffix    = "-nothinking"
+	reducedPromptModelSuffix = "-rp"
+)
 
 var deepSeekBaseModels = []ModelInfo{
 	{ID: "deepseek-v4-flash", Object: "model", Created: 1677610602, OwnedBy: "deepseek", Permission: []any{}},
@@ -24,7 +27,7 @@ var deepSeekBaseModels = []ModelInfo{
 	{ID: "deepseek-v4-vision", Object: "model", Created: 1677610602, OwnedBy: "deepseek", Permission: []any{}},
 }
 
-var DeepSeekModels = appendNoThinkingVariants(deepSeekBaseModels)
+var DeepSeekModels = appendDeepSeekVariants(deepSeekBaseModels)
 
 var claudeBaseModels = []ModelInfo{
 	// Current aliases
@@ -59,8 +62,11 @@ var claudeBaseModels = []ModelInfo{
 var ClaudeModels = appendNoThinkingVariants(claudeBaseModels)
 
 func GetModelConfig(model string) (thinking bool, search bool, ok bool) {
-	baseModel, noThinking := splitNoThinkingModel(model)
+	baseModel, noThinking, _ := splitDeepSeekVariant(model)
 	if baseModel == "" {
+		return false, false, false
+	}
+	if IsReducedPromptModel(model) && !supportsReducedPromptBaseModel(baseModel) {
 		return false, false, false
 	}
 	switch baseModel {
@@ -74,7 +80,10 @@ func GetModelConfig(model string) (thinking bool, search bool, ok bool) {
 }
 
 func GetModelType(model string) (modelType string, ok bool) {
-	baseModel, _ := splitNoThinkingModel(model)
+	baseModel, _, _ := splitDeepSeekVariant(model)
+	if IsReducedPromptModel(model) && !supportsReducedPromptBaseModel(baseModel) {
+		return "", false
+	}
 	switch baseModel {
 	case "deepseek-v4-flash", "deepseek-v4-flash-search":
 		return "default", true
@@ -93,8 +102,22 @@ func IsSupportedDeepSeekModel(model string) bool {
 }
 
 func IsNoThinkingModel(model string) bool {
-	_, noThinking := splitNoThinkingModel(model)
+	_, noThinking, _ := splitDeepSeekVariant(model)
 	return noThinking
+}
+
+func IsReducedPromptModel(model string) bool {
+	_, _, reducedPrompt := splitDeepSeekVariant(model)
+	return reducedPrompt
+}
+
+func supportsReducedPromptBaseModel(baseModel string) bool {
+	switch baseModel {
+	case "deepseek-v4-flash", "deepseek-v4-pro":
+		return true
+	default:
+		return false
+	}
 }
 
 func DefaultModelAliases() map[string]string {
@@ -211,11 +234,14 @@ func ResolveModel(store ModelAliasReader, requested string) (string, bool) {
 		return model, true
 	}
 	if mapped, ok := aliases[model]; ok && IsSupportedDeepSeekModel(mapped) {
-		return mapped, true
+		return lower(strings.TrimSpace(mapped)), true
 	}
-	baseModel, noThinking := splitNoThinkingModel(model)
+	baseModel, noThinking, reducedPrompt := splitDeepSeekVariant(model)
 	if mapped, ok := aliases[baseModel]; ok && IsSupportedDeepSeekModel(mapped) {
-		return withNoThinkingVariant(mapped, noThinking), true
+		candidate := withDeepSeekVariant(mapped, noThinking, reducedPrompt)
+		if IsSupportedDeepSeekModel(candidate) {
+			return lower(strings.TrimSpace(candidate)), true
+		}
 	}
 	return "", false
 }
@@ -260,34 +286,62 @@ func ClaudeModelsResponse() map[string]any {
 	return resp
 }
 
+func appendDeepSeekVariants(models []ModelInfo) []ModelInfo {
+	out := make([]ModelInfo, 0, len(models)*2+4)
+	for _, model := range models {
+		out = append(out, model)
+		noThinking := model
+		noThinking.ID = withDeepSeekVariant(model.ID, true, false)
+		out = append(out, noThinking)
+		if supportsReducedPromptBaseModel(model.ID) {
+			reducedPrompt := model
+			reducedPrompt.ID = withDeepSeekVariant(model.ID, false, true)
+			out = append(out, reducedPrompt)
+			noThinkingReducedPrompt := model
+			noThinkingReducedPrompt.ID = withDeepSeekVariant(model.ID, true, true)
+			out = append(out, noThinkingReducedPrompt)
+		}
+	}
+	return out
+}
+
 func appendNoThinkingVariants(models []ModelInfo) []ModelInfo {
 	out := make([]ModelInfo, 0, len(models)*2)
 	for _, model := range models {
 		out = append(out, model)
 		variant := model
-		variant.ID = withNoThinkingVariant(model.ID, true)
+		variant.ID = withDeepSeekVariant(model.ID, true, false)
 		out = append(out, variant)
 	}
 	return out
 }
 
-func splitNoThinkingModel(model string) (string, bool) {
+func splitDeepSeekVariant(model string) (baseModel string, noThinking bool, reducedPrompt bool) {
 	model = lower(strings.TrimSpace(model))
-	if strings.HasSuffix(model, noThinkingModelSuffix) {
-		return strings.TrimSuffix(model, noThinkingModelSuffix), true
+	if strings.HasSuffix(model, reducedPromptModelSuffix) {
+		reducedPrompt = true
+		model = strings.TrimSuffix(model, reducedPromptModelSuffix)
 	}
-	return model, false
+	if strings.HasSuffix(model, noThinkingModelSuffix) {
+		noThinking = true
+		model = strings.TrimSuffix(model, noThinkingModelSuffix)
+	}
+	return model, noThinking, reducedPrompt
 }
 
-func withNoThinkingVariant(model string, enabled bool) string {
-	baseModel, _ := splitNoThinkingModel(model)
-	if !enabled {
-		return baseModel
-	}
+func withDeepSeekVariant(model string, noThinking, reducedPrompt bool) string {
+	baseModel, _, _ := splitDeepSeekVariant(model)
 	if baseModel == "" {
 		return ""
 	}
-	return baseModel + noThinkingModelSuffix
+	out := baseModel
+	if noThinking {
+		out += noThinkingModelSuffix
+	}
+	if reducedPrompt {
+		out += reducedPromptModelSuffix
+	}
+	return out
 }
 
 func loadModelAliases(store ModelAliasReader) map[string]string {

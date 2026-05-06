@@ -105,6 +105,7 @@ DS2API 当前的核心思路，不是把客户端传来的 `messages`、`tools`�
 - `prompt` 才是对话上下文主载体。
 - `ref_file_ids` 只承载文件引用，不承载普通文本消息。
 - `tools` 不会作为“原生工具 schema”直接下发给下游，而是被改写进 `prompt`。
+- 如果最终解析出的 DeepSeek 模型名带 `-rp` 后缀，则会走 reduced-prompt 路径：仍保留请求中的 tool schema 用于后续工具输出解析、schema 归一和流式 sieve，但不会把工具 schema、`You have access to these tools:` 或 DSML 工具调用格式约束注入到下游 prompt。该后缀目前只支持 `deepseek-v4-flash` / `deepseek-v4-pro` 及其 `-nothinking` 组合，不改变 `thinking_enabled`、`search_enabled` 或上游 `model_type`。
 - 对外返回给客户端的 `prompt_tokens` / `input_tokens` / `promptTokenCount` 不再按“最后一条消息”或字符粗估近似返回，而是基于**完整上下文 prompt**做 tokenizer 计数；为了避免上下文实际超限但客户端误以为还能塞下，请求侧上下文 token 会额外保守上浮一点，宁可略大也不低估。
 - 当前 `/v1/chat/completions` 业务路径仍是“每次请求新建一个远端 `chat_session_id`，并默认发送 `parent_message_id: null`”；因此 DS2API 对外默认表现为“新会话 + prompt 拼历史”，而不是复用 DeepSeek 原生会话树。
 - 但 DeepSeek 远端本身支持同一 `chat_session_id` 的跨轮次持续对话。2026-04-27 已用项目内现有 DeepSeek client 做过一次不改业务代码的双轮实测：同一 `chat_session_id` 下，第 1 轮返回 `request_message_id=1` / `response_message_id=2` / 文本 `SESSION_TEST_ONE`；第 2 轮重新获取一次 PoW，并发送 `parent_message_id=2` 后，成功返回 `request_message_id=3` / `response_message_id=4` / 文本 `SESSION_TEST_TWO`。这说明“同远端会话持续聊天”能力存在，且每轮需要携带正确的 parent/message 链接信息，同时重新获取对应轮次可用的 PoW。
@@ -160,6 +161,8 @@ OpenAI Chat / Responses 在标准化后、current input file 之前，会默认�
 ## 6. tools 为什么是“文本注入”，不是原生下发
 
 当前项目把工具能力视为“prompt 约束的一部分”。
+
+例外是 reduced-prompt 模型（`deepseek-v4-flash-rp`、`deepseek-v4-pro-rp`、`deepseek-v4-flash-nothinking-rp`、`deepseek-v4-pro-nothinking-rp`）：这些模型不会执行本节的工具提示词注入，但当前请求的 tool schema 仍会保留在标准化请求里，用于流式工具块筛分、最终 `tool_calls` / `function_call` 解析和按 schema 做参数类型归一。
 
 具体做法：
 

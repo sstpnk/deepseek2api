@@ -172,6 +172,43 @@ func TestBuildOpenAIFinalPromptNonReadToolOmitsCacheGuard(t *testing.T) {
 	}
 }
 
+func TestBuildOpenAIPromptWithOptionsReducedPromptSkipsToolInstructions(t *testing.T) {
+	messages := []any{
+		map[string]any{"role": "system", "content": "You are helpful"},
+		map[string]any{"role": "user", "content": "请调用工具"},
+	}
+	tools := []any{
+		map[string]any{
+			"type": "function",
+			"function": map[string]any{
+				"name":        "search",
+				"description": "Search docs",
+				"parameters": map[string]any{
+					"type": "object",
+				},
+			},
+		},
+	}
+
+	finalPrompt, toolNames := BuildOpenAIPromptWithOptions(messages, tools, "", DefaultToolChoicePolicy(), false, PromptBuildOptions{SuppressToolPrompt: true})
+	if len(toolNames) != 1 || toolNames[0] != "search" {
+		t.Fatalf("expected tool detection names to remain available, got %#v", toolNames)
+	}
+	for _, forbidden := range []string{
+		"You have access to these tools:",
+		"TOOL CALL FORMAT",
+		"<|DSML|tool_calls>",
+		"Read-tool cache guard",
+	} {
+		if strings.Contains(finalPrompt, forbidden) {
+			t.Fatalf("reduced prompt should not include %q, got %q", forbidden, finalPrompt)
+		}
+	}
+	if !strings.Contains(finalPrompt, "<｜User｜>请调用工具") {
+		t.Fatalf("reduced prompt should still include user content, got %q", finalPrompt)
+	}
+}
+
 func TestBuildOpenAIFinalPromptWithThinkingKeepsPromptUnchanged(t *testing.T) {
 	messages := []any{
 		map[string]any{"role": "user", "content": "继续回答上一个问题"},

@@ -164,8 +164,12 @@ OpenAI `/v1/*` 仍是推荐的规范路径；同时支持 `/models`、`/chat/com
 | --- | --- | --- | --- |
 | default | `deepseek-v4-flash` | 默认开启，可由请求参数控制 | ❌ |
 | default | `deepseek-v4-flash-nothinking` | 永久关闭，不受请求参数影响 | ❌ |
+| default | `deepseek-v4-flash-rp` | 默认开启，可由请求参数控制；不注入工具提示词 | ❌ |
+| default | `deepseek-v4-flash-nothinking-rp` | 永久关闭；不注入工具提示词 | ❌ |
 | expert | `deepseek-v4-pro` | 默认开启，可由请求参数控制 | ❌ |
 | expert | `deepseek-v4-pro-nothinking` | 永久关闭，不受请求参数影响 | ❌ |
+| expert | `deepseek-v4-pro-rp` | 默认开启，可由请求参数控制；不注入工具提示词 | ❌ |
+| expert | `deepseek-v4-pro-nothinking-rp` | 永久关闭；不注入工具提示词 | ❌ |
 | default | `deepseek-v4-flash-search` | 默认开启，可由请求参数控制 | ✅ |
 | default | `deepseek-v4-flash-search-nothinking` | 永久关闭，不受请求参数影响 | ✅ |
 | expert | `deepseek-v4-pro-search` | 默认开启，可由请求参数控制 | ✅ |
@@ -173,7 +177,7 @@ OpenAI `/v1/*` 仍是推荐的规范路径；同时支持 `/models`、`/chat/com
 | vision | `deepseek-v4-vision` | 默认开启，可由请求参数控制 | ❌ |
 | vision | `deepseek-v4-vision-nothinking` | 永久关闭，不受请求参数影响 | ❌ |
 
-除原生模型外，也支持常见 alias 输入（如 `gpt-4.1`、`gpt-5`、`gpt-5-codex`、`o3`、`claude-*`、`gemini-*` 等），但 `/v1/models` 返回的是规范化后的 DeepSeek 原生模型 ID。若 alias 名本身追加 `-nothinking` 后缀，也会映射到对应的强制关思考模型。完整 alias 行为以 [API.md](API.md#模型-alias-解析策略) 和 `config.example.json` 为准。
+除原生模型外，也支持常见 alias 输入（如 `gpt-4.1`、`gpt-5`、`gpt-5-codex`、`o3`、`claude-*`、`gemini-*` 等），但 `/v1/models` 返回的是规范化后的 DeepSeek 原生模型 ID。若 alias 名本身追加 `-nothinking` 后缀，也会映射到对应的强制关思考模型；追加 `-rp` 会映射到 reduced-prompt 变体。`-rp` 只跳过工具 schema 与 DSML 工具调用规则提示词注入，thinking 相关提示词、`thinking_enabled`、`model_type` 和工具输出解析保持对应基础模型行为。完整 alias 行为以 [API.md](API.md#模型-alias-解析策略) 和 `config.example.json` 为准。
 当前上游视觉模型只暴露 `vision` 通道，不提供独立的联网搜索视觉变体。
 
 ### Claude 接口（`GET /anthropic/v1/models`）
