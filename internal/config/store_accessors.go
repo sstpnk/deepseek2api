@@ -33,6 +33,15 @@ func (s *Store) ConfiguredModelAliases() map[string]string {
 	return cloneStringMap(s.cfg.ModelAliases)
 }
 
+func (s *Store) VercelConfig() VercelConfig {
+	if s == nil {
+		return VercelConfig{}
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return NormalizeVercelConfig(s.cfg.Vercel)
+}
+
 func (s *Store) ToolcallMode() string {
 	return "feature_match"
 }

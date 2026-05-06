@@ -20,6 +20,7 @@ type ConfigStore interface {
 	Proxies() []config.Proxy
 	ModelAliases() map[string]string
 	ConfiguredModelAliases() map[string]string
+	VercelConfig() config.VercelConfig
 	UpdateAccountToken(identifier, token string) error
 	UpdateAccountTestStatus(identifier, status string) error
 	AccountTestStatus(identifier string) (string, bool)
