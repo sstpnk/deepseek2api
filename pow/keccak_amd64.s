@@ -8,7 +8,7 @@
 //   - Theta (θ): scalar XOR chain + ROLQ $1, results in GP registers.
 //   - Rho (ρ) + Pi (π): 25 scalar lane rotations with hardcoded offsets,
 //     stored to b[] scratch at 200(SP).
-//   - Chi (χ): VPTERNLOGQ $0xA6 on ZMM registers → 1 instruction per lane
+//   - Chi (χ): VPTERNLOGQ $0xA4 on ZMM registers → 1 instruction per lane
 //     instead of 3 scalar (ANDN + XOR). Data loaded via XMM (SSE2 MOVQ)
 //     into shared XMM/ZMM physical registers.
 //   - Iota (ι): XOR round constant from precomputed table.
@@ -189,63 +189,63 @@ round:
     //
     // Row 0 (0,1,2,3,4)
     MOVQ 200(SP), X0; MOVQ 208(SP), X1; MOVQ 216(SP), X2
-    VPTERNLOGQ $0xA6, Z2, Z1, Z0; MOVQ X0, 0(SP)         // a[0]
+    VPTERNLOGQ $0xA4, Z2, Z1, Z0; MOVQ X0, 0(SP)         // a[0]
     MOVQ 224(SP), X3
-    VPTERNLOGQ $0xA6, Z3, Z2, Z1; MOVQ X1, 8(SP)         // a[1]
+    VPTERNLOGQ $0xA4, Z3, Z2, Z1; MOVQ X1, 8(SP)         // a[1]
     MOVQ 232(SP), X4
-    VPTERNLOGQ $0xA6, Z4, Z3, Z2; MOVQ X2, 16(SP)        // a[2]
+    VPTERNLOGQ $0xA4, Z4, Z3, Z2; MOVQ X2, 16(SP)        // a[2]
     MOVQ 200(SP), X0
-    VPTERNLOGQ $0xA6, Z0, Z4, Z3; MOVQ X3, 24(SP)        // a[3]
+    VPTERNLOGQ $0xA4, Z0, Z4, Z3; MOVQ X3, 24(SP)        // a[3]
     MOVQ 208(SP), X1
-    VPTERNLOGQ $0xA6, Z1, Z0, Z4; MOVQ X4, 32(SP)        // a[4]
+    VPTERNLOGQ $0xA4, Z1, Z0, Z4; MOVQ X4, 32(SP)        // a[4]
 
     // Row 1 (5,6,7,8,9)
     MOVQ 240(SP), X0; MOVQ 248(SP), X1; MOVQ 256(SP), X2
-    VPTERNLOGQ $0xA6, Z2, Z1, Z0; MOVQ X0, 40(SP)
+    VPTERNLOGQ $0xA4, Z2, Z1, Z0; MOVQ X0, 40(SP)
     MOVQ 264(SP), X3
-    VPTERNLOGQ $0xA6, Z3, Z2, Z1; MOVQ X1, 48(SP)
+    VPTERNLOGQ $0xA4, Z3, Z2, Z1; MOVQ X1, 48(SP)
     MOVQ 272(SP), X4
-    VPTERNLOGQ $0xA6, Z4, Z3, Z2; MOVQ X2, 56(SP)
+    VPTERNLOGQ $0xA4, Z4, Z3, Z2; MOVQ X2, 56(SP)
     MOVQ 240(SP), X0
-    VPTERNLOGQ $0xA6, Z0, Z4, Z3; MOVQ X3, 64(SP)
+    VPTERNLOGQ $0xA4, Z0, Z4, Z3; MOVQ X3, 64(SP)
     MOVQ 248(SP), X1
-    VPTERNLOGQ $0xA6, Z1, Z0, Z4; MOVQ X4, 72(SP)
+    VPTERNLOGQ $0xA4, Z1, Z0, Z4; MOVQ X4, 72(SP)
 
     // Row 2 (10,11,12,13,14)
     MOVQ 280(SP), X0; MOVQ 288(SP), X1; MOVQ 296(SP), X2
-    VPTERNLOGQ $0xA6, Z2, Z1, Z0; MOVQ X0, 80(SP)
+    VPTERNLOGQ $0xA4, Z2, Z1, Z0; MOVQ X0, 80(SP)
     MOVQ 304(SP), X3
-    VPTERNLOGQ $0xA6, Z3, Z2, Z1; MOVQ X1, 88(SP)
+    VPTERNLOGQ $0xA4, Z3, Z2, Z1; MOVQ X1, 88(SP)
     MOVQ 312(SP), X4
-    VPTERNLOGQ $0xA6, Z4, Z3, Z2; MOVQ X2, 96(SP)
+    VPTERNLOGQ $0xA4, Z4, Z3, Z2; MOVQ X2, 96(SP)
     MOVQ 280(SP), X0
-    VPTERNLOGQ $0xA6, Z0, Z4, Z3; MOVQ X3, 104(SP)
+    VPTERNLOGQ $0xA4, Z0, Z4, Z3; MOVQ X3, 104(SP)
     MOVQ 288(SP), X1
-    VPTERNLOGQ $0xA6, Z1, Z0, Z4; MOVQ X4, 112(SP)
+    VPTERNLOGQ $0xA4, Z1, Z0, Z4; MOVQ X4, 112(SP)
 
     // Row 3 (15,16,17,18,19)
     MOVQ 320(SP), X0; MOVQ 328(SP), X1; MOVQ 336(SP), X2
-    VPTERNLOGQ $0xA6, Z2, Z1, Z0; MOVQ X0, 120(SP)
+    VPTERNLOGQ $0xA4, Z2, Z1, Z0; MOVQ X0, 120(SP)
     MOVQ 344(SP), X3
-    VPTERNLOGQ $0xA6, Z3, Z2, Z1; MOVQ X1, 128(SP)
+    VPTERNLOGQ $0xA4, Z3, Z2, Z1; MOVQ X1, 128(SP)
     MOVQ 352(SP), X4
-    VPTERNLOGQ $0xA6, Z4, Z3, Z2; MOVQ X2, 136(SP)
+    VPTERNLOGQ $0xA4, Z4, Z3, Z2; MOVQ X2, 136(SP)
     MOVQ 320(SP), X0
-    VPTERNLOGQ $0xA6, Z0, Z4, Z3; MOVQ X3, 144(SP)
+    VPTERNLOGQ $0xA4, Z0, Z4, Z3; MOVQ X3, 144(SP)
     MOVQ 328(SP), X1
-    VPTERNLOGQ $0xA6, Z1, Z0, Z4; MOVQ X4, 152(SP)
+    VPTERNLOGQ $0xA4, Z1, Z0, Z4; MOVQ X4, 152(SP)
 
     // Row 4 (20,21,22,23,24)
     MOVQ 360(SP), X0; MOVQ 368(SP), X1; MOVQ 376(SP), X2
-    VPTERNLOGQ $0xA6, Z2, Z1, Z0; MOVQ X0, 160(SP)
+    VPTERNLOGQ $0xA4, Z2, Z1, Z0; MOVQ X0, 160(SP)
     MOVQ 384(SP), X3
-    VPTERNLOGQ $0xA6, Z3, Z2, Z1; MOVQ X1, 168(SP)
+    VPTERNLOGQ $0xA4, Z3, Z2, Z1; MOVQ X1, 168(SP)
     MOVQ 392(SP), X4
-    VPTERNLOGQ $0xA6, Z4, Z3, Z2; MOVQ X2, 176(SP)
+    VPTERNLOGQ $0xA4, Z4, Z3, Z2; MOVQ X2, 176(SP)
     MOVQ 360(SP), X0
-    VPTERNLOGQ $0xA6, Z0, Z4, Z3; MOVQ X3, 184(SP)
+    VPTERNLOGQ $0xA4, Z0, Z4, Z3; MOVQ X3, 184(SP)
     MOVQ 368(SP), X1
-    VPTERNLOGQ $0xA6, Z1, Z0, Z4; MOVQ X4, 192(SP)
+    VPTERNLOGQ $0xA4, Z1, Z0, Z4; MOVQ X4, 192(SP)
 
     // === Iota ===
     MOVQ 0(BP)(SI*8), AX; XORQ AX, 0(SP)
