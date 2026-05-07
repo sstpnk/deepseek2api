@@ -34,8 +34,18 @@ GLOBL rc<>(SB), RODATA, $184
 // Uses BIC (bit-clear = ANDN) for Chi step.
 // ARM64 has 31 GP registers — keep hot values in registers, minimal stack traffic.
 //
-// Stack: 0(SP)..192(SP) = state[25]uint64, 200(SP)..392(SP) = b[] scratch
-TEXT ·keccakF23ARM64(SB), NOSPLIT, $400-8
+// Stack: 0(RSP)..192(RSP)=state, 200(RSP)..392(RSP)=b[] scratch,
+// 400(RSP)..448(RSP)=saved callee-saved regs (R19-R25)
+TEXT ·keccakF23ARM64(SB), $456-8
+    // Save callee-saved registers (Go ARM64 ABI: R19-R29)
+    MOVD R19, 400(RSP)
+    MOVD R20, 408(RSP)
+    MOVD R21, 416(RSP)
+    MOVD R22, 424(RSP)
+    MOVD R23, 432(RSP)
+    MOVD R24, 440(RSP)
+    MOVD R25, 448(RSP)
+
     MOVD s+0(FP), R0
 
     // Copy state to stack.
@@ -260,9 +270,6 @@ round:
     CMP $23, R19
     BLT round
 
-    // Reset RC pointer for next call
-    MOVD $rc<>(SB), R20
-
     // Store back
     MOVD 0(RSP), R1; MOVD R1, 0(R0)
     MOVD 8(RSP), R1; MOVD R1, 8(R0)
@@ -289,4 +296,13 @@ round:
     MOVD 176(RSP), R1; MOVD R1, 176(R0)
     MOVD 184(RSP), R1; MOVD R1, 184(R0)
     MOVD 192(RSP), R1; MOVD R1, 192(R0)
+
+    // Restore callee-saved registers
+    MOVD 400(RSP), R19
+    MOVD 408(RSP), R20
+    MOVD 416(RSP), R21
+    MOVD 424(RSP), R22
+    MOVD 432(RSP), R23
+    MOVD 440(RSP), R24
+    MOVD 448(RSP), R25
     RET

@@ -34,8 +34,14 @@ GLOBL rc<>(SB), RODATA, $184
 // Chi step uses VPTERNLOGQ (1 instruction vs 3 scalar).
 // Theta and Rho+Pi remain scalar; state on stack.
 //
-// Stack: 0(SP)..192(SP)=state, 200(SP)..392(SP)=b[] scratch
-TEXT ·keccakF23AVX512(SB), NOSPLIT, $400-8
+// Stack: 0(SP)..192(SP)=state, 200(SP)..392(SP)=b[] scratch,
+// 400(SP)..416(SP)=saved callee-saved regs (R12,R13,BP)
+TEXT ·keccakF23AVX512(SB), $424-8
+    // Save callee-saved registers (Go amd64 ABI: BP, R12-R15)
+    MOVQ R12, 400(SP)
+    MOVQ R13, 408(SP)
+    MOVQ BP, 416(SP)
+
     MOVQ s+0(FP), DI
 
     // Copy state to stack.
@@ -257,4 +263,9 @@ round:
     MOVQ 176(SP), AX; MOVQ AX, 176(DI)
     MOVQ 184(SP), AX; MOVQ AX, 184(DI)
     MOVQ 192(SP), AX; MOVQ AX, 192(DI)
+
+    // Restore callee-saved registers
+    MOVQ 400(SP), R12
+    MOVQ 408(SP), R13
+    MOVQ 416(SP), BP
     RET
