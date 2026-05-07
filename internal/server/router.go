@@ -64,7 +64,8 @@ func NewApp() (*App, error) {
 			"requested", pow.BackendRequested(),
 			"validated", pow.BackendValidated(),
 			"internal_parallel", pow.PowInternalParallel(),
-			"max_concurrency", pow.PowInternalParallel(),
+			"external_concurrency", dsclient.PowExternalConcurrencyEffective(),
+			"mode", dsclient.PowModeEffective(),
 		)
 	}
 	chatHistoryStore := chathistory.New(config.ChatHistoryPath())

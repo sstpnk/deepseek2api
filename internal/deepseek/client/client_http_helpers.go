@@ -9,11 +9,12 @@ import (
 	"github.com/andybalholm/brotli"
 )
 
-const maxResponseBytes = 50 << 20 // 50 MiB limit to prevent OOM on malformed upstream responses
+const maxCompressedBytes = 50 << 20   // 50 MiB compressed (network wire)
+const maxDecompressedBytes = 200 << 20 // 200 MiB decompressed (defense against zip bombs)
 
 func readResponseBody(resp *http.Response) ([]byte, error) {
 	encoding := strings.ToLower(strings.TrimSpace(resp.Header.Get("Content-Encoding")))
-	var reader io.Reader = io.LimitReader(resp.Body, maxResponseBytes)
+	var reader io.Reader = io.LimitReader(resp.Body, maxCompressedBytes)
 	switch encoding {
 	case "gzip":
 		gz, err := gzip.NewReader(reader)
@@ -21,9 +22,9 @@ func readResponseBody(resp *http.Response) ([]byte, error) {
 			return nil, err
 		}
 		defer func() { _ = gz.Close() }()
-		reader = gz
+		reader = io.LimitReader(gz, maxDecompressedBytes)
 	case "br":
-		reader = brotli.NewReader(reader)
+		reader = io.LimitReader(brotli.NewReader(reader), maxDecompressedBytes)
 	}
 	return io.ReadAll(reader)
 }

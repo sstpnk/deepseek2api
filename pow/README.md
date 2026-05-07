@@ -51,9 +51,28 @@ keccakF23 在以下平台有专用实现：
 
 | 平台 | 实现 | 状态 |
 |------|------|------|
-| amd64 (通用) | 纯 Go（编译器展开 + 寄存器分配） | 已稳定 |
-| amd64 AVX-512F/VL (Zen 4/5) | SIMD 汇编（VPTERNLOGQ Chi） | 已实现，需 Zen 4/5 实测 |
-| arm64 NEON (N1) | SIMD 汇编（BIC Chi） | 已实现，需 N1 实测 |
+| amd64 (通用) | 纯 Go（编译器展开 + 寄存器分配） | 生产可用 |
+| amd64 AVX-512F/VL | SIMD 汇编（VPTERNLOGQ Chi） | **实验** — 需显式 `DS2API_POW_BACKEND=avx512` 启用 |
+| arm64 NEON | SIMD 汇编（BIC Chi） | 已实现，需 N1 实测 |
+
+## AVX-512 调试
+
+AVX-512 后端为实验特性，默认不启用。要测试并反馈问题：
+
+```bash
+# 启用 AVX-512 后端
+export DS2API_POW_BACKEND=avx512
+
+# 运行自测（会打印 expected/actual 哈希对比）
+go test ./pow/... -v -run TestDeepSeekHashV1
+
+# 如果自测失败，收集以下信息反馈：
+# 1. 完整的测试输出（包括 expected_generic / actual_avx512 哈希值）
+# 2. CPU 型号：lscpu | grep "Model name"
+# 3. CPU flags：lscpu | grep Flags
+# 4. Go 版本：go version
+# 5. 操作系统：uname -a
+```
 
 ## 测试
 

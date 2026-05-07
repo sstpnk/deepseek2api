@@ -174,28 +174,6 @@ func (s *Store) APIKeys() []APIKey {
 	return slices.Clone(s.cfg.APIKeys)
 }
 
-func (s *Store) Accounts() []Account {
-	if s == nil {
-		return nil
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return slices.Clone(s.cfg.Accounts)
-}
-
-// AccountsUnsafe returns the internal account slice directly.
-// Caller must NOT modify the returned slice or its elements.
-// Use only in performance-sensitive read-only paths where the
-// caller's lifetime is bounded by the read lock.
-func (s *Store) AccountsUnsafe() []Account {
-	if s == nil {
-		return nil
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.cfg.Accounts
-}
-
 func (s *Store) AccountCount() int {
 	if s == nil {
 		return 0
@@ -203,6 +181,15 @@ func (s *Store) AccountCount() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return len(s.cfg.Accounts)
+}
+
+func (s *Store) Accounts() []Account {
+	if s == nil {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return slices.Clone(s.cfg.Accounts)
 }
 
 func (s *Store) FindAccount(identifier string) (Account, bool) {
