@@ -53,7 +53,6 @@ func TestRecordAccountVisibleSuccessDecaysEmptyOutputPenalty(t *testing.T) {
 	client, pool, requestAuth := newAccountHealthClientForTest(t)
 
 	client.RecordAccountEmptyOutput(requestAuth, "test")
-	client.RecordAccountEmptyOutput(requestAuth, "test")
 	client.RecordAccountVisibleSuccess(requestAuth, "test")
 	client.RecordAccountVisibleSuccess(requestAuth, "test")
 	client.RecordAccountEmptyOutput(requestAuth, "test")

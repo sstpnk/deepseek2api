@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	accountEmptyOutputThreshold         = 3
-	accountEmptyOutputFailureWindow     = 20 * time.Minute
+	accountEmptyOutputThreshold         = 2
+	accountEmptyOutputFailureWindow     = 2 * time.Hour
 	accountEmptyOutputRecoverySuccesses = 2
 	completionProxyHeader               = "X-Ds2api-Proxy-Id"
 )
