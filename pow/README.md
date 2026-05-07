@@ -20,8 +20,9 @@ header = base64(json({algorithm, challenge, salt, answer, signature, target_path
 ## 主要入口
 
 - `pow/deepseek_hash.go`：DeepSeekHashV1。
-- `pow/keccak_generic.go`：keccakF23 纯 Go 实现（23 轮 Keccak-f[1600]，跳过 round 0）。
-- `pow/keccak_amd64.s`：预留 amd64 SIMD 汇编（AVX-512 路径仍在开发中）。
+- `pow/keccak_generic.go`：keccakF23 纯 Go 实现（23 轮 Keccak-f[1600]，跳过 round 0）。所有平台的通用 fallback。
+- `pow/keccak_amd64.s`：AVX-512 汇编实现（VPTERNLOGQ 加速 Chi 步）。
+- `pow/keccak_arm64.s`：ARM64 NEON 汇编实现（BIC 加速 Chi 步）。
 - `pow/deepseek_pow.go`：`SolvePow`、`BuildPowHeader`、`SolveAndBuildHeader`。
 - `internal/deepseek/client/pow.go`：服务侧适配层，校验 `algorithm == DeepSeekHashV1` 并调用 `pow.SolvePow`。
 - `internal/deepseek/client/pow_runtime.go`：运行时 CPU 保护层，限制本地 PoW 并发；上传目标会短时间缓存并合并同账号同目标的并发求解。
@@ -51,8 +52,8 @@ keccakF23 在以下平台有专用实现：
 | 平台 | 实现 | 状态 |
 |------|------|------|
 | amd64 (通用) | 纯 Go（编译器展开 + 寄存器分配） | 已稳定 |
-| amd64 AVX-512 (Zen 4/5) | SIMD 汇编（VPROLQ + VPTERNLOG） | 开发中 |
-| arm64 NEON | SIMD 汇编（BIC + ROR） | 开发中 |
+| amd64 AVX-512F/VL (Zen 4/5) | SIMD 汇编（VPTERNLOGQ Chi） | 已实现，需 Zen 4/5 实测 |
+| arm64 NEON (N1) | SIMD 汇编（BIC Chi） | 已实现，需 N1 实测 |
 
 ## 测试
 
