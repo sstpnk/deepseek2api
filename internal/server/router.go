@@ -30,6 +30,7 @@ import (
 	"ds2api/internal/httpapi/openai/shared"
 	"ds2api/internal/httpapi/requestbody"
 	"ds2api/internal/webui"
+	"ds2api/pow"
 )
 
 type App struct {
@@ -58,7 +59,7 @@ func NewApp() (*App, error) {
 	if err := dsClient.PreloadPow(context.Background()); err != nil {
 		config.Logger.Warn("[PoW] init failed", "error", err)
 	} else {
-		config.Logger.Info("[PoW] pure Go solver ready")
+		config.Logger.Info("[PoW] solver ready", "backend", pow.BackendName())
 	}
 	chatHistoryStore := chathistory.New(config.ChatHistoryPath())
 	if err := chatHistoryStore.Err(); err != nil {

@@ -2,6 +2,17 @@
 
 package pow
 
+func init() {
+	if backendName == "" {
+		backendName = "neon"
+	}
+}
+
 func keccakF23(s *[25]uint64) {
-	keccakF23ARM64(s)
+	switch backendName {
+	case "generic":
+		keccakF23Generic(s)
+	default:
+		keccakF23ARM64(s)
+	}
 }
