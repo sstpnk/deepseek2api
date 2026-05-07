@@ -10,7 +10,7 @@ import (
 
 type Pool struct {
 	store                  *config.Store
-	mu                     sync.Mutex
+	mu                     sync.RWMutex
 	queue                  []string
 	inUse                  map[string]int
 	waiters                []chan struct{}
@@ -147,7 +147,7 @@ func (p *Pool) StatusSummary() map[string]any {
 }
 
 func (p *Pool) StatusWithOptions(opts StatusOptions) map[string]any {
-	p.mu.Lock()
+	p.mu.RLock()
 	stats := p.stats
 	if stats == nil {
 		stats = sharedRuntimeStats()
@@ -201,7 +201,7 @@ func (p *Pool) StatusWithOptions(opts StatusOptions) map[string]any {
 		status["available_accounts"] = availableAccounts
 		status["in_use_accounts"] = inUseAccounts
 	}
-	p.mu.Unlock()
+	p.mu.RUnlock()
 	if store != nil {
 		totalAccounts = store.AccountCount()
 	}

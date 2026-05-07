@@ -107,6 +107,12 @@ func pumpAutoContinue(ctx context.Context, pw *io.PipeWriter, initial io.ReadClo
 			return
 		}
 		if state.shouldContinue() && rounds < maxRounds {
+			select {
+			case <-ctx.Done():
+				_ = pw.CloseWithError(ctx.Err())
+				return
+			default:
+			}
 			rounds++
 			config.Logger.Info("[auto_continue] continuing", "round", rounds, "session_id", state.sessionID, "message_id", state.responseMessageID, "status", state.lastStatus)
 			nextResp, err := openContinue(ctx, state.sessionID, state.responseMessageID)
