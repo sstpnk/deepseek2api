@@ -276,6 +276,43 @@ func TestPoolAcquireRotatesIntoTokenlessAccounts(t *testing.T) {
 	}
 }
 
+func TestPoolSkipsCoolingDownAccounts(t *testing.T) {
+	pool := newPoolForTest(t, "1")
+	pool.Cooldown("acc1@example.com", "test")
+
+	acc, ok := pool.Acquire("", nil)
+	if !ok {
+		t.Fatal("expected second account to be acquired")
+	}
+	if got := acc.Identifier(); got != "acc2@example.com" {
+		t.Fatalf("expected acc2 while acc1 is cooling down, got %q", got)
+	}
+
+	status := pool.Status()
+	if got, ok := status["cooling_down"].(int); !ok || got != 1 {
+		t.Fatalf("expected one cooling_down account, got %#v", status["cooling_down"])
+	}
+}
+
+func TestPoolTargetCoolingDownAccountFailsFast(t *testing.T) {
+	pool := newPoolForTest(t, "1")
+	pool.Cooldown("acc1@example.com", "test")
+
+	if _, ok := pool.Acquire("acc1@example.com", nil); ok {
+		t.Fatal("expected target acquire to fail while account is cooling down")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	start := time.Now()
+	if _, ok := pool.AcquireWait(ctx, "acc1@example.com", nil); ok {
+		t.Fatal("expected target acquire wait to fail while account is cooling down")
+	}
+	if time.Since(start) > 120*time.Millisecond {
+		t.Fatalf("cooldown acquire should fail fast, took %s", time.Since(start))
+	}
+}
+
 func TestPoolAcquireWaitQueuesAndSucceedsAfterRelease(t *testing.T) {
 	pool := newSingleAccountPoolForTest(t, "1")
 	first, ok := pool.Acquire("", nil)

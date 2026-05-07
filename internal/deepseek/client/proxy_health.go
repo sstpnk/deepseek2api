@@ -11,14 +11,18 @@ import (
 const (
 	proxyFailureThreshold     = 3
 	proxyCooldownInitial      = 30 * time.Second
-	proxyCooldownMax          = 5 * time.Minute
+	proxyCooldownMax          = time.Hour
 	proxyCooldownGrowthFactor = 2
+	proxyRecoverySuccesses    = 3
 )
 
 type proxyHealth struct {
-	failures      int
-	cooldownLevel int
-	cooldownUntil time.Time
+	failures          int
+	recoverySuccesses int
+	cooldownLevel     int
+	cooldownUntil     time.Time
+	lastFailure       time.Time
+	lastSuccess       time.Time
 }
 
 // markProxyFailure records a transport-level failure for proxyID.
@@ -40,6 +44,8 @@ func (c *Client) markProxyFailure(proxyID string) {
 		c.proxyHealthMap[proxyID] = h
 	}
 	h.failures++
+	h.recoverySuccesses = 0
+	h.lastFailure = time.Now()
 	if h.failures < proxyFailureThreshold {
 		return
 	}
@@ -50,8 +56,8 @@ func (c *Client) markProxyFailure(proxyID string) {
 	if cooldown > proxyCooldownMax {
 		cooldown = proxyCooldownMax
 	}
-	h.cooldownUntil = time.Now().Add(cooldown)
-	if h.cooldownLevel < 8 {
+	h.cooldownUntil = h.lastFailure.Add(cooldown)
+	if h.cooldownLevel < 16 {
 		h.cooldownLevel++
 	}
 	h.failures = 0
@@ -62,7 +68,11 @@ func (c *Client) markProxyFailure(proxyID string) {
 	)
 }
 
-// markProxySuccess clears failure counters and cooldown for proxyID.
+// markProxySuccess records a healthy request for proxyID. A single success
+// clears the active cooldown so recovered proxies can be used, but the
+// cooldown level only decays after multiple consecutive successes. This keeps
+// repeatedly flaky Resin leases from re-entering rotation at full weight every
+// few minutes.
 func (c *Client) markProxySuccess(proxyID string) {
 	proxyID = strings.TrimSpace(proxyID)
 	if c == nil || proxyID == "" {
@@ -74,12 +84,18 @@ func (c *Client) markProxySuccess(proxyID string) {
 	if !ok {
 		return
 	}
-	if h.failures == 0 && h.cooldownLevel == 0 && h.cooldownUntil.IsZero() {
-		return
-	}
 	h.failures = 0
-	h.cooldownLevel = 0
+	h.lastSuccess = time.Now()
 	h.cooldownUntil = time.Time{}
+	if h.cooldownLevel > 0 {
+		h.recoverySuccesses++
+		if h.recoverySuccesses >= proxyRecoverySuccesses {
+			h.cooldownLevel--
+			h.recoverySuccesses = 0
+		}
+	} else {
+		h.recoverySuccesses = 0
+	}
 }
 
 // proxyOnCooldown reports whether proxyID is currently in a cooldown window.
@@ -101,7 +117,7 @@ func (c *Client) proxyOnCooldown(proxyID string) bool {
 // and not equal to skipID. Selection is deterministic per (skipID, time
 // bucket) to spread load across replacements rather than herd onto one.
 // Returns false if no healthy alternative exists.
-func (c *Client) pickHealthyProxy(skipID string) (config.Proxy, bool) {
+func (c *Client) pickHealthyProxy(skipID string, avoid map[string]bool) (config.Proxy, bool) {
 	if c == nil || c.Store == nil {
 		return config.Proxy{}, false
 	}
@@ -111,15 +127,26 @@ func (c *Client) pickHealthyProxy(skipID string) (config.Proxy, bool) {
 		return config.Proxy{}, false
 	}
 	candidates := make([]config.Proxy, 0, len(proxies))
+	bestScore := -1
 	for _, p := range proxies {
 		p = config.NormalizeProxy(p)
 		if p.ID == "" || p.ID == skipID {
 			continue
 		}
+		if avoid != nil && avoid[p.ID] {
+			continue
+		}
 		if c.proxyOnCooldown(p.ID) {
 			continue
 		}
-		candidates = append(candidates, p)
+		score := c.proxyHealthScore(p.ID)
+		if score > bestScore {
+			bestScore = score
+			candidates = candidates[:0]
+		}
+		if score == bestScore {
+			candidates = append(candidates, p)
+		}
 	}
 	if len(candidates) == 0 {
 		return config.Proxy{}, false
@@ -137,4 +164,25 @@ func (c *Client) pickHealthyProxy(skipID string) (config.Proxy, bool) {
 		idx = -idx
 	}
 	return candidates[idx], true
+}
+
+func (c *Client) proxyHealthScore(proxyID string) int {
+	proxyID = strings.TrimSpace(proxyID)
+	if c == nil || proxyID == "" {
+		return 0
+	}
+	c.proxyHealthMu.Lock()
+	defer c.proxyHealthMu.Unlock()
+	h, ok := c.proxyHealthMap[proxyID]
+	if !ok {
+		return 1000
+	}
+	score := 1000 - h.cooldownLevel*50 - h.failures*10
+	if h.recoverySuccesses > 0 {
+		score += h.recoverySuccesses * 5
+	}
+	if score < 0 {
+		return 0
+	}
+	return score
 }

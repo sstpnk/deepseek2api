@@ -30,6 +30,7 @@ func (c *Client) CallCompletion(ctx context.Context, a *auth.RequestAuth, payloa
 		}
 		resp, err := c.streamPost(ctx, clients.stream, clients.fallbackS, dsprotocol.DeepSeekCompletionURL, headers, payload)
 		if err != nil {
+			baseCtx = withAvoidedProxyID(baseCtx, activeProxyIDFromContext(ctx))
 			attempts++
 			if attempts >= maxAttempts {
 				break
@@ -92,7 +93,9 @@ func (c *Client) streamPost(ctx context.Context, doer trans.Doer, fallback trans
 	resp, err := doer.Do(req)
 	if err != nil {
 		if isTransportError(err) {
-			c.markProxyFailure(activeProxyIDFromContext(ctx))
+			proxyID := activeProxyIDFromContext(ctx)
+			c.markProxyFailure(proxyID)
+			ctx = withAvoidedProxyID(ctx, proxyID)
 		}
 		config.Logger.Warn("[deepseek] fingerprint stream request failed, fallback to std transport", "url", url, "error", err)
 		req2, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(b))

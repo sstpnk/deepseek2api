@@ -14,6 +14,7 @@ type Pool struct {
 	queue                  []string
 	inUse                  map[string]int
 	waiters                []chan struct{}
+	cooldowns              map[string]*accountCooldown
 	maxInflightPerAccount  int
 	recommendedConcurrency int
 	maxQueueSize           int
@@ -54,6 +55,7 @@ func NewPool(store *config.Store) *Pool {
 	p := &Pool{
 		store:                 store,
 		inUse:                 map[string]int{},
+		cooldowns:             map[string]*accountCooldown{},
 		maxInflightPerAccount: maxPer,
 		stats:                 sharedRuntimeStats(),
 	}
@@ -101,6 +103,9 @@ func (p *Pool) Reset() {
 	p.drainWaitersLocked()
 	p.queue = ids
 	p.inUse = map[string]int{}
+	if p.cooldowns == nil {
+		p.cooldowns = map[string]*accountCooldown{}
+	}
 	p.recommendedConcurrency = recommended
 	p.maxQueueSize = queueLimit
 	p.globalMaxInflight = globalLimit
@@ -151,7 +156,12 @@ func (p *Pool) StatusWithOptions(opts StatusOptions) map[string]any {
 	availableAccounts := make([]string, 0)
 	availableSlots := 0
 	inUseSlots := 0
+	coolingDown := 0
 	for _, id := range p.queue {
+		if p.accountOnCooldownLocked(id, time.Now()) {
+			coolingDown++
+			continue
+		}
 		if p.inUse[id] >= p.maxInflightPerAccount {
 			continue
 		}
@@ -180,6 +190,7 @@ func (p *Pool) StatusWithOptions(opts StatusOptions) map[string]any {
 		"global_max_inflight":      p.globalMaxInflight,
 		"recommended_concurrency":  p.recommendedConcurrency,
 		"waiting":                  len(p.waiters),
+		"cooling_down":             coolingDown,
 		"max_queue_size":           p.maxQueueSize,
 	}
 	if opts.IncludeAccounts {

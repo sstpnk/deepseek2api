@@ -315,6 +315,7 @@ VERCEL_TEAM_ID=team_xxxxxxxxxxxx   # 个人账号可留空
 - **每账号并发上限** (`account_max_inflight`)：环境变量已支持，但也可通过 Admin API 热更新。
 - **全局并发上限** (`global_max_inflight`)：同上。
 - **PoW 计算并发上限** (`pow_max_concurrency`)：限制本机 CPU 密集型 PoW 求解数量；高并发部署建议从 `1`-`4` 之间试起。
+- **代理/账号健康保护**：传输层失败会让对应 proxy 进入指数增长冷却，重试会避开本次请求内刚失败的 proxy；明确账号认证失败且刷新无效时，该账号会进入指数增长冷却并暂时从账号池跳过。管理台账号池状态会显示 `cooling_down` 数量。
 
 详细说明参见 [API.md](../API.md#admin-接口) 中 `/admin/settings` 部分。
 

@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"time"
 
 	"ds2api/internal/config"
 )
@@ -47,8 +48,9 @@ func (p *Pool) AcquireWait(ctx context.Context, target string, exclude map[strin
 }
 
 func (p *Pool) acquireLocked(target string, exclude map[string]bool) (config.Account, bool) {
+	now := time.Now()
 	if target != "" {
-		if exclude[target] || !p.canAcquireIDLocked(target) {
+		if exclude[target] || p.accountOnCooldownLocked(target, now) || !p.canAcquireIDLocked(target) {
 			return config.Account{}, false
 		}
 		acc, ok := p.store.FindAccount(target)
@@ -64,9 +66,10 @@ func (p *Pool) acquireLocked(target string, exclude map[string]bool) (config.Acc
 }
 
 func (p *Pool) tryAcquire(exclude map[string]bool) (config.Account, bool) {
+	now := time.Now()
 	for i := 0; i < len(p.queue); i++ {
 		id := p.queue[i]
-		if exclude[id] || !p.canAcquireIDLocked(id) {
+		if exclude[id] || p.accountOnCooldownLocked(id, now) || !p.canAcquireIDLocked(id) {
 			continue
 		}
 		acc, ok := p.store.FindAccount(id)

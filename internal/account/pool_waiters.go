@@ -1,18 +1,33 @@
 package account
 
+import "time"
+
 func (p *Pool) canQueueLocked(target string, exclude map[string]bool) bool {
 	if target != "" {
-		if exclude[target] {
+		if exclude[target] || p.accountOnCooldownLocked(target, time.Now()) {
 			return false
 		}
 		if _, ok := p.store.FindAccount(target); !ok {
 			return false
 		}
+	} else if !p.hasPotentialAcquireLocked(exclude) {
+		return false
 	}
 	if p.maxQueueSize <= 0 {
 		return false
 	}
 	return len(p.waiters) < p.maxQueueSize
+}
+
+func (p *Pool) hasPotentialAcquireLocked(exclude map[string]bool) bool {
+	now := time.Now()
+	for _, id := range p.queue {
+		if exclude[id] || p.accountOnCooldownLocked(id, now) {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 func (p *Pool) notifyWaiterLocked() {

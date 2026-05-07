@@ -26,6 +26,7 @@ type requestClients struct {
 }
 
 type proxyIDCtxKey struct{}
+type avoidedProxyIDsCtxKey struct{}
 
 // withActiveProxyID attaches the proxyID currently in use to ctx so that
 // downstream transport-error sites can mark the right proxy unhealthy
@@ -43,6 +44,28 @@ func activeProxyIDFromContext(ctx context.Context) string {
 	}
 	v, _ := ctx.Value(proxyIDCtxKey{}).(string)
 	return v
+}
+
+func withAvoidedProxyID(ctx context.Context, proxyID string) context.Context {
+	if ctx == nil || strings.TrimSpace(proxyID) == "" {
+		return ctx
+	}
+	avoid := map[string]bool{}
+	if existing, ok := ctx.Value(avoidedProxyIDsCtxKey{}).(map[string]bool); ok {
+		for id, v := range existing {
+			avoid[id] = v
+		}
+	}
+	avoid[strings.TrimSpace(proxyID)] = true
+	return context.WithValue(ctx, avoidedProxyIDsCtxKey{}, avoid)
+}
+
+func avoidedProxyIDsFromContext(ctx context.Context) map[string]bool {
+	if ctx == nil {
+		return nil
+	}
+	avoid, _ := ctx.Value(avoidedProxyIDsCtxKey{}).(map[string]bool)
+	return avoid
 }
 
 type hostLookupFunc func(ctx context.Context, network, host string) ([]string, error)
@@ -135,28 +158,36 @@ func (c *Client) resolveProxyForAccount(acc config.Account) (config.Proxy, bool)
 
 func (c *Client) requestClientsFromContext(ctx context.Context) requestClients {
 	if a, ok := auth.FromContext(ctx); ok {
-		return c.requestClientsForAccount(a.Account)
+		return c.requestClientsForAccountWithAvoid(a.Account, avoidedProxyIDsFromContext(ctx))
 	}
 	return c.defaultRequestClients()
 }
 
 func (c *Client) requestClientsForAuth(ctx context.Context, a *auth.RequestAuth) requestClients {
 	if a != nil {
-		return c.requestClientsForAccount(a.Account)
+		return c.requestClientsForAccountWithAvoid(a.Account, avoidedProxyIDsFromContext(ctx))
 	}
 	return c.requestClientsFromContext(ctx)
 }
 
 func (c *Client) requestClientsForAccount(acc config.Account) requestClients {
+	return c.requestClientsForAccountWithAvoid(acc, nil)
+}
+
+func (c *Client) requestClientsForAccountWithAvoid(acc config.Account, avoid map[string]bool) requestClients {
 	proxyCfg, ok := c.resolveProxyForAccount(acc)
 	if !ok {
 		return c.defaultRequestClients()
 	}
 
 	originalID := proxyCfg.ID
-	if c.proxyOnCooldown(originalID) {
-		if alt, found := c.pickHealthyProxy(originalID); found {
-			config.Logger.Info("[proxy_sticky] switched", "from", originalID, "to", alt.ID, "reason", "cooldown")
+	if c.proxyOnCooldown(originalID) || (avoid != nil && avoid[originalID]) {
+		if alt, found := c.pickHealthyProxy(originalID, avoid); found {
+			reason := "cooldown"
+			if avoid != nil && avoid[originalID] {
+				reason = "request_retry"
+			}
+			config.Logger.Info("[proxy_sticky] switched", "from", originalID, "to", alt.ID, "reason", reason)
 			proxyCfg = alt
 		}
 	}

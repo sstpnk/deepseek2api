@@ -169,13 +169,23 @@ func (r *Resolver) RefreshToken(ctx context.Context, a *RequestAuth) bool {
 	if !a.UseConfigToken || a.AccountID == "" {
 		return false
 	}
-	_ = r.Store.UpdateAccountToken(a.AccountID, "")
-	a.Account.Token = ""
-	if err := r.loginAndPersist(ctx, a); err != nil {
+	if err := r.RefreshTokenWithError(ctx, a); err != nil {
 		config.Logger.Error("[refresh_token] failed", "account", a.AccountID, "error", err)
 		return false
 	}
 	return true
+}
+
+func (r *Resolver) RefreshTokenWithError(ctx context.Context, a *RequestAuth) error {
+	if !a.UseConfigToken || a.AccountID == "" {
+		return errors.New("managed account required")
+	}
+	_ = r.Store.UpdateAccountToken(a.AccountID, "")
+	a.Account.Token = ""
+	if err := r.loginAndPersist(ctx, a); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *Resolver) MarkTokenInvalid(a *RequestAuth) {
@@ -186,6 +196,16 @@ func (r *Resolver) MarkTokenInvalid(a *RequestAuth) {
 	a.DeepSeekToken = ""
 	r.clearTokenRefreshMark(a.AccountID)
 	_ = r.Store.UpdateAccountToken(a.AccountID, "")
+}
+
+func (r *Resolver) CooldownAccount(a *RequestAuth, reason string) {
+	if a == nil || !a.UseConfigToken || strings.TrimSpace(a.AccountID) == "" {
+		return
+	}
+	if r == nil || r.Pool == nil {
+		return
+	}
+	r.Pool.Cooldown(a.AccountID, reason)
 }
 
 func (r *Resolver) SwitchAccount(ctx context.Context, a *RequestAuth) bool {

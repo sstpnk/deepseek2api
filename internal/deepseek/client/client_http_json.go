@@ -38,7 +38,9 @@ func (c *Client) postJSONWithStatus(ctx context.Context, doer trans.Doer, fallba
 	resp, err := doer.Do(req)
 	if err != nil {
 		if isTransportError(err) {
-			c.markProxyFailure(activeProxyIDFromContext(ctx))
+			proxyID := activeProxyIDFromContext(ctx)
+			c.markProxyFailure(proxyID)
+			ctx = withAvoidedProxyID(ctx, proxyID)
 		}
 		config.Logger.Warn("[deepseek] fingerprint request failed, fallback to std transport", "url", url, "error", err)
 		req2, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(b))
@@ -80,7 +82,9 @@ func (c *Client) getJSONWithStatus(ctx context.Context, doer trans.Doer, fallbac
 	resp, err := doer.Do(req)
 	if err != nil {
 		if isTransportError(err) {
-			c.markProxyFailure(activeProxyIDFromContext(ctx))
+			proxyID := activeProxyIDFromContext(ctx)
+			c.markProxyFailure(proxyID)
+			ctx = withAvoidedProxyID(ctx, proxyID)
 		}
 		config.Logger.Warn("[deepseek] fingerprint GET request failed, fallback to std transport", "url", url, "error", err)
 		req2, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)

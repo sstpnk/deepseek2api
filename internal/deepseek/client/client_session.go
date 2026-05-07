@@ -59,6 +59,7 @@ func (c *Client) GetSessionCount(ctx context.Context, a *auth.RequestAuth, maxAt
 
 		resp, status, err := c.getJSONWithStatus(ctx, clients.regular, clients.fallback, reqURL, headers)
 		if err != nil {
+			baseCtx = withAvoidedProxyID(baseCtx, activeProxyIDFromContext(ctx))
 			config.Logger.Warn("[get_session_count] request error", "error", err, "account", a.AccountID)
 			attempts++
 			if attempts < maxAttempts {
@@ -97,10 +98,15 @@ func (c *Client) GetSessionCount(ctx context.Context, a *auth.RequestAuth, maxAt
 
 		if a.UseConfigToken {
 			if isTokenInvalid(status, code, bizCode, msg, bizMsg) && !refreshed {
-				if c.Auth.RefreshToken(ctx, a) {
+				if refreshErr := c.Auth.RefreshTokenWithError(ctx, a); refreshErr == nil {
 					refreshed = true
 					continue
+				} else {
+					config.Logger.Error("[refresh_token] failed", "account", a.AccountID, "error", refreshErr)
+					c.cooldownRefreshFailureAccount(a, refreshErr, "get_session_count_refresh_failed")
 				}
+			} else if refreshed && isTokenInvalid(status, code, bizCode, msg, bizMsg) {
+				c.cooldownAuthFailureAccount(a, "get_session_count_token_invalid_after_refresh")
 			}
 			if c.Auth.SwitchAccount(ctx, a) {
 				refreshed = false

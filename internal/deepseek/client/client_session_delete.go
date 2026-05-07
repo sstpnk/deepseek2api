@@ -51,6 +51,7 @@ func (c *Client) DeleteSession(ctx context.Context, a *auth.RequestAuth, session
 
 		resp, status, err := c.postJSONWithStatus(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekDeleteSessionURL, headers, payload)
 		if err != nil {
+			baseCtx = withAvoidedProxyID(baseCtx, activeProxyIDFromContext(ctx))
 			config.Logger.Warn("[delete_session] request error", "error", err, "session_id", sessionID)
 			attempts++
 			if attempts < maxAttempts {
@@ -72,10 +73,15 @@ func (c *Client) DeleteSession(ctx context.Context, a *auth.RequestAuth, session
 
 		if a.UseConfigToken {
 			if isTokenInvalid(status, code, bizCode, msg, bizMsg) && !refreshed {
-				if c.Auth.RefreshToken(ctx, a) {
+				if refreshErr := c.Auth.RefreshTokenWithError(ctx, a); refreshErr == nil {
 					refreshed = true
 					continue
+				} else {
+					config.Logger.Error("[refresh_token] failed", "account", a.AccountID, "error", refreshErr)
+					c.cooldownRefreshFailureAccount(a, refreshErr, "delete_session_refresh_failed")
 				}
+			} else if refreshed && isTokenInvalid(status, code, bizCode, msg, bizMsg) {
+				c.cooldownAuthFailureAccount(a, "delete_session_token_invalid_after_refresh")
 			}
 			if c.Auth.SwitchAccount(ctx, a) {
 				refreshed = false

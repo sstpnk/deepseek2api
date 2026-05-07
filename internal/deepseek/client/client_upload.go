@@ -75,19 +75,20 @@ func (c *Client) UploadFile(ctx context.Context, a *auth.RequestAuth, req Upload
 	powHeader := ""
 	lastFailureKind := FailureUnknown
 	lastFailureMessage := ""
+	baseCtx := ctx
 	for attempts < maxAttempts {
-		if err := ctx.Err(); err != nil {
+		if err := baseCtx.Err(); err != nil {
 			return nil, err
 		}
-		clients := c.requestClientsForAuth(ctx, a)
-		uploadCtx := withActiveProxyID(ctx, clients.proxyID)
+		clients := c.requestClientsForAuth(baseCtx, a)
+		uploadCtx := withActiveProxyID(baseCtx, clients.proxyID)
 		if strings.TrimSpace(powHeader) == "" {
-			powHeader, err = c.GetPowForTarget(ctx, a, dsprotocol.DeepSeekUploadTargetPath, maxAttempts)
+			powHeader, err = c.GetPowForTarget(baseCtx, a, dsprotocol.DeepSeekUploadTargetPath, maxAttempts)
 			if err != nil {
 				return nil, err
 			}
-			clients = c.requestClientsForAuth(ctx, a)
-			uploadCtx = withActiveProxyID(ctx, clients.proxyID)
+			clients = c.requestClientsForAuth(baseCtx, a)
+			uploadCtx = withActiveProxyID(baseCtx, clients.proxyID)
 		}
 		headers := c.authHeaders(a.DeepSeekToken)
 		headers["Content-Type"] = contentTypeHeader
@@ -99,13 +100,14 @@ func (c *Client) UploadFile(ctx context.Context, a *auth.RequestAuth, req Upload
 		headers["x-thinking-enabled"] = "1"
 		resp, err := c.doUpload(uploadCtx, clients.regular, clients.fallback, dsprotocol.DeepSeekUploadFileURL, headers, body)
 		if err != nil {
+			baseCtx = withAvoidedProxyID(baseCtx, activeProxyIDFromContext(uploadCtx))
 			config.Logger.Warn("[upload_file] request error", "error", err, "account", a.AccountID, "filename", filename)
 			powHeader = ""
 			lastFailureKind = FailureUnknown
 			lastFailureMessage = err.Error()
 			attempts++
 			if attempts < maxAttempts {
-				if waitErr := sleepWithCtx(ctx, retryDelay(attempts-1, true)); waitErr != nil {
+				if waitErr := sleepWithCtx(baseCtx, retryDelay(attempts-1, true)); waitErr != nil {
 					return nil, waitErr
 				}
 			}
@@ -122,7 +124,7 @@ func (c *Client) UploadFile(ctx context.Context, a *auth.RequestAuth, req Upload
 			powHeader = ""
 			attempts++
 			if attempts < maxAttempts {
-				if waitErr := sleepWithCtx(ctx, retryDelay(attempts-1, true)); waitErr != nil {
+				if waitErr := sleepWithCtx(baseCtx, retryDelay(attempts-1, true)); waitErr != nil {
 					return nil, waitErr
 				}
 			}
@@ -154,7 +156,7 @@ func (c *Client) UploadFile(ctx context.Context, a *auth.RequestAuth, req Upload
 			if result.ID == "" {
 				return nil, errors.New("upload file succeeded without file id")
 			}
-			if err := c.waitForUploadedFile(ctx, a, result); err != nil {
+			if err := c.waitForUploadedFile(baseCtx, a, result); err != nil {
 				return nil, err
 			}
 			return result, nil
@@ -172,13 +174,18 @@ func (c *Client) UploadFile(ctx context.Context, a *auth.RequestAuth, req Upload
 		}
 		if a.UseConfigToken {
 			if !refreshed && shouldAttemptRefresh(resp.StatusCode, code, bizCode, msg, bizMsg) {
-				if c.Auth.RefreshToken(ctx, a) {
+				if refreshErr := c.Auth.RefreshTokenWithError(baseCtx, a); refreshErr == nil {
 					refreshed = true
 					attempts++
 					continue
+				} else {
+					config.Logger.Error("[refresh_token] failed", "account", a.AccountID, "error", refreshErr)
+					c.cooldownRefreshFailureAccount(a, refreshErr, "upload_file_refresh_failed")
 				}
+			} else if refreshed && (isTokenInvalid(resp.StatusCode, code, bizCode, msg, bizMsg) || isAuthIndicativeBizFailure(msg, bizMsg)) {
+				c.cooldownAuthFailureAccount(a, "upload_file_auth_failed_after_refresh")
 			}
-			if c.Auth.SwitchAccount(ctx, a) {
+			if c.Auth.SwitchAccount(baseCtx, a) {
 				refreshed = false
 				attempts++
 				continue
@@ -186,7 +193,7 @@ func (c *Client) UploadFile(ctx context.Context, a *auth.RequestAuth, req Upload
 		}
 		attempts++
 		if attempts < maxAttempts {
-			if waitErr := sleepWithCtx(ctx, retryDelay(attempts-1, resp.StatusCode >= 500)); waitErr != nil {
+			if waitErr := sleepWithCtx(baseCtx, retryDelay(attempts-1, resp.StatusCode >= 500)); waitErr != nil {
 				return nil, waitErr
 			}
 		}
@@ -242,7 +249,9 @@ func (c *Client) doUpload(ctx context.Context, doer trans.Doer, fallback trans.D
 		return resp, nil
 	}
 	if isTransportError(err) {
-		c.markProxyFailure(activeProxyIDFromContext(ctx))
+		proxyID := activeProxyIDFromContext(ctx)
+		c.markProxyFailure(proxyID)
+		ctx = withAvoidedProxyID(ctx, proxyID)
 	}
 	config.Logger.Warn("[deepseek] fingerprint upload request failed, fallback to std transport", "url", url, "error", err)
 	req2, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))

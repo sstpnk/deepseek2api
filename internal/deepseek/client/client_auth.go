@@ -67,6 +67,7 @@ func (c *Client) CreateSession(ctx context.Context, a *auth.RequestAuth, maxAtte
 		headers := c.authHeaders(a.DeepSeekToken)
 		resp, status, err := c.postJSONWithStatus(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekCreateSessionURL, headers, map[string]any{"agent": "chat"})
 		if err != nil {
+			baseCtx = withAvoidedProxyID(baseCtx, activeProxyIDFromContext(ctx))
 			config.Logger.Warn("[create_session] request error", "error", err, "account", a.AccountID)
 			attempts++
 			if attempts < maxAttempts {
@@ -86,10 +87,15 @@ func (c *Client) CreateSession(ctx context.Context, a *auth.RequestAuth, maxAtte
 		config.Logger.Warn("[create_session] failed", "status", status, "code", code, "biz_code", bizCode, "msg", msg, "biz_msg", bizMsg, "use_config_token", a.UseConfigToken, "account", a.AccountID)
 		if a.UseConfigToken {
 			if !refreshed && shouldAttemptRefresh(status, code, bizCode, msg, bizMsg) {
-				if c.Auth.RefreshToken(ctx, a) {
+				if refreshErr := c.Auth.RefreshTokenWithError(ctx, a); refreshErr == nil {
 					refreshed = true
 					continue
+				} else {
+					config.Logger.Error("[refresh_token] failed", "account", a.AccountID, "error", refreshErr)
+					c.cooldownRefreshFailureAccount(a, refreshErr, "create_session_refresh_failed")
 				}
+			} else if refreshed && isTokenInvalid(status, code, bizCode, msg, bizMsg) {
+				c.cooldownAuthFailureAccount(a, "create_session_token_invalid_after_refresh")
 			}
 			if c.Auth.SwitchAccount(ctx, a) {
 				refreshed = false
@@ -141,6 +147,7 @@ func (c *Client) GetPowForTarget(ctx context.Context, a *auth.RequestAuth, targe
 		headers := c.authHeaders(a.DeepSeekToken)
 		resp, status, err := c.postJSONWithStatus(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekCreatePowURL, headers, map[string]any{"target_path": targetPath})
 		if err != nil {
+			baseCtx = withAvoidedProxyID(baseCtx, activeProxyIDFromContext(ctx))
 			config.Logger.Warn("[get_pow] request error", "error", err, "account", a.AccountID, "target_path", targetPath)
 			lastFailureKind = FailureUnknown
 			lastFailureMessage = err.Error()
@@ -181,10 +188,15 @@ func (c *Client) GetPowForTarget(ctx context.Context, a *auth.RequestAuth, targe
 		}
 		if a.UseConfigToken {
 			if !refreshed && shouldAttemptRefresh(status, code, bizCode, msg, bizMsg) {
-				if c.Auth.RefreshToken(ctx, a) {
+				if refreshErr := c.Auth.RefreshTokenWithError(ctx, a); refreshErr == nil {
 					refreshed = true
 					continue
+				} else {
+					config.Logger.Error("[refresh_token] failed", "account", a.AccountID, "error", refreshErr)
+					c.cooldownRefreshFailureAccount(a, refreshErr, "get_pow_refresh_failed")
 				}
+			} else if refreshed && (isTokenInvalid(status, code, bizCode, msg, bizMsg) || isAuthIndicativeBizFailure(msg, bizMsg)) {
+				c.cooldownAuthFailureAccount(a, "get_pow_auth_failed_after_refresh")
 			}
 			if c.Auth.SwitchAccount(ctx, a) {
 				refreshed = false
@@ -208,6 +220,20 @@ func (c *Client) GetPowForTarget(ctx context.Context, a *auth.RequestAuth, targe
 		return "", &RequestFailure{Op: "get pow", Kind: lastFailureKind, Message: lastFailureMessage}
 	}
 	return "", errors.New("get pow failed")
+}
+
+func (c *Client) cooldownAuthFailureAccount(a *auth.RequestAuth, reason string) {
+	if c == nil || c.Auth == nil || a == nil {
+		return
+	}
+	c.Auth.CooldownAccount(a, reason)
+}
+
+func (c *Client) cooldownRefreshFailureAccount(a *auth.RequestAuth, err error, reason string) {
+	if isTransportError(err) {
+		return
+	}
+	c.cooldownAuthFailureAccount(a, reason)
 }
 
 func (c *Client) authHeaders(token string) map[string]string {

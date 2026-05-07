@@ -314,6 +314,7 @@ Some runtime behavior can also be changed after deployment through `PUT /admin/s
 - **Per-account inflight limit** (`account_max_inflight`): also available as an environment variable.
 - **Global inflight limit** (`global_max_inflight`): also available as an environment variable.
 - **PoW concurrency limit** (`pow_max_concurrency`): limits CPU-bound local PoW solvers; start with `1`-`4` for high-concurrency deployments.
+- **Proxy/account health protection**: transport failures put the active proxy into exponentially increasing cooldown, and retries avoid proxies that already failed within the same request. Clear account-auth failures that cannot be fixed by refresh put the account into exponentially increasing cooldown and temporarily skip it in the account pool. Admin account-pool status includes `cooling_down`.
 
 ### 3.4 Vercel Architecture
 
