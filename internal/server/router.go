@@ -59,7 +59,13 @@ func NewApp() (*App, error) {
 	if err := dsClient.PreloadPow(context.Background()); err != nil {
 		config.Logger.Warn("[PoW] init failed", "error", err)
 	} else {
-		config.Logger.Info("[PoW] solver ready", "backend", pow.BackendName())
+		config.Logger.Info("[PoW] solver ready",
+			"backend", pow.BackendName(),
+			"requested", pow.BackendRequested(),
+			"validated", pow.BackendValidated(),
+			"internal_parallel", pow.PowInternalParallel(),
+			"max_concurrency", pow.PowInternalParallel(),
+		)
 	}
 	chatHistoryStore := chathistory.New(config.ChatHistoryPath())
 	if err := chatHistoryStore.Err(); err != nil {

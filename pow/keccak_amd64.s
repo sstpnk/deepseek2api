@@ -2,6 +2,23 @@
 
 #include "textflag.h"
 
+// keccakF23AVX512 — AVX-512 Keccak-f[1600] rounds 1..23 (DeepSeekHashV1).
+//
+// Implementation notes:
+//   - Theta (θ): scalar XOR chain + ROLQ $1, results in GP registers.
+//   - Rho (ρ) + Pi (π): 25 scalar lane rotations with hardcoded offsets,
+//     stored to b[] scratch at 200(SP).
+//   - Chi (χ): VPTERNLOGQ $0xA6 on ZMM registers → 1 instruction per lane
+//     instead of 3 scalar (ANDN + XOR). Data loaded via XMM (SSE2 MOVQ)
+//     into shared XMM/ZMM physical registers.
+//   - Iota (ι): XOR round constant from precomputed table.
+//   - DeepSeekHashV1 skips standard Keccak round 0 — only rounds 1..23 run.
+//   - 23-round loop with INCQ/CMPQ/JL; loop overhead <0.1% of per-round work.
+//
+// Registers (callee-saved saved/restored):
+//   R12(d4), R13(d3), BP(RC table base)
+// Stack frame: 424 bytes (200 state + 200 b[] + 24 saved regs)
+
 // RC constants for rounds 1..23.
 DATA rc<>+0(SB)/8, $0x0000000000008082
 DATA rc<>+8(SB)/8, $0x800000000000808A
@@ -34,8 +51,14 @@ GLOBL rc<>(SB), RODATA, $184
 // Chi step uses VPTERNLOGQ (1 instruction vs 3 scalar).
 // Theta and Rho+Pi remain scalar; state on stack.
 //
-// Stack: 0(SP)..192(SP)=state, 200(SP)..392(SP)=b[] scratch
-TEXT ·keccakF23AVX512(SB), NOSPLIT, $400-8
+// Stack: 0(SP)..192(SP)=state, 200(SP)..392(SP)=b[] scratch,
+// 400(SP)..416(SP)=saved callee-saved regs (R12,R13,BP)
+TEXT ·keccakF23AVX512(SB), $424-8
+    // Save callee-saved registers (Go amd64 ABI: BP, R12-R15)
+    MOVQ R12, 400(SP)
+    MOVQ R13, 408(SP)
+    MOVQ BP, 416(SP)
+
     MOVQ s+0(FP), DI
 
     // Copy state to stack.
@@ -257,4 +280,9 @@ round:
     MOVQ 176(SP), AX; MOVQ AX, 176(DI)
     MOVQ 184(SP), AX; MOVQ AX, 184(DI)
     MOVQ 192(SP), AX; MOVQ AX, 192(DI)
+
+    // Restore callee-saved registers
+    MOVQ 400(SP), R12
+    MOVQ 408(SP), R13
+    MOVQ 416(SP), BP
     RET

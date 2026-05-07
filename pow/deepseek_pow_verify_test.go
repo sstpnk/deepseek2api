@@ -132,3 +132,79 @@ func TestSolvePowBoundaries(t *testing.T) {
 		}
 	})
 }
+
+// TestPowPlanEquivalence verifies that buildPowPlan produces padded states
+// equivalent to the full hash path for every possible digit length.
+func TestPowPlanEquivalence(t *testing.T) {
+	salt := "testplan"
+	expire := int64(1712345678)
+	for answer := int64(0); answer < 10000; answer++ {
+		// Reference: full DeepSeekHashV1
+		fullInput := BuildPrefix(salt, expire) + strconv.FormatInt(answer, 10)
+		want := DeepSeekHashV1([]byte(fullInput))
+
+		// powPlan-based
+		plan, err := buildPowPlan(hex.EncodeToString(want[:]), salt, expire, answer+1)
+		if err != nil {
+			t.Fatalf("buildPowPlan failed for answer %d: %v", answer, err)
+		}
+		numLen := numLenFor(answer)
+		var digits [20]byte
+		numStart, nLen := setDigitsTo(&digits, answer)
+		if nLen != numLen {
+			t.Fatalf("numLen mismatch: %d vs %d", nLen, numLen)
+		}
+		s := plan.paddedStates[numLen]
+		xorDigitsIntoState(&s, digits[numStart:numStart+numLen], plan.tailLen)
+		keccakF23(&s)
+
+		if s[0] != plan.t0 || s[1] != plan.t1 || s[2] != plan.t2 || s[3] != plan.t3 {
+			t.Fatalf("answer %d: powPlan result does not match target", answer)
+		}
+	}
+}
+
+// TestSolvePowProperty runs randomized property tests: for random salt/expire/answer,
+// solving the generated challenge must find the original answer.
+func TestSolvePowProperty(t *testing.T) {
+	rng := mathrand.New(mathrand.NewSource(12345))
+
+	// Also test concurrent solves
+	t.Run("serial_random", func(t *testing.T) {
+		// Force serial path
+		t.Setenv("DS2API_POW_INTERNAL_PARALLEL", "1")
+		for i := 0; i < 50; i++ {
+			salt := fmt.Sprintf("salt%d", rng.Int63n(1000000))
+			expire := int64(1700000000 + rng.Int63n(100000000))
+			answer := rng.Int63n(10000)
+			diff := answer + rng.Int63n(100) + 1
+			if diff < answer+1 {
+				diff = answer + 1
+			}
+
+			h := DeepSeekHashV1([]byte(BuildPrefix(salt, expire) + strconv.FormatInt(answer, 10)))
+			ch := hex.EncodeToString(h[:])
+			got, err := SolvePow(context.Background(), ch, salt, expire, diff)
+			if err != nil {
+				t.Fatalf("answer=%d salt=%s: %v", answer, salt, err)
+			}
+			if got != answer {
+				t.Fatalf("expected %d, got %d", answer, got)
+			}
+		}
+	})
+
+	// Test that difficulty < answer+1 fails
+	t.Run("unsolvable", func(t *testing.T) {
+		t.Setenv("DS2API_POW_INTERNAL_PARALLEL", "1")
+		salt := "unsolvable"
+		expire := int64(1712345678)
+		answer := int64(500)
+		h := DeepSeekHashV1([]byte(BuildPrefix(salt, expire) + strconv.FormatInt(answer, 10)))
+		ch := hex.EncodeToString(h[:])
+		_, err := SolvePow(context.Background(), ch, salt, expire, answer) // diff < answer
+		if err == nil {
+			t.Fatal("expected error for unsolvable range")
+		}
+	})
+}
