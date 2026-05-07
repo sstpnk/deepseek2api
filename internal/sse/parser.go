@@ -14,17 +14,22 @@ type ContentPart struct {
 	Type string
 }
 
+var (
+	dataPrefix   = []byte("data:")
+	doneSentinel = []byte("[DONE]")
+)
+
 func ParseDeepSeekSSELine(raw []byte) (map[string]any, bool, bool) {
-	line := strings.TrimSpace(string(raw))
-	if line == "" || !strings.HasPrefix(line, "data:") {
+	line := bytes.TrimSpace(raw)
+	if len(line) == 0 || !bytes.HasPrefix(line, dataPrefix) {
 		return nil, false, false
 	}
-	dataStr := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-	if dataStr == "[DONE]" {
+	dataBytes := bytes.TrimSpace(bytes.TrimPrefix(line, dataPrefix))
+	if bytes.Equal(dataBytes, doneSentinel) {
 		return nil, true, true
 	}
 	chunk := map[string]any{}
-	if err := json.Unmarshal([]byte(dataStr), &chunk); err != nil {
+	if err := json.Unmarshal(dataBytes, &chunk); err != nil {
 		return nil, false, false
 	}
 	return chunk, false, true
