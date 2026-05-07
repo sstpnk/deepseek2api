@@ -2,7 +2,12 @@
 
 package pow
 
-// keccakF23 on non-amd64 or purego builds uses the pure Go implementation.
+func init() {
+	if backendName == "" {
+		backendName = "generic"
+	}
+}
+
 func keccakF23(s *[25]uint64) {
 	keccakF23Generic(s)
 }
