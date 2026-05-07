@@ -2,10 +2,9 @@
 
 package pow
 
-// keccakF23 on amd64 uses the pure Go implementation.
-// Hand-written scalar assembly doesn't beat Go's register allocator
-// for single-instance keccak. The real wins are SIMD paths:
-// AVX-512 (VPROLQ + VPTERNLOG) and batch-lane processing.
+// keccakF23 on amd64 uses pure Go.
+// Go compiler's register allocator beats hand-written scalar assembly for
+// single-instance keccak. AVX-512 path pending Go assembler EVEX support.
 func keccakF23(s *[25]uint64) {
 	keccakF23Generic(s)
 }

@@ -2,6 +2,5 @@
 
 package pow
 
-// keccakF23AVX2 is implemented in keccak_amd64.s.
-// It performs 23 rounds of Keccak-f[1600] (DeepSeekHashV1 variant: skip round 0).
-func keccakF23AVX2(s *[25]uint64)
+// keccak_amd64.s is a placeholder for future SIMD implementations.
+// Currently amd64 uses pure Go via dispatch_amd64.go → keccakF23Generic.
