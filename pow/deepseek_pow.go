@@ -103,7 +103,7 @@ func solvePowSerial(ctx context.Context, challengeHex, salt string, expireAt, di
 	// Precompute padded states: one per possible digit length (1..maxNumLen).
 	// Each state has tail + 0x06 at (tailLen+nl) + 0x80 at rate-1 already XORed in.
 	// keccakF23 is NOT run yet — digits are XORed in the hot loop before the permutation.
-	var paddedStates [7][25]uint64
+	paddedStates := make([][25]uint64, maxNumLen+1) // index by numLen (1..maxNumLen)
 	for nl := 1; nl <= maxNumLen; nl++ {
 		s := baseState
 		var buf [rate]byte
@@ -258,7 +258,7 @@ func searchRange(ctx context.Context, challengeHex, salt string, expireAt int64,
 		return 0, false
 	}
 
-	var paddedStates [7][25]uint64
+	paddedStates := make([][25]uint64, maxNumLen+1) // index by numLen (1..maxNumLen)
 	for nl := 1; nl <= maxNumLen; nl++ {
 		s := baseState
 		var buf [rate]byte
@@ -323,7 +323,15 @@ func numLenFor(n int64) int {
 	if n < 100000 {
 		return 5
 	}
-	return 6 // difficulty capped at 999999 for practical purposes
+	if n < 1000000 {
+		return 6
+	}
+	if n < 10000000 {
+		return 7
+	}
+	// Beyond 7 digits: use strconv for correctness, though difficulty
+	// this high would likely time out before reaching here.
+	return len(strconv.FormatInt(n, 10))
 }
 
 // xorDigitsIntoState XORs the decimal digit bytes into the keccak state at the
