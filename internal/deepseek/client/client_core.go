@@ -33,8 +33,9 @@ type Client struct {
 	proxyHealthMu  sync.Mutex
 	proxyHealthMap map[string]*proxyHealth
 
-	accountHealthMu  sync.Mutex
-	accountHealthMap map[string]*accountEmptyOutputHealth
+	accountHealthMu          sync.Mutex
+	accountHealthMap         map[string]*accountEmptyOutputHealth
+	accountEmptyOutputGlobal accountEmptyOutputGlobalHealth
 }
 
 func NewClient(store *config.Store, resolver *auth.Resolver) *Client {

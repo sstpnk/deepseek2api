@@ -11,9 +11,11 @@ import (
 )
 
 const (
-	accountEmptyOutputThreshold         = 2
-	accountEmptyOutputFailureWindow     = 2 * time.Hour
+	accountEmptyOutputThreshold         = 3
+	accountEmptyOutputFailureWindow     = 20 * time.Minute
 	accountEmptyOutputRecoverySuccesses = 2
+	accountEmptyOutputGlobalWindow      = 10 * time.Minute
+	accountEmptyOutputGlobalMaxCooldown = 30
 	completionProxyHeader               = "X-Ds2api-Proxy-Id"
 )
 
@@ -21,6 +23,11 @@ type accountEmptyOutputHealth struct {
 	failures          int
 	recoverySuccesses int
 	lastFailure       time.Time
+}
+
+type accountEmptyOutputGlobalHealth struct {
+	cooldowns   int
+	windowStart time.Time
 }
 
 func (c *Client) RecordAccountEmptyOutput(a *auth.RequestAuth, reason string) {
@@ -48,8 +55,11 @@ func (c *Client) RecordAccountEmptyOutput(a *auth.RequestAuth, reason string) {
 	h.lastFailure = now
 	failures := h.failures
 	shouldCooldown := failures >= accountEmptyOutputThreshold
+	globalCooldowns := 0
+	globalBudgetExceeded := false
 	if shouldCooldown {
 		h.failures = 0
+		globalCooldowns, globalBudgetExceeded = c.recordEmptyOutputCooldownLocked(now)
 	}
 	c.accountHealthMu.Unlock()
 
@@ -63,10 +73,23 @@ func (c *Client) RecordAccountEmptyOutput(a *auth.RequestAuth, reason string) {
 		return
 	}
 
+	if globalBudgetExceeded {
+		config.Logger.Warn("[account_health] empty output cooldown suppressed",
+			"account", accountID,
+			"failures", failures,
+			"threshold", accountEmptyOutputThreshold,
+			"global_cooldowns", globalCooldowns,
+			"global_window_seconds", int(accountEmptyOutputGlobalWindow/time.Second),
+			"reason", reason,
+		)
+		return
+	}
+
 	config.Logger.Warn("[account_health] empty output threshold reached",
 		"account", accountID,
 		"failures", failures,
 		"threshold", accountEmptyOutputThreshold,
+		"global_cooldowns", globalCooldowns,
 		"reason", reason,
 	)
 	if c.Auth != nil {
@@ -146,4 +169,13 @@ func managedAccountID(a *auth.RequestAuth) string {
 		return ""
 	}
 	return strings.TrimSpace(a.AccountID)
+}
+
+func (c *Client) recordEmptyOutputCooldownLocked(now time.Time) (int, bool) {
+	if c.accountEmptyOutputGlobal.windowStart.IsZero() || now.Sub(c.accountEmptyOutputGlobal.windowStart) > accountEmptyOutputGlobalWindow {
+		c.accountEmptyOutputGlobal.windowStart = now
+		c.accountEmptyOutputGlobal.cooldowns = 0
+	}
+	c.accountEmptyOutputGlobal.cooldowns++
+	return c.accountEmptyOutputGlobal.cooldowns, c.accountEmptyOutputGlobal.cooldowns > accountEmptyOutputGlobalMaxCooldown
 }

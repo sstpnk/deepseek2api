@@ -2,6 +2,7 @@ package client
 
 import (
 	"testing"
+	"time"
 
 	"ds2api/internal/account"
 	"ds2api/internal/auth"
@@ -53,11 +54,26 @@ func TestRecordAccountVisibleSuccessDecaysEmptyOutputPenalty(t *testing.T) {
 	client, pool, requestAuth := newAccountHealthClientForTest(t)
 
 	client.RecordAccountEmptyOutput(requestAuth, "test")
+	client.RecordAccountEmptyOutput(requestAuth, "test")
 	client.RecordAccountVisibleSuccess(requestAuth, "test")
 	client.RecordAccountVisibleSuccess(requestAuth, "test")
 	client.RecordAccountEmptyOutput(requestAuth, "test")
 
 	if got := pool.Status()["cooling_down"]; got != 0 {
 		t.Fatalf("expected one recovered success window to keep account out of cooldown, got %#v", got)
+	}
+}
+
+func TestRecordAccountEmptyOutputSuppressesGlobalCooldownStorm(t *testing.T) {
+	client, pool, requestAuth := newAccountHealthClientForTest(t)
+	client.accountEmptyOutputGlobal.cooldowns = accountEmptyOutputGlobalMaxCooldown
+	client.accountEmptyOutputGlobal.windowStart = time.Now()
+
+	for i := 0; i < accountEmptyOutputThreshold; i++ {
+		client.RecordAccountEmptyOutput(requestAuth, "test")
+	}
+
+	if got := pool.Status()["cooling_down"]; got != 0 {
+		t.Fatalf("expected global budget to suppress cooldown, got %#v", got)
 	}
 }

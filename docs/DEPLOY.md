@@ -315,7 +315,7 @@ VERCEL_TEAM_ID=team_xxxxxxxxxxxx   # 个人账号可留空
 - **每账号并发上限** (`account_max_inflight`)：环境变量已支持，但也可通过 Admin API 热更新。
 - **全局并发上限** (`global_max_inflight`)：同上。
 - **PoW 计算并发上限** (`pow_max_concurrency`)：限制本机 CPU 密集型 PoW 求解数量；高并发部署建议从 `1`-`4` 之间试起。
-- **代理/账号健康保护**：传输层失败会让对应 proxy 进入指数增长冷却，重试会避开本次请求内刚失败的 proxy；OpenAI Chat / Responses 空输出补偿重试会优先避开当前 proxy，同一账号在 2 小时滚动窗口内连续两次仍返回 `upstream_empty_output` 时会进入指数增长冷却，成功可见输出会逐步降低空输出计数与账号冷却等级；明确账号认证失败且刷新无效时，该账号也会进入指数增长冷却并暂时从账号池跳过。管理台账号池状态会显示可用账号数、`cooling_down` / `cooling_down_accounts_total` 冷却账号数。
+- **代理/账号健康保护**：传输层失败会让对应 proxy 进入指数增长冷却，重试会避开本次请求内刚失败的 proxy；OpenAI Chat / Responses 空输出补偿重试会优先避开当前 proxy，同一账号在 20 分钟滚动窗口内连续三次仍返回 `upstream_empty_output` 时会进入指数增长冷却，但空输出账号冷却带有全局预算，避免上游或代理整体异常时把账号池批量误判为不可用；成功可见输出会逐步降低空输出计数与账号冷却等级；明确账号认证失败且刷新无效时，该账号也会进入指数增长冷却并暂时从账号池跳过。管理台账号池状态会显示可用账号数、`cooling_down` / `cooling_down_accounts_total` 冷却账号数。
 
 详细说明参见 [API.md](../API.md#admin-接口) 中 `/admin/settings` 部分。
 
