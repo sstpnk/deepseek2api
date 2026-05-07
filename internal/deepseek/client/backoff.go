@@ -2,8 +2,7 @@ package client
 
 import (
 	"context"
-	"math/rand"
-	"sync"
+	"math/rand/v2"
 	"time"
 )
 
@@ -13,10 +12,7 @@ const (
 	backoffCap           = 3 * time.Second
 )
 
-var (
-	backoffRandMu sync.Mutex
-	backoffRand   = rand.New(rand.NewSource(time.Now().UnixNano()))
-)
+var ()
 
 // sleepWithCtx sleeps for d, but returns early with ctx.Err() if the context
 // is cancelled. d <= 0 means no sleep, just check context state.
@@ -61,8 +57,6 @@ func retryDelay(attempt int, transport bool) time.Duration {
 	if j <= 0 {
 		return d
 	}
-	backoffRandMu.Lock()
-	off := backoffRand.Int63n(int64(2*j) + 1)
-	backoffRandMu.Unlock()
+	off := rand.Int64N(int64(2*j) + 1)
 	return d - j + time.Duration(off)
 }

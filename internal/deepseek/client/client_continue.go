@@ -121,7 +121,7 @@ func pumpAutoContinue(ctx context.Context, pw *io.PipeWriter, initial io.ReadClo
 		}
 		// Emit the final [DONE] sentinel if the upstream had one.
 		if hadDone {
-			if _, err := io.Copy(pw, bytes.NewBufferString("data: [DONE]\n")); err != nil {
+			if _, err := pw.Write([]byte("data: [DONE]\n")); err != nil {
 				_ = pw.CloseWithError(err)
 			}
 		}

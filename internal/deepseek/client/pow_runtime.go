@@ -78,8 +78,8 @@ func (r *powRuntime) compute(ctx context.Context, key string, challenge map[stri
 		r.recordFlight(key, "", err)
 		return "", err
 	}
-	r.setCached(key, header, time.Now().Add(powCacheTTL))
 	r.recordFlight(key, header, nil)
+	r.setCached(key, header, time.Now().Add(powCacheTTL))
 	return header, nil
 }
 
