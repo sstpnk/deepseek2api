@@ -1,0 +1,283 @@
+// +build amd64,!purego
+
+#include "textflag.h"
+
+// RC constants for rounds 1..23 (single contiguous table).
+DATA rc<>+0(SB)/8, $0x0000000000008082
+DATA rc<>+8(SB)/8, $0x800000000000808A
+DATA rc<>+16(SB)/8, $0x8000000080008000
+DATA rc<>+24(SB)/8, $0x000000000000808B
+DATA rc<>+32(SB)/8, $0x0000000080000001
+DATA rc<>+40(SB)/8, $0x8000000080008081
+DATA rc<>+48(SB)/8, $0x8000000000008009
+DATA rc<>+56(SB)/8, $0x000000000000008A
+DATA rc<>+64(SB)/8, $0x0000000000000088
+DATA rc<>+72(SB)/8, $0x0000000080008009
+DATA rc<>+80(SB)/8, $0x000000008000000A
+DATA rc<>+88(SB)/8, $0x000000008000808B
+DATA rc<>+96(SB)/8, $0x800000000000008B
+DATA rc<>+104(SB)/8, $0x8000000000008089
+DATA rc<>+112(SB)/8, $0x8000000000008003
+DATA rc<>+120(SB)/8, $0x8000000000008002
+DATA rc<>+128(SB)/8, $0x8000000000000080
+DATA rc<>+136(SB)/8, $0x000000000000800A
+DATA rc<>+144(SB)/8, $0x800000008000000A
+DATA rc<>+152(SB)/8, $0x8000000080008081
+DATA rc<>+160(SB)/8, $0x8000000000008080
+DATA rc<>+168(SB)/8, $0x0000000080000001
+DATA rc<>+176(SB)/8, $0x8000000080008008
+GLOBL rc<>(SB), RODATA, $184
+
+// func keccakF23AVX2(s *[25]uint64)
+//
+// Loop-based (23 iterations) Keccak-f[1600] skipping round 0.
+// State lives on stack: 0(SP)..192(SP) = state[25]uint64.
+// Scratch b[] at 200(SP)..392(SP).
+TEXT ·keccakF23AVX2(SB), NOSPLIT, $400-8
+    MOVQ s+0(FP), DI
+
+    // Copy state to stack.
+    MOVQ 0(DI), AX; MOVQ AX, 0(SP)
+    MOVQ 8(DI), AX; MOVQ AX, 8(SP)
+    MOVQ 16(DI), AX; MOVQ AX, 16(SP)
+    MOVQ 24(DI), AX; MOVQ AX, 24(SP)
+    MOVQ 32(DI), AX; MOVQ AX, 32(SP)
+    MOVQ 40(DI), AX; MOVQ AX, 40(SP)
+    MOVQ 48(DI), AX; MOVQ AX, 48(SP)
+    MOVQ 56(DI), AX; MOVQ AX, 56(SP)
+    MOVQ 64(DI), AX; MOVQ AX, 64(SP)
+    MOVQ 72(DI), AX; MOVQ AX, 72(SP)
+    MOVQ 80(DI), AX; MOVQ AX, 80(SP)
+    MOVQ 88(DI), AX; MOVQ AX, 88(SP)
+    MOVQ 96(DI), AX; MOVQ AX, 96(SP)
+    MOVQ 104(DI), AX; MOVQ AX, 104(SP)
+    MOVQ 112(DI), AX; MOVQ AX, 112(SP)
+    MOVQ 120(DI), AX; MOVQ AX, 120(SP)
+    MOVQ 128(DI), AX; MOVQ AX, 128(SP)
+    MOVQ 136(DI), AX; MOVQ AX, 136(SP)
+    MOVQ 144(DI), AX; MOVQ AX, 144(SP)
+    MOVQ 152(DI), AX; MOVQ AX, 152(SP)
+    MOVQ 160(DI), AX; MOVQ AX, 160(SP)
+    MOVQ 168(DI), AX; MOVQ AX, 168(SP)
+    MOVQ 176(DI), AX; MOVQ AX, 176(SP)
+    MOVQ 184(DI), AX; MOVQ AX, 184(SP)
+    MOVQ 192(DI), AX; MOVQ AX, 192(SP)
+
+    XORQ SI, SI          // round counter = 0
+    LEAQ rc<>(SB), BP    // RC table base
+
+round:
+    // === Theta ===
+    MOVQ 0(SP), R8; MOVQ 40(SP), AX; XORQ AX, R8
+    MOVQ 80(SP), AX; XORQ AX, R8
+    MOVQ 120(SP), AX; XORQ AX, R8
+    MOVQ 160(SP), AX; XORQ AX, R8          // R8 = c0
+
+    MOVQ 8(SP), R9; MOVQ 48(SP), AX; XORQ AX, R9
+    MOVQ 88(SP), AX; XORQ AX, R9
+    MOVQ 128(SP), AX; XORQ AX, R9
+    MOVQ 168(SP), AX; XORQ AX, R9          // R9 = c1
+
+    MOVQ 16(SP), R10; MOVQ 56(SP), AX; XORQ AX, R10
+    MOVQ 96(SP), AX; XORQ AX, R10
+    MOVQ 136(SP), AX; XORQ AX, R10
+    MOVQ 176(SP), AX; XORQ AX, R10         // R10 = c2
+
+    MOVQ 24(SP), R11; MOVQ 64(SP), AX; XORQ AX, R11
+    MOVQ 104(SP), AX; XORQ AX, R11
+    MOVQ 144(SP), AX; XORQ AX, R11
+    MOVQ 184(SP), AX; XORQ AX, R11         // R11 = c3
+
+    MOVQ 32(SP), R12; MOVQ 72(SP), AX; XORQ AX, R12
+    MOVQ 112(SP), AX; XORQ AX, R12
+    MOVQ 152(SP), AX; XORQ AX, R12
+    MOVQ 192(SP), AX; XORQ AX, R12         // R12 = c4
+
+    // d[x] = c[x-1] ^ ROTL64(c[x+1], 1)
+    MOVQ R9, AX; ROLQ $1, AX; XORQ R12, AX; MOVQ AX, BX  // d0
+    MOVQ R10, AX; ROLQ $1, AX; XORQ R8, AX; MOVQ AX, CX  // d1
+    MOVQ R11, AX; ROLQ $1, AX; XORQ R9, AX; MOVQ AX, DX  // d2
+    MOVQ R12, AX; ROLQ $1, AX; XORQ R10, AX; MOVQ AX, R13 // d3
+    MOVQ R8, AX; ROLQ $1, AX; XORQ R11, AX; MOVQ AX, R12 // d4 (R12=c4 reused)
+
+    // Mix d into columns (d0=BX, d1=CX, d2=DX, d3=R13, d4=R12)
+    MOVQ 0(SP), AX; XORQ BX, AX; MOVQ AX, 0(SP)
+    MOVQ 40(SP), AX; XORQ BX, AX; MOVQ AX, 40(SP)
+    MOVQ 80(SP), AX; XORQ BX, AX; MOVQ AX, 80(SP)
+    MOVQ 120(SP), AX; XORQ BX, AX; MOVQ AX, 120(SP)
+    MOVQ 160(SP), AX; XORQ BX, AX; MOVQ AX, 160(SP)
+
+    MOVQ 8(SP), AX; XORQ CX, AX; MOVQ AX, 8(SP)
+    MOVQ 48(SP), AX; XORQ CX, AX; MOVQ AX, 48(SP)
+    MOVQ 88(SP), AX; XORQ CX, AX; MOVQ AX, 88(SP)
+    MOVQ 128(SP), AX; XORQ CX, AX; MOVQ AX, 128(SP)
+    MOVQ 168(SP), AX; XORQ CX, AX; MOVQ AX, 168(SP)
+
+    MOVQ 16(SP), AX; XORQ DX, AX; MOVQ AX, 16(SP)
+    MOVQ 56(SP), AX; XORQ DX, AX; MOVQ AX, 56(SP)
+    MOVQ 96(SP), AX; XORQ DX, AX; MOVQ AX, 96(SP)
+    MOVQ 136(SP), AX; XORQ DX, AX; MOVQ AX, 136(SP)
+    MOVQ 176(SP), AX; XORQ DX, AX; MOVQ AX, 176(SP)
+
+    MOVQ 24(SP), AX; XORQ R13, AX; MOVQ AX, 24(SP)
+    MOVQ 64(SP), AX; XORQ R13, AX; MOVQ AX, 64(SP)
+    MOVQ 104(SP), AX; XORQ R13, AX; MOVQ AX, 104(SP)
+    MOVQ 144(SP), AX; XORQ R13, AX; MOVQ AX, 144(SP)
+    MOVQ 184(SP), AX; XORQ R13, AX; MOVQ AX, 184(SP)
+
+    MOVQ 32(SP), AX; XORQ R12, AX; MOVQ AX, 32(SP)
+    MOVQ 72(SP), AX; XORQ R12, AX; MOVQ AX, 72(SP)
+    MOVQ 112(SP), AX; XORQ R12, AX; MOVQ AX, 112(SP)
+    MOVQ 152(SP), AX; XORQ R12, AX; MOVQ AX, 152(SP)
+    MOVQ 192(SP), AX; XORQ R12, AX; MOVQ AX, 192(SP)
+
+    // === Rho+Pi with hardcoded permutation ===
+    // Load s[i], rotate, store to b[pi(i)]
+    // b starts at 200(SP)
+
+    // b0  = s[0]
+    MOVQ 0(SP), AX; MOVQ AX, 200(SP)
+    // b10 = ROT(s[1], 1)
+    MOVQ 8(SP), AX; ROLQ $1, AX; MOVQ AX, 280(SP)
+    // b20 = ROT(s[2], 62)
+    MOVQ 16(SP), AX; ROLQ $62, AX; MOVQ AX, 360(SP)
+    // b5  = ROT(s[3], 28)
+    MOVQ 24(SP), AX; ROLQ $28, AX; MOVQ AX, 240(SP)
+    // b15 = ROT(s[4], 27)
+    MOVQ 32(SP), AX; ROLQ $27, AX; MOVQ AX, 320(SP)
+    // b16 = ROT(s[5], 36)
+    MOVQ 40(SP), AX; ROLQ $36, AX; MOVQ AX, 328(SP)
+    // b1  = ROT(s[6], 44)
+    MOVQ 48(SP), AX; ROLQ $44, AX; MOVQ AX, 208(SP)
+    // b11 = ROT(s[7], 6)
+    MOVQ 56(SP), AX; ROLQ $6, AX; MOVQ AX, 288(SP)
+    // b21 = ROT(s[8], 55)
+    MOVQ 64(SP), AX; ROLQ $55, AX; MOVQ AX, 368(SP)
+    // b6  = ROT(s[9], 20)
+    MOVQ 72(SP), AX; ROLQ $20, AX; MOVQ AX, 248(SP)
+    // b7  = ROT(s[10], 3)
+    MOVQ 80(SP), AX; ROLQ $3, AX; MOVQ AX, 256(SP)
+    // b17 = ROT(s[11], 10)
+    MOVQ 88(SP), AX; ROLQ $10, AX; MOVQ AX, 336(SP)
+    // b2  = ROT(s[12], 43)
+    MOVQ 96(SP), AX; ROLQ $43, AX; MOVQ AX, 216(SP)
+    // b12 = ROT(s[13], 25)
+    MOVQ 104(SP), AX; ROLQ $25, AX; MOVQ AX, 296(SP)
+    // b22 = ROT(s[14], 39)
+    MOVQ 112(SP), AX; ROLQ $39, AX; MOVQ AX, 376(SP)
+    // b23 = ROT(s[15], 41)
+    MOVQ 120(SP), AX; ROLQ $41, AX; MOVQ AX, 384(SP)
+    // b8  = ROT(s[16], 45)
+    MOVQ 128(SP), AX; ROLQ $45, AX; MOVQ AX, 264(SP)
+    // b18 = ROT(s[17], 15)
+    MOVQ 136(SP), AX; ROLQ $15, AX; MOVQ AX, 344(SP)
+    // b3  = ROT(s[18], 21)
+    MOVQ 144(SP), AX; ROLQ $21, AX; MOVQ AX, 224(SP)
+    // b13 = ROT(s[19], 8)
+    MOVQ 152(SP), AX; ROLQ $8, AX; MOVQ AX, 304(SP)
+    // b14 = ROT(s[20], 18)
+    MOVQ 160(SP), AX; ROLQ $18, AX; MOVQ AX, 312(SP)
+    // b24 = ROT(s[21], 2)
+    MOVQ 168(SP), AX; ROLQ $2, AX; MOVQ AX, 392(SP)
+    // b9  = ROT(s[22], 61)
+    MOVQ 176(SP), AX; ROLQ $61, AX; MOVQ AX, 272(SP)
+    // b19 = ROT(s[23], 56)
+    MOVQ 184(SP), AX; ROLQ $56, AX; MOVQ AX, 352(SP)
+    // b4  = ROT(s[24], 14)
+    MOVQ 192(SP), AX; ROLQ $14, AX; MOVQ AX, 232(SP)
+
+    // === Chi: a[x] = b[x] ^ ((~b[x+1]) & b[x+2]), 5 rows, ANDN ===
+    // Row 0 (0,1,2,3,4): a[4] needs b[1] after b[1] is overwritten → reload
+    MOVQ 200(SP), R8; MOVQ 208(SP), R9; MOVQ 216(SP), R10
+    ANDNQ R10, R9, AX; XORQ AX, R8; MOVQ R8, 0(SP)      // a[0]
+    MOVQ 224(SP), R11
+    ANDNQ R11, R10, AX; XORQ AX, R9; MOVQ R9, 8(SP)      // a[1] — R9 modified
+    MOVQ 232(SP), R12
+    ANDNQ R12, R11, AX; XORQ AX, R10; MOVQ R10, 16(SP)   // a[2]
+    MOVQ 200(SP), R8
+    ANDNQ R8, R12, AX; XORQ AX, R11; MOVQ R11, 24(SP)    // a[3]
+    MOVQ 208(SP), R15
+    ANDNQ R15, R8, AX; XORQ AX, R12; MOVQ R12, 32(SP)    // a[4]
+
+    // Row 1 (5,6,7,8,9): a[9] needs b[6] after overwritten
+    MOVQ 240(SP), R8; MOVQ 248(SP), R9; MOVQ 256(SP), R10
+    ANDNQ R10, R9, AX; XORQ AX, R8; MOVQ R8, 40(SP)
+    MOVQ 264(SP), R11
+    ANDNQ R11, R10, AX; XORQ AX, R9; MOVQ R9, 48(SP)      // a[6] — R9 modified
+    MOVQ 272(SP), R12
+    ANDNQ R12, R11, AX; XORQ AX, R10; MOVQ R10, 56(SP)
+    MOVQ 240(SP), R8
+    ANDNQ R8, R12, AX; XORQ AX, R11; MOVQ R11, 64(SP)
+    MOVQ 248(SP), R15
+    ANDNQ R15, R8, AX; XORQ AX, R12; MOVQ R12, 72(SP)
+
+    // Row 2 (10,11,12,13,14): a[14] needs b[11] after overwritten
+    MOVQ 280(SP), R8; MOVQ 288(SP), R9; MOVQ 296(SP), R10
+    ANDNQ R10, R9, AX; XORQ AX, R8; MOVQ R8, 80(SP)
+    MOVQ 304(SP), R11
+    ANDNQ R11, R10, AX; XORQ AX, R9; MOVQ R9, 88(SP)     // a[11] — R9 modified
+    MOVQ 312(SP), R12
+    ANDNQ R12, R11, AX; XORQ AX, R10; MOVQ R10, 96(SP)
+    MOVQ 280(SP), R8
+    ANDNQ R8, R12, AX; XORQ AX, R11; MOVQ R11, 104(SP)
+    MOVQ 288(SP), R15
+    ANDNQ R15, R8, AX; XORQ AX, R12; MOVQ R12, 112(SP)
+
+    // Row 3 (15,16,17,18,19): a[19] needs b[16] after overwritten
+    MOVQ 320(SP), R8; MOVQ 328(SP), R9; MOVQ 336(SP), R10
+    ANDNQ R10, R9, AX; XORQ AX, R8; MOVQ R8, 120(SP)
+    MOVQ 344(SP), R11
+    ANDNQ R11, R10, AX; XORQ AX, R9; MOVQ R9, 128(SP)    // a[16] — R9 modified
+    MOVQ 352(SP), R12
+    ANDNQ R12, R11, AX; XORQ AX, R10; MOVQ R10, 136(SP)
+    MOVQ 320(SP), R8
+    ANDNQ R8, R12, AX; XORQ AX, R11; MOVQ R11, 144(SP)
+    MOVQ 328(SP), R15
+    ANDNQ R15, R8, AX; XORQ AX, R12; MOVQ R12, 152(SP)
+
+    // Row 4 (20,21,22,23,24): a[24] needs b[21] after overwritten
+    MOVQ 360(SP), R8; MOVQ 368(SP), R9; MOVQ 376(SP), R10
+    ANDNQ R10, R9, AX; XORQ AX, R8; MOVQ R8, 160(SP)
+    MOVQ 384(SP), R11
+    ANDNQ R11, R10, AX; XORQ AX, R9; MOVQ R9, 168(SP)    // a[21] — R9 modified
+    MOVQ 392(SP), R12
+    ANDNQ R12, R11, AX; XORQ AX, R10; MOVQ R10, 176(SP)
+    MOVQ 360(SP), R8
+    ANDNQ R8, R12, AX; XORQ AX, R11; MOVQ R11, 184(SP)
+    MOVQ 368(SP), R15
+    ANDNQ R15, R8, AX; XORQ AX, R12; MOVQ R12, 192(SP)
+
+    // === Iota ===
+    MOVQ 0(BP)(SI*8), AX; XORQ AX, 0(SP)
+
+    INCQ SI
+    CMPQ SI, $23
+    JL round
+
+    // Store back
+    MOVQ 0(SP), AX; MOVQ AX, 0(DI)
+    MOVQ 8(SP), AX; MOVQ AX, 8(DI)
+    MOVQ 16(SP), AX; MOVQ AX, 16(DI)
+    MOVQ 24(SP), AX; MOVQ AX, 24(DI)
+    MOVQ 32(SP), AX; MOVQ AX, 32(DI)
+    MOVQ 40(SP), AX; MOVQ AX, 40(DI)
+    MOVQ 48(SP), AX; MOVQ AX, 48(DI)
+    MOVQ 56(SP), AX; MOVQ AX, 56(DI)
+    MOVQ 64(SP), AX; MOVQ AX, 64(DI)
+    MOVQ 72(SP), AX; MOVQ AX, 72(DI)
+    MOVQ 80(SP), AX; MOVQ AX, 80(DI)
+    MOVQ 88(SP), AX; MOVQ AX, 88(DI)
+    MOVQ 96(SP), AX; MOVQ AX, 96(DI)
+    MOVQ 104(SP), AX; MOVQ AX, 104(DI)
+    MOVQ 112(SP), AX; MOVQ AX, 112(DI)
+    MOVQ 120(SP), AX; MOVQ AX, 120(DI)
+    MOVQ 128(SP), AX; MOVQ AX, 128(DI)
+    MOVQ 136(SP), AX; MOVQ AX, 136(DI)
+    MOVQ 144(SP), AX; MOVQ AX, 144(DI)
+    MOVQ 152(SP), AX; MOVQ AX, 152(DI)
+    MOVQ 160(SP), AX; MOVQ AX, 160(DI)
+    MOVQ 168(SP), AX; MOVQ AX, 168(DI)
+    MOVQ 176(SP), AX; MOVQ AX, 176(DI)
+    MOVQ 184(SP), AX; MOVQ AX, 184(DI)
+    MOVQ 192(SP), AX; MOVQ AX, 192(DI)
+    RET

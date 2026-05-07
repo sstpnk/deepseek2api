@@ -7,7 +7,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"os"
+	"runtime"
 	"strconv"
+	"strings"
+	"sync"
 )
 
 // Challenge 对应 /api/v0/chat/create_pow_challenge 返回 dem data.biz_data.challenge。
@@ -27,8 +31,37 @@ func BuildPrefix(salt string, expireAt int64) string {
 }
 
 // SolvePow 搜索 nonce ∈ [0, difficulty) 使得 DeepSeekHashV1(prefix+str(nonce)) == challenge。
-// prefix 预吸收进 state,循环内零分配。
+// prefix 预吸收进 state,循环内增量十进制计数 + 预计算按位长填充状态,零分配。
+//
+// 默认使用多核并行搜索（工作线程数 = GOMAXPROCS）。
+// 设置 DS2API_POW_INTERNAL_PARALLEL=0/1 禁用并行,用 N 固定线程数,或 -1 显式全核。
 func SolvePow(ctx context.Context, challengeHex, salt string, expireAt, difficulty int64) (int64, error) {
+	workers := PowInternalParallel()
+	if workers > 1 && difficulty > 100 {
+		return solvePowParallel(ctx, challengeHex, salt, expireAt, difficulty, workers)
+	}
+	return solvePowSerial(ctx, challengeHex, salt, expireAt, difficulty)
+}
+
+// PowInternalParallel 返回 SolvePow 内部并行度。
+// 0/1 → 串行, -1 → runtime.GOMAXPROCS(0), N → 固定 N 线程。
+// 可由环境变量 DS2API_POW_INTERNAL_PARALLEL 覆盖。
+func PowInternalParallel() int {
+	if raw := strings.TrimSpace(os.Getenv("DS2API_POW_INTERNAL_PARALLEL")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil {
+			if n == -1 {
+				return runtime.GOMAXPROCS(0)
+			}
+			if n >= 0 {
+				return n
+			}
+		}
+	}
+	return runtime.GOMAXPROCS(0)
+}
+
+// solvePowSerial 串行搜索实现。
+func solvePowSerial(ctx context.Context, challengeHex, salt string, expireAt, difficulty int64) (int64, error) {
 	if len(challengeHex) != 64 {
 		return 0, errors.New("pow: challenge must be 64 hex chars")
 	}
@@ -58,63 +91,248 @@ func SolvePow(ctx context.Context, challengeHex, salt string, expireAt, difficul
 	var tail [rate]byte
 	copy(tail[:], prefix[off:])
 
-	var numBuf [20]byte
+	// max digits needed for the largest nonce
+	maxNumLen := numLenFor(difficulty - 1)
+	if maxNumLen < 1 {
+		maxNumLen = 1
+	}
+	if tailLen+maxNumLen >= rate {
+		return 0, errors.New("pow: prefix tail too long")
+	}
+
+	// Precompute padded states: one per possible digit length (1..maxNumLen).
+	// Each state has tail + 0x06 at (tailLen+nl) + 0x80 at rate-1 already XORed in.
+	// keccakF23 is NOT run yet — digits are XORed in the hot loop before the permutation.
+	var paddedStates [7][25]uint64
+	for nl := 1; nl <= maxNumLen; nl++ {
+		s := baseState
+		var buf [rate]byte
+		copy(buf[:tailLen], tail[:tailLen])
+		buf[tailLen+nl] = 0x06
+		buf[rate-1] = 0x80
+		for i := 0; i < rate/8; i++ {
+			s[i] ^= binary.LittleEndian.Uint64(buf[i*8:])
+		}
+		paddedStates[nl] = s
+	}
+
+	// Incremental decimal counter — avoids division in the hot loop.
+	// digits[numStart:] holds the current decimal string.
+	var digits [20]byte
+	digits[19] = '0'
+	numStart := 19
+	numLen := 1
+
 	for n := int64(0); n < difficulty; n++ {
-		// Periodically check if context is canceled to avoid wasting CPU
 		if n&0x3FF == 0 {
 			if err := ctx.Err(); err != nil {
 				return 0, err
 			}
 		}
 
-		v := uint64(n)
-		pos := 20
-		if v == 0 {
-			pos--
-			numBuf[pos] = '0'
-		} else {
-			for v > 0 {
-				pos--
-				numBuf[pos] = byte('0' + v%10)
-				v /= 10
-			}
-		}
-		numLen := 20 - pos
-		s := baseState
-		totalTail := tailLen + numLen
-		if totalTail < rate {
-			var buf [rate]byte
-			copy(buf[:tailLen], tail[:tailLen])
-			copy(buf[tailLen:totalTail], numBuf[pos:])
-			buf[totalTail] = 0x06
-			buf[rate-1] |= 0x80
-			for i := 0; i < rate/8; i++ {
-				s[i] ^= binary.LittleEndian.Uint64(buf[i*8:])
-			}
-			keccakF23(&s)
-		} else {
-			var buf [rate]byte
-			copy(buf[:tailLen], tail[:tailLen])
-			copy(buf[tailLen:rate], numBuf[pos:pos+(rate-tailLen)])
-			for i := 0; i < rate/8; i++ {
-				s[i] ^= binary.LittleEndian.Uint64(buf[i*8:])
-			}
-			keccakF23(&s)
-			var buf2 [rate]byte
-			rem := totalTail - rate
-			copy(buf2[:rem], numBuf[pos+(rate-tailLen):pos+(rate-tailLen)+rem])
-			buf2[rem] = 0x06
-			buf2[rate-1] |= 0x80
-			for i := 0; i < rate/8; i++ {
-				s[i] ^= binary.LittleEndian.Uint64(buf2[i*8:])
-			}
-			keccakF23(&s)
-		}
+		s := paddedStates[numLen]
+		xorDigitsIntoState(&s, digits[numStart:numStart+numLen], tailLen)
+		keccakF23(&s)
+
 		if s[0] == t0 && s[1] == t1 && s[2] == t2 && s[3] == t3 {
 			return n, nil
 		}
+
+		// Increment decimal counter for next iteration
+		i := 19
+		for i >= numStart {
+			if digits[i] < '9' {
+				digits[i]++
+				break
+			}
+			digits[i] = '0'
+			i--
+		}
+		if i < numStart {
+			numStart--
+			numLen++
+			digits[numStart] = '1'
+		}
 	}
 	return 0, errors.New("pow: no solution within difficulty")
+}
+
+// setDigitsTo sets digits[numStart:] to the decimal representation of v.
+// Returns (numStart, numLen).
+func setDigitsTo(digits *[20]byte, v int64) (numStart, numLen int) {
+	if v == 0 {
+		digits[19] = '0'
+		return 19, 1
+	}
+	pos := 20
+	for v > 0 {
+		pos--
+		digits[pos] = byte('0' + v%10)
+		v /= 10
+	}
+	return pos, 20 - pos
+}
+
+// solvePowParallel splits the difficulty range across workers goroutines.
+func solvePowParallel(ctx context.Context, challengeHex, salt string, expireAt, difficulty int64, workers int) (int64, error) {
+	if workers < 2 {
+		workers = 2
+	}
+	chunkSize := difficulty / int64(workers)
+	if chunkSize < 1 {
+		chunkSize = 1
+	}
+
+	searchCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	resultCh := make(chan int64, 1)
+	var wg sync.WaitGroup
+
+	for w := 0; w < workers; w++ {
+		start := int64(w) * chunkSize
+		end := start + chunkSize
+		if w == workers-1 {
+			end = difficulty
+		}
+		if start >= end {
+			continue
+		}
+
+		wg.Add(1)
+		go func(start, end int64) {
+			defer wg.Done()
+			if ans, ok := searchRange(searchCtx, challengeHex, salt, expireAt, start, end); ok {
+				select {
+				case resultCh <- ans:
+				default:
+				}
+				cancel()
+			}
+		}(start, end)
+	}
+
+	wg.Wait()
+	close(resultCh)
+
+	if ans, ok := <-resultCh; ok {
+		return ans, nil
+	}
+	return 0, errors.New("pow: no solution within difficulty")
+}
+
+// searchRange searches for a matching nonce in [start, end) using the precomputed
+// state approach. Returns (answer, true) on match, (0, false) otherwise.
+func searchRange(ctx context.Context, challengeHex, salt string, expireAt int64, start, end int64) (int64, bool) {
+	target, err := hex.DecodeString(challengeHex)
+	if err != nil {
+		return 0, false
+	}
+	var ta [32]byte
+	copy(ta[:], target)
+	t0 := binary.LittleEndian.Uint64(ta[0:])
+	t1 := binary.LittleEndian.Uint64(ta[8:])
+	t2 := binary.LittleEndian.Uint64(ta[16:])
+	t3 := binary.LittleEndian.Uint64(ta[24:])
+
+	prefix := []byte(BuildPrefix(salt, expireAt))
+	const rate = 136
+	var baseState [25]uint64
+	off := 0
+	for off+rate <= len(prefix) {
+		for i := 0; i < rate/8; i++ {
+			baseState[i] ^= binary.LittleEndian.Uint64(prefix[off+i*8:])
+		}
+		keccakF23(&baseState)
+		off += rate
+	}
+	tailLen := len(prefix) - off
+	var tail [rate]byte
+	copy(tail[:], prefix[off:])
+
+	maxNumLen := numLenFor(end - 1)
+	if maxNumLen < 1 {
+		maxNumLen = 1
+	}
+	if tailLen+maxNumLen >= rate {
+		return 0, false
+	}
+
+	var paddedStates [7][25]uint64
+	for nl := 1; nl <= maxNumLen; nl++ {
+		s := baseState
+		var buf [rate]byte
+		copy(buf[:tailLen], tail[:tailLen])
+		buf[tailLen+nl] = 0x06
+		buf[rate-1] = 0x80
+		for i := 0; i < rate/8; i++ {
+			s[i] ^= binary.LittleEndian.Uint64(buf[i*8:])
+		}
+		paddedStates[nl] = s
+	}
+
+	var digits [20]byte
+	numStart, numLen := setDigitsTo(&digits, start)
+
+	for n := start; n < end; n++ {
+		select {
+		case <-ctx.Done():
+			return 0, false
+		default:
+		}
+
+		s := paddedStates[numLen]
+		xorDigitsIntoState(&s, digits[numStart:numStart+numLen], tailLen)
+		keccakF23(&s)
+
+		if s[0] == t0 && s[1] == t1 && s[2] == t2 && s[3] == t3 {
+			return n, true
+		}
+
+		// Increment decimal counter
+		i := 19
+		for i >= numStart {
+			if digits[i] < '9' {
+				digits[i]++
+				break
+			}
+			digits[i] = '0'
+			i--
+		}
+		if i < numStart {
+			numStart--
+			numLen++
+			digits[numStart] = '1'
+		}
+	}
+	return 0, false
+}
+func numLenFor(n int64) int {
+	if n < 10 {
+		return 1
+	}
+	if n < 100 {
+		return 2
+	}
+	if n < 1000 {
+		return 3
+	}
+	if n < 10000 {
+		return 4
+	}
+	if n < 100000 {
+		return 5
+	}
+	return 6 // difficulty capped at 999999 for practical purposes
+}
+
+// xorDigitsIntoState XORs the decimal digit bytes into the keccak state at the
+// correct byte positions within the rate block (offset = tailLen).
+func xorDigitsIntoState(s *[25]uint64, digits []byte, tailLen int) {
+	for i, d := range digits {
+		pos := tailLen + i
+		s[pos/8] ^= uint64(d) << ((pos % 8) * 8)
+	}
 }
 
 // BuildPowHeader 序列化 {algorithm,challenge,salt,answer,signature,target_path} 为 base64(JSON)。

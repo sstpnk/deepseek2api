@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"ds2api/internal/config"
+	"ds2api/pow"
 )
 
 const powCacheTTL = 45 * time.Second
@@ -232,6 +233,11 @@ func (r *powRuntime) semaphore() chan struct{} {
 }
 
 func (r *powRuntime) maxConcurrency() int {
+	// When SolvePow uses internal parallelism, cap external semaphore at 1
+	// to prevent M concurrent requests × N workers from oversubscribing CPU.
+	if pow.PowInternalParallel() >= 2 {
+		return 1
+	}
 	if r == nil || r.store == nil {
 		return config.DefaultPowMaxConcurrency()
 	}
