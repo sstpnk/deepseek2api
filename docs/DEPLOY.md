@@ -295,7 +295,8 @@ VERCEL_TEAM_ID=team_xxxxxxxxxxxx   # 个人账号可留空
 | `DS2API_ACCOUNT_MAX_INFLIGHT` | 每账号并发上限 | `2` |
 | `DS2API_ACCOUNT_MAX_QUEUE` | 等待队列上限 | `recommended_concurrency` |
 | `DS2API_GLOBAL_MAX_INFLIGHT` | 全局并发上限 | `recommended_concurrency` |
-| `DS2API_POW_MAX_CONCURRENCY` | 本机同时执行 DeepSeek PoW 求解的上限，用于避免 CPU 被 PoW 打满 | `min(max(GOMAXPROCS/2, 1), 4)` |
+| `DS2API_POW_MAX_CONCURRENCY` | 本机同时执行 DeepSeek PoW 求解的外部并发上限，用于避免 CPU 被 PoW 打满 | `min(max(GOMAXPROCS/2, 1), 4)` |
+| `DS2API_POW_INTERNAL_PARALLEL` | 单个 PoW 求解的**内部**并行工作线程数：`0`/`1`=串行，`N`=固定 N 线程，`-1`=全核（默认值）。当内部并行 ≥ 2 时，外部并发自动降为 1 防止过度订阅 | `GOMAXPROCS` |
 | `DS2API_ENV_WRITEBACK` | 检测到 `DS2API_CONFIG_JSON` 时自动写入 `DS2API_CONFIG_PATH`，并在成功后转为文件模式（`1/true/yes/on`） | 关闭 |
 | `DS2API_VERCEL_INTERNAL_SECRET` | 混合流式内部鉴权 | 回退用 `DS2API_ADMIN_KEY` |
 | `DS2API_VERCEL_STREAM_LEASE_TTL_SECONDS` | 流式 lease TTL | `900` |
@@ -314,7 +315,9 @@ VERCEL_TEAM_ID=team_xxxxxxxxxxxx   # 个人账号可留空
 - **自动删除会话模式** (`auto_delete.mode`)：支持 `none` / `single` / `all`，默认为 `none`。可通过 `PUT /admin/settings` 更新。
 - **每账号并发上限** (`account_max_inflight`)：环境变量已支持，但也可通过 Admin API 热更新。
 - **全局并发上限** (`global_max_inflight`)：同上。
-- **PoW 计算并发上限** (`pow_max_concurrency`)：限制本机 CPU 密集型 PoW 求解数量；高并发部署建议从 `1`-`4` 之间试起。
+- **PoW 计算并发上限** (`pow_max_concurrency`)：限制本机 CPU 密集型 PoW 求解的外部并发数量；高并发部署建议从 `1`-`4` 之间试起。
+- **PoW 内部并行** (`DS2API_POW_INTERNAL_PARALLEL`)：默认使用全部 CPU 核心并行求解单个 PoW challenge。在虚拟机或低负载场景可保持默认值获得最低延迟；高并发场景可设为 `1` 关闭内部并行，利用外部并发排队处理。
+- PoW 求解器已内置 **DeepSeekHashV1 增量搜索优化**和 **arm64 NEON 指令集加速**（自动检测），支持 x86-64 和 ARM64 平台。
 - **代理/账号健康保护**：传输层失败会让对应 proxy 进入指数增长冷却，重试会避开本次请求内刚失败的 proxy；OpenAI Chat / Responses 空输出补偿重试会优先避开当前 proxy，同一账号在 20 分钟滚动窗口内连续三次仍返回 `upstream_empty_output` 时会进入指数增长冷却，但空输出账号冷却带有全局预算，避免上游或代理整体异常时把账号池批量误判为不可用；成功可见输出会逐步降低空输出计数与账号冷却等级；明确账号认证失败且刷新无效时，该账号也会进入指数增长冷却并暂时从账号池跳过。管理台账号池状态会显示可用账号数、`cooling_down` / `cooling_down_accounts_total` 冷却账号数。
 
 详细说明参见 [API.md](../API.md#admin-接口) 中 `/admin/settings` 部分。

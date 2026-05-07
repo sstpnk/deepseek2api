@@ -88,7 +88,7 @@ flowchart LR
             Auth["Auth Resolver\n(API key / bearer / x-goog-api-key)"]
             Pool["Account Pool + Queue\n(in-flight slots + wait queue)"]
             DSClient["DeepSeek Client\n(session / auth / completion / files)"]
-            Pow["PoW Solver\n(Pure Go)"]
+            Pow["PoW Solver\n(Pure Go + NEON)"]
             Tool["Tool Sieve\n(Go/Node semantic parity)"]
             History["Current Input File\n(DS2API_HISTORY.txt)"]
         end
@@ -134,7 +134,7 @@ For the full module-by-module architecture and directory responsibilities, see [
 | Unified CORS compatibility | `/v1/*`, `/anthropic/*`, `/v1beta/models/*`, and `/admin/*` share one CORS policy; on Vercel, the Node Runtime for `/v1/chat/completions` mirrors the same relaxed preflight behavior for third-party clients |
 | Multi-account rotation | Auto token refresh, email/mobile dual login |
 | Concurrency control | Per-account in-flight limit + waiting queue, dynamic recommended concurrency |
-| DeepSeek PoW | Pure Go high-performance solver (DeepSeekHashV1), ms-level response |
+| DeepSeek PoW | Pure Go high-performance solver (DeepSeekHashV1), adaptive multi-core parallelism, arm64 NEON acceleration, ms-level response |
 | Tool Calling | Anti-leak handling: non-code-block feature match, early `delta.tool_calls`, structured incremental output |
 | Admin API | Config management, runtime settings hot-reload, proxy management, account testing/batch test, session cleanup, import/export, Vercel sync, version check |
 | WebUI Admin Panel | SPA at `/admin` (bilingual Chinese/English, dark mode, with server-side conversation history) |
