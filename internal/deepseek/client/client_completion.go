@@ -44,6 +44,7 @@ func (c *Client) CallCompletion(ctx context.Context, a *auth.RequestAuth, payloa
 			if captureSession != nil {
 				resp.Body = captureSession.WrapBody(resp.Body, resp.StatusCode)
 			}
+			attachCompletionProxyID(resp, activeProxyIDFromContext(ctx))
 			resp = c.wrapCompletionWithAutoContinue(ctx, a, payload, powResp, resp)
 			return resp, nil
 		}

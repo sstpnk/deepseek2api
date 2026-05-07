@@ -292,6 +292,12 @@ func TestPoolSkipsCoolingDownAccounts(t *testing.T) {
 	if got, ok := status["cooling_down"].(int); !ok || got != 1 {
 		t.Fatalf("expected one cooling_down account, got %#v", status["cooling_down"])
 	}
+	if got, ok := status["usable_accounts"].(int); !ok || got != 1 {
+		t.Fatalf("expected one usable account, got %#v", status["usable_accounts"])
+	}
+	if got, ok := status["cooling_down_accounts_total"].(int); !ok || got != 1 {
+		t.Fatalf("expected one cooling_down account total, got %#v", status["cooling_down_accounts_total"])
+	}
 }
 
 func TestPoolTargetCoolingDownAccountFailsFast(t *testing.T) {
@@ -310,6 +316,30 @@ func TestPoolTargetCoolingDownAccountFailsFast(t *testing.T) {
 	}
 	if time.Since(start) > 120*time.Millisecond {
 		t.Fatalf("cooldown acquire should fail fast, took %s", time.Since(start))
+	}
+}
+
+func TestPoolSuccessDecaysCooldownLevelAfterRecoveryHits(t *testing.T) {
+	pool := newPoolForTest(t, "1")
+	for i := 0; i < 3; i++ {
+		pool.Cooldown("acc1@example.com", "test")
+	}
+
+	pool.mu.Lock()
+	cd := pool.cooldowns["acc1@example.com"]
+	cd.until = time.Now().Add(-time.Second)
+	levelBefore := cd.level
+	pool.mu.Unlock()
+
+	for i := 0; i < accountCooldownRecoveryHits; i++ {
+		pool.Success("acc1@example.com", "test")
+	}
+
+	pool.mu.Lock()
+	levelAfter := pool.cooldowns["acc1@example.com"].level
+	pool.mu.Unlock()
+	if levelAfter != levelBefore-1 {
+		t.Fatalf("expected cooldown level to decay by one, before=%d after=%d", levelBefore, levelAfter)
 	}
 }
 

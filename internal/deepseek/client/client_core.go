@@ -32,21 +32,25 @@ type Client struct {
 
 	proxyHealthMu  sync.Mutex
 	proxyHealthMap map[string]*proxyHealth
+
+	accountHealthMu  sync.Mutex
+	accountHealthMap map[string]*accountEmptyOutputHealth
 }
 
 func NewClient(store *config.Store, resolver *auth.Resolver) *Client {
 	return &Client{
-		Store:          store,
-		Auth:           resolver,
-		capture:        devcapture.Global(),
-		regular:        trans.New(60 * time.Second),
-		stream:         trans.New(0),
-		fallback:       &http.Client{Timeout: 60 * time.Second},
-		fallbackS:      &http.Client{Timeout: 0},
-		maxRetries:     2,
-		pow:            newPowRuntime(store),
-		proxyClients:   map[string]requestClients{},
-		proxyHealthMap: map[string]*proxyHealth{},
+		Store:            store,
+		Auth:             resolver,
+		capture:          devcapture.Global(),
+		regular:          trans.New(60 * time.Second),
+		stream:           trans.New(0),
+		fallback:         &http.Client{Timeout: 60 * time.Second},
+		fallbackS:        &http.Client{Timeout: 0},
+		maxRetries:       2,
+		pow:              newPowRuntime(store),
+		proxyClients:     map[string]requestClients{},
+		proxyHealthMap:   map[string]*proxyHealth{},
+		accountHealthMap: map[string]*accountEmptyOutputHealth{},
 	}
 }
 

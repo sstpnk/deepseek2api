@@ -18,6 +18,13 @@ type fakeDeepSeekCaller struct {
 	uploads   []dsclient.UploadFileRequest
 }
 
+type fakeHealthDeepSeekCaller struct {
+	fakeDeepSeekCaller
+	avoidCalls   int
+	emptyRecords int
+	successes    int
+}
+
 type currentInputRuntimeConfig struct{}
 
 func (currentInputRuntimeConfig) CurrentInputFileEnabled() bool { return true }
@@ -44,6 +51,19 @@ func (f *fakeDeepSeekCaller) CallCompletion(_ context.Context, _ *auth.RequestAu
 	resp := f.responses[0]
 	f.responses = f.responses[1:]
 	return resp, nil
+}
+
+func (f *fakeHealthDeepSeekCaller) AvoidProxyForResponse(ctx context.Context, _ *http.Response, _ *auth.RequestAuth, _ string) context.Context {
+	f.avoidCalls++
+	return ctx
+}
+
+func (f *fakeHealthDeepSeekCaller) RecordAccountEmptyOutput(_ *auth.RequestAuth, _ string) {
+	f.emptyRecords++
+}
+
+func (f *fakeHealthDeepSeekCaller) RecordAccountVisibleSuccess(_ *auth.RequestAuth, _ string) {
+	f.successes++
 }
 
 func TestExecuteNonStreamWithRetryBuildsCanonicalTurn(t *testing.T) {
@@ -90,10 +110,10 @@ func TestExecuteNonStreamWithRetryBuildsCanonicalTurn(t *testing.T) {
 }
 
 func TestExecuteNonStreamWithRetryUsesParentMessageForEmptyRetry(t *testing.T) {
-	ds := &fakeDeepSeekCaller{responses: []*http.Response{
+	ds := &fakeHealthDeepSeekCaller{fakeDeepSeekCaller: fakeDeepSeekCaller{responses: []*http.Response{
 		sseHTTPResponse(http.StatusOK, `data: {"response_message_id":77,"p":"response/status","v":"FINISHED"}`),
 		sseHTTPResponse(http.StatusOK, `data: {"response_message_id":78,"p":"response/content","v":"ok"}`),
-	}}
+	}}}
 	stdReq := promptcompat.StandardRequest{
 		Surface:         "test",
 		ResponseModel:   "deepseek-v4-flash",
@@ -116,6 +136,42 @@ func TestExecuteNonStreamWithRetryUsesParentMessageForEmptyRetry(t *testing.T) {
 	}
 	if result.Turn.Text != "ok" {
 		t.Fatalf("retry text mismatch: %q", result.Turn.Text)
+	}
+	if ds.avoidCalls != 1 {
+		t.Fatalf("expected one proxy avoid call, got %d", ds.avoidCalls)
+	}
+	if ds.emptyRecords != 0 {
+		t.Fatalf("expected successful retry not to record empty output, got %d", ds.emptyRecords)
+	}
+	if ds.successes != 1 {
+		t.Fatalf("expected visible retry success to be recorded, got %d", ds.successes)
+	}
+}
+
+func TestExecuteNonStreamWithRetryRecordsTerminalEmptyOutput(t *testing.T) {
+	ds := &fakeHealthDeepSeekCaller{fakeDeepSeekCaller: fakeDeepSeekCaller{responses: []*http.Response{
+		sseHTTPResponse(http.StatusOK, `data: {"response_message_id":77,"p":"response/status","v":"FINISHED"}`),
+		sseHTTPResponse(http.StatusOK, `data: {"response_message_id":78,"p":"response/status","v":"FINISHED"}`),
+	}}}
+	stdReq := promptcompat.StandardRequest{
+		Surface:         "test",
+		ResponseModel:   "deepseek-v4-flash",
+		PromptTokenText: "prompt",
+		FinalPrompt:     "final prompt",
+	}
+
+	result, outErr := ExecuteNonStreamWithRetry(context.Background(), ds, &auth.RequestAuth{UseConfigToken: true, AccountID: "acc1"}, stdReq, Options{RetryEnabled: true})
+	if outErr == nil || outErr.Code != "upstream_empty_output" {
+		t.Fatalf("expected upstream_empty_output, got result=%#v err=%#v", result, outErr)
+	}
+	if result.Attempts != 1 {
+		t.Fatalf("expected one retry, got %d", result.Attempts)
+	}
+	if ds.avoidCalls != 1 {
+		t.Fatalf("expected one proxy avoid call, got %d", ds.avoidCalls)
+	}
+	if ds.emptyRecords != 1 {
+		t.Fatalf("expected terminal empty output to be recorded once, got %d", ds.emptyRecords)
 	}
 }
 

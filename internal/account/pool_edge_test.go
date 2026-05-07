@@ -76,7 +76,7 @@ func TestPoolStatusFields(t *testing.T) {
 	status := pool.Status()
 
 	// Check all expected fields are present
-	for _, key := range []string{"total", "available", "max_inflight_per_account", "recommended_concurrency", "available_accounts", "in_use_accounts", "waiting", "max_queue_size", "rpm", "total_requests"} {
+	for _, key := range []string{"total", "available", "usable_accounts", "max_inflight_per_account", "recommended_concurrency", "available_accounts", "in_use_accounts", "waiting", "cooling_down", "cooling_down_accounts_total", "max_queue_size", "rpm", "total_requests"} {
 		if _, ok := status[key]; !ok {
 			t.Fatalf("missing status field: %s", key)
 		}

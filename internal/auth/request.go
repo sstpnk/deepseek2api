@@ -208,6 +208,16 @@ func (r *Resolver) CooldownAccount(a *RequestAuth, reason string) {
 	r.Pool.Cooldown(a.AccountID, reason)
 }
 
+func (r *Resolver) RecordAccountSuccess(a *RequestAuth, reason string) {
+	if a == nil || !a.UseConfigToken || strings.TrimSpace(a.AccountID) == "" {
+		return
+	}
+	if r == nil || r.Pool == nil {
+		return
+	}
+	r.Pool.Success(a.AccountID, reason)
+}
+
 func (r *Resolver) SwitchAccount(ctx context.Context, a *RequestAuth) bool {
 	if !a.UseConfigToken {
 		return false

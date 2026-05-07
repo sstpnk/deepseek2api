@@ -135,6 +135,8 @@
         "quarantineNeverChecked": "Not checked yet",
         "testFailed": "Test failed: {error}",
         "available": "Available",
+        "coolingDown": "Cooling down",
+        "accountPoolFormula": "available {available} + cooling {cooling} = total {total}",
         "inUse": "In use",
         "rpm": "RPM",
         "totalRequests": "Total requests",

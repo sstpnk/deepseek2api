@@ -124,30 +124,41 @@ func ExecuteNonStreamWithRetry(ctx context.Context, ds DeepSeekCaller, a *auth.R
 			CitationLinks:         turn.CitationLinks,
 			ResponseMessageID:     turn.ResponseMessageID,
 		}, buildOptions(stdReq, usagePrompt, opts))
+		if turn.Error == nil {
+			shared.RecordAccountVisibleSuccess(ds, a, "completion_nonstream")
+		}
 
 		retryMax := opts.RetryMaxAttempts
 		if retryMax <= 0 {
 			retryMax = shared.EmptyOutputRetryMaxAttempts()
 		}
 		if !opts.RetryEnabled || !assistantturn.ShouldRetryEmptyOutput(turn, attempts, retryMax) {
+			if isUpstreamEmptyOutputTurn(turn) {
+				shared.RecordAccountEmptyOutput(ds, a, "completion_nonstream")
+			}
 			return NonStreamResult{SessionID: sessionID, Payload: payload, Turn: turn, Attempts: attempts}, turn.Error
 		}
 
 		attempts++
 		config.Logger.Info("[completion_runtime_empty_retry] attempting synthetic retry", "surface", stdReq.Surface, "stream", false, "retry_attempt", attempts, "parent_message_id", turn.ResponseMessageID)
-		retryPow, powErr := ds.GetPow(ctx, a, maxAttempts)
+		retryCtx := shared.AvoidProxyForEmptyOutputRetry(ds, ctx, currentResp, a, "completion_empty_output_retry")
+		retryPow, powErr := ds.GetPow(retryCtx, a, maxAttempts)
 		if powErr != nil {
 			config.Logger.Warn("[completion_runtime_empty_retry] retry PoW fetch failed, falling back to original PoW", "surface", stdReq.Surface, "retry_attempt", attempts, "error", powErr)
 			retryPow = pow
 		}
 		retryPayload := shared.ClonePayloadForEmptyOutputRetry(payload, turn.ResponseMessageID)
-		nextResp, err := ds.CallCompletion(ctx, a, retryPayload, retryPow, maxAttempts)
+		nextResp, err := ds.CallCompletion(retryCtx, a, retryPayload, retryPow, maxAttempts)
 		if err != nil {
 			return NonStreamResult{SessionID: sessionID, Payload: payload, Turn: turn, Attempts: attempts}, &assistantturn.OutputError{Status: http.StatusInternalServerError, Message: "Failed to get completion.", Code: "error"}
 		}
 		usagePrompt = shared.UsagePromptWithEmptyOutputRetry(usagePrompt, attempts)
 		currentResp = nextResp
 	}
+}
+
+func isUpstreamEmptyOutputTurn(turn assistantturn.Turn) bool {
+	return turn.Error != nil && turn.Error.Code == "upstream_empty_output"
 }
 
 func collectAttempt(resp *http.Response, stdReq promptcompat.StandardRequest, usagePrompt string, opts Options) (assistantturn.Turn, *assistantturn.OutputError) {

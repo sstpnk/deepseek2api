@@ -155,13 +155,16 @@ func (p *Pool) StatusWithOptions(opts StatusOptions) map[string]any {
 	inUseAccounts := make([]string, 0, len(p.inUse))
 	availableAccounts := make([]string, 0)
 	availableSlots := 0
+	usableAccounts := 0
 	inUseSlots := 0
 	coolingDown := 0
+	now := time.Now()
 	for _, id := range p.queue {
-		if p.accountOnCooldownLocked(id, time.Now()) {
+		if p.accountOnCooldownLocked(id, now) {
 			coolingDown++
 			continue
 		}
+		usableAccounts++
 		if p.inUse[id] >= p.maxInflightPerAccount {
 			continue
 		}
@@ -185,6 +188,7 @@ func (p *Pool) StatusWithOptions(opts StatusOptions) map[string]any {
 	store := p.store
 	status := map[string]any{
 		"available":                availableSlots,
+		"usable_accounts":          usableAccounts,
 		"in_use":                   inUseSlots,
 		"max_inflight_per_account": p.maxInflightPerAccount,
 		"global_max_inflight":      p.globalMaxInflight,
@@ -203,6 +207,7 @@ func (p *Pool) StatusWithOptions(opts StatusOptions) map[string]any {
 	}
 	totalRequests, rpm := stats.snapshot(time.Now())
 	status["total"] = totalAccounts
+	status["cooling_down_accounts_total"] = coolingDown
 	status["rpm"] = rpm
 	status["total_requests"] = totalRequests
 	return status

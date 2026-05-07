@@ -135,6 +135,8 @@
         "quarantineNeverChecked": "尚未复测",
         "testFailed": "测试失败: {error}",
         "available": "可用",
+        "coolingDown": "冷却中",
+        "accountPoolFormula": "可用 {available} + 冷却中 {cooling} = 全部 {total}",
         "inUse": "正在使用",
         "rpm": "RPM",
         "totalRequests": "累计请求数",
