@@ -30,51 +30,29 @@ func BuildPrefix(salt string, expireAt int64) string {
 	return salt + "_" + strconv.FormatInt(expireAt, 10) + "_"
 }
 
-// SolvePow 搜索 nonce ∈ [0, difficulty) 使得 DeepSeekHashV1(prefix+str(nonce)) == challenge。
-// prefix 预吸收进 state,循环内增量十进制计数 + 预计算按位长填充状态,零分配。
-//
-// 默认使用多核并行搜索（工作线程数 = GOMAXPROCS）。
-// 设置 DS2API_POW_INTERNAL_PARALLEL=0/1 禁用并行,用 N 固定线程数,或 -1 显式全核。
-func SolvePow(ctx context.Context, challengeHex, salt string, expireAt, difficulty int64) (int64, error) {
-	workers := PowInternalParallel()
-	if workers > 1 && difficulty > 100 {
-		return solvePowParallel(ctx, challengeHex, salt, expireAt, difficulty, workers)
-	}
-	return solvePowSerial(ctx, challengeHex, salt, expireAt, difficulty)
+// powPlan holds precomputed values shared across all workers for a single challenge.
+type powPlan struct {
+	t0, t1, t2, t3 uint64       // target hash as 4 uint64
+	tailLen         int
+	paddedStates    [][25]uint64 // index by numLen (1..maxNumLen)
 }
 
-// PowInternalParallel 返回 SolvePow 内部并行度。
-// 0/1 → 串行, -1 → runtime.GOMAXPROCS(0), N → 固定 N 线程。
-// 可由环境变量 DS2API_POW_INTERNAL_PARALLEL 覆盖。
-func PowInternalParallel() int {
-	if raw := strings.TrimSpace(os.Getenv("DS2API_POW_INTERNAL_PARALLEL")); raw != "" {
-		if n, err := strconv.Atoi(raw); err == nil {
-			if n == -1 {
-				return runtime.GOMAXPROCS(0)
-			}
-			if n >= 0 {
-				return n
-			}
-		}
-	}
-	return runtime.GOMAXPROCS(0)
-}
-
-// solvePowSerial 串行搜索实现。
-func solvePowSerial(ctx context.Context, challengeHex, salt string, expireAt, difficulty int64) (int64, error) {
+// buildPowPlan parses the challenge and precomputes the padded states.
+// This is the shared preprocessing step — call once, then pass to all workers.
+func buildPowPlan(challengeHex, salt string, expireAt, difficulty int64) (*powPlan, error) {
 	if len(challengeHex) != 64 {
-		return 0, errors.New("pow: challenge must be 64 hex chars")
+		return nil, errors.New("pow: challenge must be 64 hex chars")
 	}
 	target, err := hex.DecodeString(challengeHex)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	var ta [32]byte
-	copy(ta[:], target)
-	t0 := binary.LittleEndian.Uint64(ta[0:])
-	t1 := binary.LittleEndian.Uint64(ta[8:])
-	t2 := binary.LittleEndian.Uint64(ta[16:])
-	t3 := binary.LittleEndian.Uint64(ta[24:])
+
+	plan := &powPlan{}
+	plan.t0 = binary.LittleEndian.Uint64(target[0:])
+	plan.t1 = binary.LittleEndian.Uint64(target[8:])
+	plan.t2 = binary.LittleEndian.Uint64(target[16:])
+	plan.t3 = binary.LittleEndian.Uint64(target[24:])
 
 	prefix := []byte(BuildPrefix(salt, expireAt))
 	const rate = 136
@@ -87,37 +65,54 @@ func solvePowSerial(ctx context.Context, challengeHex, salt string, expireAt, di
 		keccakF23(&baseState)
 		off += rate
 	}
-	tailLen := len(prefix) - off
+	plan.tailLen = len(prefix) - off
 	var tail [rate]byte
 	copy(tail[:], prefix[off:])
 
-	// max digits needed for the largest nonce
 	maxNumLen := numLenFor(difficulty - 1)
 	if maxNumLen < 1 {
 		maxNumLen = 1
 	}
-	if tailLen+maxNumLen >= rate {
-		return 0, errors.New("pow: prefix tail too long")
+	if plan.tailLen+maxNumLen >= rate {
+		return nil, errors.New("pow: prefix tail too long")
 	}
 
-	// Precompute padded states: one per possible digit length (1..maxNumLen).
-	// Each state has tail + 0x06 at (tailLen+nl) + 0x80 at rate-1 already XORed in.
-	// keccakF23 is NOT run yet — digits are XORed in the hot loop before the permutation.
-	paddedStates := make([][25]uint64, maxNumLen+1) // index by numLen (1..maxNumLen)
+	plan.paddedStates = make([][25]uint64, maxNumLen+1) // index by numLen (1..maxNumLen)
 	for nl := 1; nl <= maxNumLen; nl++ {
 		s := baseState
 		var buf [rate]byte
-		copy(buf[:tailLen], tail[:tailLen])
-		buf[tailLen+nl] = 0x06
+		copy(buf[:plan.tailLen], tail[:plan.tailLen])
+		buf[plan.tailLen+nl] = 0x06
 		buf[rate-1] = 0x80
 		for i := 0; i < rate/8; i++ {
 			s[i] ^= binary.LittleEndian.Uint64(buf[i*8:])
 		}
-		paddedStates[nl] = s
+		plan.paddedStates[nl] = s
+	}
+	return plan, nil
+}
+
+// SolvePow 搜索 nonce ∈ [0, difficulty) 使得 DeepSeekHashV1(prefix+str(nonce)) == challenge。
+// prefix 预吸收进 state,循环内增量十进制计数 + 预计算按位长填充状态,零分配。
+//
+// 默认使用多核并行搜索（工作线程数 = GOMAXPROCS）。
+// 设置 DS2API_POW_INTERNAL_PARALLEL=0/1 禁用并行,用 N 固定线程数,或 -1 显式全核。
+func SolvePow(ctx context.Context, challengeHex, salt string, expireAt, difficulty int64) (int64, error) {
+	plan, err := buildPowPlan(challengeHex, salt, expireAt, difficulty)
+	if err != nil {
+		return 0, err
 	}
 
+	workers := PowInternalParallel()
+	if workers > 1 && difficulty > 100 {
+		return solvePowParallel(ctx, plan, difficulty, workers)
+	}
+	return solvePowSerial(ctx, plan, difficulty)
+}
+
+// solvePowSerial performs a sequential nonce search using the precomputed plan.
+func solvePowSerial(ctx context.Context, plan *powPlan, difficulty int64) (int64, error) {
 	// Incremental decimal counter — avoids division in the hot loop.
-	// digits[numStart:] holds the current decimal string.
 	var digits [20]byte
 	digits[19] = '0'
 	numStart := 19
@@ -130,11 +125,11 @@ func solvePowSerial(ctx context.Context, challengeHex, salt string, expireAt, di
 			}
 		}
 
-		s := paddedStates[numLen]
-		xorDigitsIntoState(&s, digits[numStart:numStart+numLen], tailLen)
+		s := plan.paddedStates[numLen]
+		xorDigitsIntoState(&s, digits[numStart:numStart+numLen], plan.tailLen)
 		keccakF23(&s)
 
-		if s[0] == t0 && s[1] == t1 && s[2] == t2 && s[3] == t3 {
+		if s[0] == plan.t0 && s[1] == plan.t1 && s[2] == plan.t2 && s[3] == plan.t3 {
 			return n, nil
 		}
 
@@ -157,6 +152,23 @@ func solvePowSerial(ctx context.Context, challengeHex, salt string, expireAt, di
 	return 0, errors.New("pow: no solution within difficulty")
 }
 
+// PowInternalParallel 返回 SolvePow 内部并行度。
+// 0/1 → 串行, -1 → runtime.GOMAXPROCS(0), N → 固定 N 线程。
+// 可由环境变量 DS2API_POW_INTERNAL_PARALLEL 覆盖。
+func PowInternalParallel() int {
+	if raw := strings.TrimSpace(os.Getenv("DS2API_POW_INTERNAL_PARALLEL")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil {
+			if n == -1 {
+				return runtime.GOMAXPROCS(0)
+			}
+			if n >= 0 {
+				return n
+			}
+		}
+	}
+	return runtime.GOMAXPROCS(0)
+}
+
 // setDigitsTo sets digits[numStart:] to the decimal representation of v.
 // Returns (numStart, numLen).
 func setDigitsTo(digits *[20]byte, v int64) (numStart, numLen int) {
@@ -174,7 +186,7 @@ func setDigitsTo(digits *[20]byte, v int64) (numStart, numLen int) {
 }
 
 // solvePowParallel splits the difficulty range across workers goroutines.
-func solvePowParallel(ctx context.Context, challengeHex, salt string, expireAt, difficulty int64, workers int) (int64, error) {
+func solvePowParallel(ctx context.Context, plan *powPlan, difficulty int64, workers int) (int64, error) {
 	if workers < 2 {
 		workers = 2
 	}
@@ -202,7 +214,7 @@ func solvePowParallel(ctx context.Context, challengeHex, salt string, expireAt, 
 		wg.Add(1)
 		go func(start, end int64) {
 			defer wg.Done()
-			if ans, ok := searchRange(searchCtx, challengeHex, salt, expireAt, start, end); ok {
+			if ans, ok := searchRange(searchCtx, plan, start, end); ok {
 				select {
 				case resultCh <- ans:
 				default:
@@ -221,56 +233,8 @@ func solvePowParallel(ctx context.Context, challengeHex, salt string, expireAt, 
 	return 0, errors.New("pow: no solution within difficulty")
 }
 
-// searchRange searches for a matching nonce in [start, end) using the precomputed
-// state approach. Returns (answer, true) on match, (0, false) otherwise.
-func searchRange(ctx context.Context, challengeHex, salt string, expireAt int64, start, end int64) (int64, bool) {
-	target, err := hex.DecodeString(challengeHex)
-	if err != nil {
-		return 0, false
-	}
-	var ta [32]byte
-	copy(ta[:], target)
-	t0 := binary.LittleEndian.Uint64(ta[0:])
-	t1 := binary.LittleEndian.Uint64(ta[8:])
-	t2 := binary.LittleEndian.Uint64(ta[16:])
-	t3 := binary.LittleEndian.Uint64(ta[24:])
-
-	prefix := []byte(BuildPrefix(salt, expireAt))
-	const rate = 136
-	var baseState [25]uint64
-	off := 0
-	for off+rate <= len(prefix) {
-		for i := 0; i < rate/8; i++ {
-			baseState[i] ^= binary.LittleEndian.Uint64(prefix[off+i*8:])
-		}
-		keccakF23(&baseState)
-		off += rate
-	}
-	tailLen := len(prefix) - off
-	var tail [rate]byte
-	copy(tail[:], prefix[off:])
-
-	maxNumLen := numLenFor(end - 1)
-	if maxNumLen < 1 {
-		maxNumLen = 1
-	}
-	if tailLen+maxNumLen >= rate {
-		return 0, false
-	}
-
-	paddedStates := make([][25]uint64, maxNumLen+1) // index by numLen (1..maxNumLen)
-	for nl := 1; nl <= maxNumLen; nl++ {
-		s := baseState
-		var buf [rate]byte
-		copy(buf[:tailLen], tail[:tailLen])
-		buf[tailLen+nl] = 0x06
-		buf[rate-1] = 0x80
-		for i := 0; i < rate/8; i++ {
-			s[i] ^= binary.LittleEndian.Uint64(buf[i*8:])
-		}
-		paddedStates[nl] = s
-	}
-
+// searchRange searches for a matching nonce in [start, end) using the precomputed plan.
+func searchRange(ctx context.Context, plan *powPlan, start, end int64) (int64, bool) {
 	var digits [20]byte
 	numStart, numLen := setDigitsTo(&digits, start)
 
@@ -281,11 +245,11 @@ func searchRange(ctx context.Context, challengeHex, salt string, expireAt int64,
 		default:
 		}
 
-		s := paddedStates[numLen]
-		xorDigitsIntoState(&s, digits[numStart:numStart+numLen], tailLen)
+		s := plan.paddedStates[numLen]
+		xorDigitsIntoState(&s, digits[numStart:numStart+numLen], plan.tailLen)
 		keccakF23(&s)
 
-		if s[0] == t0 && s[1] == t1 && s[2] == t2 && s[3] == t3 {
+		if s[0] == plan.t0 && s[1] == plan.t1 && s[2] == plan.t2 && s[3] == plan.t3 {
 			return n, true
 		}
 
