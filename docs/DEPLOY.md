@@ -296,7 +296,10 @@ VERCEL_TEAM_ID=team_xxxxxxxxxxxx   # 个人账号可留空
 | `DS2API_ACCOUNT_MAX_QUEUE` | 等待队列上限 | `recommended_concurrency` |
 | `DS2API_GLOBAL_MAX_INFLIGHT` | 全局并发上限 | `recommended_concurrency` |
 | `DS2API_POW_MAX_CONCURRENCY` | 本机同时执行 DeepSeek PoW 求解的外部并发上限，用于避免 CPU 被 PoW 打满 | `min(max(GOMAXPROCS/2, 1), 4)` |
-| `DS2API_POW_INTERNAL_PARALLEL` | 单个 PoW 求解的**内部**并行工作线程数：`0`/`1`=串行，`N`=固定 N 线程，`-1`=全核（默认值）。当内部并行 ≥ 2 时，外部并发自动降为 1 防止过度订阅 | `GOMAXPROCS` |
+| `DS2API_POW_INTERNAL_PARALLEL` | 单个 PoW 求解的**内部**并行工作线程数：`0`/`1`=串行，`N`=固定 N 线程，`-1`=全核（默认值） | `GOMAXPROCS` |
+| `DS2API_POW_MODE` | PoW 并发策略模式：`latency`=内部全核+外部串行（低延迟），`throughput`=内部串行+外部并发（高吞吐），`balanced`=内部≤4+外部配置值 | `latency` |
+| `DS2API_POW_BACKEND` | keccak 后端选择：`auto`/`generic`/`avx512`/`neon`/`purego`。默认 `auto` 自动检测。`avx512` 为实验特性需显式指定 | `auto` |
+| `DS2API_POW_BACKEND_STRICT` | 设为 `1` 时，后端自测失败直接退出进程而非静默回退 | 关闭 |
 | `DS2API_ENV_WRITEBACK` | 检测到 `DS2API_CONFIG_JSON` 时自动写入 `DS2API_CONFIG_PATH`，并在成功后转为文件模式（`1/true/yes/on`） | 关闭 |
 | `DS2API_VERCEL_INTERNAL_SECRET` | 混合流式内部鉴权 | 回退用 `DS2API_ADMIN_KEY` |
 | `DS2API_VERCEL_STREAM_LEASE_TTL_SECONDS` | 流式 lease TTL | `900` |

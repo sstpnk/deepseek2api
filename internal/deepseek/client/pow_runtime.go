@@ -240,20 +240,19 @@ func (r *powRuntime) maxConcurrency() int {
 	}
 	internal := pow.PowInternalParallel()
 
+	// Apply mode-specific caps
 	switch mode {
 	case "throughput":
-		// Disable internal parallelism for max external concurrency
 		internal = 1
 	case "balanced":
-		// Cap internal at 4 workers
 		if internal > 4 {
 			internal = 4
 		}
 	case "latency":
 		fallthrough
 	default:
-		// Default: internal uses all cores, external capped at 1
 		if internal >= 2 {
+			// External concurrency capped at 1 to avoid oversubscription
 			return 1
 		}
 	}
@@ -267,4 +266,18 @@ func (r *powRuntime) maxConcurrency() int {
 		return config.DefaultPowMaxConcurrency()
 	}
 	return n
+}
+
+// PowModeEffective returns the active concurrency mode name.
+func PowModeEffective() string {
+	mode := strings.TrimSpace(os.Getenv("DS2API_POW_MODE"))
+	if mode == "" {
+		return "latency"
+	}
+	return mode
+}
+
+// PowExternalConcurrencyEffective returns the actual external semaphore cap.
+func PowExternalConcurrencyEffective() int {
+	return (&powRuntime{}).maxConcurrency()
 }
