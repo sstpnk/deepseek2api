@@ -91,7 +91,7 @@ flowchart LR
             Auth["Auth Resolver\n(API key / bearer / x-goog-api-key)"]
             Pool["Account Pool + Queue\n(并发槽位 + 等待队列)"]
             DSClient["DeepSeek Client\n(Session / Auth / Completion / Files)"]
-            Pow["PoW 实现\n(纯 Go)"]
+            Pow["PoW 实现\n(纯 Go + NEON 加速)"]
             Tool["Tool Sieve\n(Go/Node 语义对齐)"]
             History["Current Input File\n(DS2API_HISTORY.txt)"]
         end
@@ -137,7 +137,7 @@ flowchart LR
 | 统一 CORS 兼容 | `/v1/*`、`/anthropic/*`、`/v1beta/models/*`、`/admin/*` 统一走同一套 CORS 策略；Vercel 上 `/v1/chat/completions` 的 Node Runtime 也对齐相同放行规则，尽量减少第三方预检请求头限制 |
 | 多账号轮询 | 自动 token 刷新、邮箱/手机号双登录方式 |
 | 并发队列控制 | 每账号 in-flight 上限 + 等待队列，动态计算建议并发值 |
-| DeepSeek PoW | 纯 Go 高性能实现（DeepSeekHashV1），毫秒级响应 |
+| DeepSeek PoW | 纯 Go 高性能实现（DeepSeekHashV1），自适应多核并行，arm64 NEON 加速，毫秒级响应 |
 | Tool Calling | 防泄漏处理：非代码块高置信特征识别、`delta.tool_calls` 早发、结构化增量输出 |
 | Admin API | 配置管理、运行时设置热更新、代理管理、账号测试 / 批量测试、会话清理、导入导出、Vercel 同步、版本检查 |
 | WebUI 管理台 | `/admin` 单页应用（中英文双语、深色模式，支持查看服务器端对话记录） |
