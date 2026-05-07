@@ -2,6 +2,22 @@
 
 #include "textflag.h"
 
+// keccakF23ARM64 — ARM64 NEON Keccak-f[1600] rounds 1..23 (DeepSeekHashV1).
+//
+// Implementation notes:
+//   - Theta (θ): scalar EOR chain with ROR $63 (≡ ROL $1), results in GP registers.
+//   - Rho (ρ) + Pi (π): 25 scalar lane rotations with hardcoded offsets,
+//     stored to b[] scratch at 200(RSP).
+//   - Chi (χ): BIC (bit-clear = ANDN) for each lane → 2 instructions per lane
+//     (BIC + EOR) vs 3 scalar. ARM64 has 31 GP registers — ample headroom.
+//   - Iota (ι): EOR round constant from precomputed table.
+//   - DeepSeekHashV1 skips standard Keccak round 0 — only rounds 1..23 run.
+//   - 23-round loop with ADD/CMP/BLT.
+//
+// Registers (callee-saved saved/restored):
+//   R19(round counter), R20(RC table base), R21-R25(d0..d4)
+// Stack frame: 456 bytes (200 state + 200 b[] + 56 saved regs)
+
 // RC constants for rounds 1..23.
 DATA rc<>+0(SB)/8, $0x0000000000008082
 DATA rc<>+8(SB)/8, $0x800000000000808A

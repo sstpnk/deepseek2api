@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -233,11 +234,31 @@ func (r *powRuntime) semaphore() chan struct{} {
 }
 
 func (r *powRuntime) maxConcurrency() int {
-	// When SolvePow uses internal parallelism, cap external semaphore at 1
-	// to prevent M concurrent requests × N workers from oversubscribing CPU.
-	if pow.PowInternalParallel() >= 2 {
-		return 1
+	mode := strings.TrimSpace(os.Getenv("DS2API_POW_MODE"))
+	if mode == "" {
+		mode = "latency"
 	}
+	internal := pow.PowInternalParallel()
+
+	switch mode {
+	case "throughput":
+		// Disable internal parallelism for max external concurrency
+		internal = 1
+	case "balanced":
+		// Cap internal at 4 workers
+		if internal > 4 {
+			internal = 4
+		}
+	case "latency":
+		fallthrough
+	default:
+		// Default: internal uses all cores, external capped at 1
+		if internal >= 2 {
+			return 1
+		}
+	}
+	_ = internal
+
 	if r == nil || r.store == nil {
 		return config.DefaultPowMaxConcurrency()
 	}
