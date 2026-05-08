@@ -2,12 +2,21 @@
 
 #include "textflag.h"
 
-// Probe A4: imm8=0xA4 → should compute a^(~b&c)
+// Probe A4: imm8=0xA4
 TEXT ·vpternlogProbe(SB), NOSPLIT, $0-32
     MOVQ a+0(FP), AX; VMOVQ AX, X0
     MOVQ b+8(FP), BX; VMOVQ BX, X1
     MOVQ c+16(FP), CX; VMOVQ CX, X2
     VPTERNLOGQ $0xA4, Z2, Z1, Z0
+    VMOVQ X0, AX; MOVQ AX, ret+24(FP)
+    RET
+
+// Probe E2: imm8=0xE2 — correct for Go asm's (a<<2)|(b<<1)|c ordering
+TEXT ·vpternlogProbeE2(SB), NOSPLIT, $0-32
+    MOVQ a+0(FP), AX; VMOVQ AX, X0
+    MOVQ b+8(FP), BX; VMOVQ BX, X1
+    MOVQ c+16(FP), CX; VMOVQ CX, X2
+    VPTERNLOGQ $0xE2, Z2, Z1, Z0
     VMOVQ X0, AX; MOVQ AX, ret+24(FP)
     RET
 TEXT ·vpternlogProbe00(SB), NOSPLIT, $0-32
