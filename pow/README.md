@@ -52,7 +52,7 @@ keccakF23 在以下平台有专用实现：
 | 平台 | 实现 | 状态 |
 |------|------|------|
 | amd64 (通用) | 纯 Go（编译器展开 + 寄存器分配） | 生产可用 |
-| amd64 AVX-512F/VL | SIMD 汇编（VPTERNLOGQ Chi） | **实验** — 需显式 `DS2API_POW_BACKEND=avx512` 启用 |
+| amd64 AVX-512F/VL | 手写汇编（标量 ANDN Chi，寄存器优化） | 生产可用，自动检测启用 |
 | arm64 NEON | SIMD 汇编（BIC Chi） | 已实现，需 N1 实测 |
 
 ## AVX-512 调试
