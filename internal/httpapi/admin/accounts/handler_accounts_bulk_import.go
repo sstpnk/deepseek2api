@@ -126,11 +126,15 @@ func (h *Handler) bulkImportAccounts(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			c.Accounts = append(c.Accounts, config.Account{
+			acc := config.Account{
 				Email:    e.Email,
 				Password: e.Password,
 				ProxyID:  proxyID,
-			})
+			}
+			if acc.ProxyID == "" {
+				acc.ProxyID = defaultProxyForNewAccount(c, acc)
+			}
+			c.Accounts = append(c.Accounts, acc)
 			existingEmails[emailKey] = true
 			importedAccounts++
 		}

@@ -48,3 +48,6 @@ func normalizeSettingsConfig(c *config.Config) { adminshared.NormalizeSettingsCo
 func validateSettingsConfig(c config.Config) error {
 	return adminshared.ValidateSettingsConfig(c)
 }
+func proxySwitchStatus(c config.Config) map[string]any {
+	return adminshared.ProxySwitchStatus(c)
+}

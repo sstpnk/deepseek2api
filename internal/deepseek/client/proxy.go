@@ -135,6 +135,7 @@ func proxyCacheKey(proxyCfg config.Proxy) string {
 		strconv.Itoa(proxyCfg.Port),
 		proxyCfg.Username,
 		proxyCfg.Password,
+		strings.ToLower(proxyCfg.WorkerHost),
 	}, "|")
 }
 
@@ -273,10 +274,10 @@ func (c *Client) requestClientsForAccountWithAvoid(acc config.Account, avoid map
 	}
 
 	bundle := requestClients{
-		regular:   trans.NewWithDialContext(60*time.Second, dialContext),
-		stream:    trans.NewWithDialContext(0, dialContext),
-		fallback:  trans.NewFallbackClient(0, dialContext),
-		proxyID:   proxyCfg.ID,
+		regular:  trans.NewWithDialContext(60*time.Second, dialContext),
+		stream:   trans.NewWithDialContext(0, dialContext),
+		fallback: trans.NewFallbackClient(0, dialContext),
+		proxyID:  proxyCfg.ID,
 	}
 
 	c.proxyClientsMu.Lock()
@@ -325,6 +326,36 @@ func TestProxyConnectivity(ctx context.Context, proxyCfg config.Proxy) map[strin
 
 	if err := config.ValidateProxyConfig([]config.Proxy{proxyCfg}); err != nil {
 		result["message"] = "代理配置无效: " + err.Error()
+		return result
+	}
+	if proxyCfg.Type == "cloudflare" {
+		targetHost := strings.TrimSpace(proxyCfg.WorkerHost)
+		if targetHost == "" {
+			targetHost = strings.TrimSpace(proxyCfg.Host)
+		}
+		if targetHost == "" {
+			result["message"] = "代理配置无效: cloudflare worker_host cannot be empty"
+			return result
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+targetHost+"/", nil)
+		if err != nil {
+			result["message"] = err.Error()
+			return result
+		}
+		applyProxyConnectivityHeaders(req)
+		resp, err := trans.NewFallbackClient(15*time.Second, nil).Do(req)
+		result["response_time"] = int(time.Since(start).Milliseconds())
+		if err != nil {
+			result["message"] = err.Error()
+			return result
+		}
+		defer func() {
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				config.Logger.Warn("[proxy] close response body failed", "proxy_id", proxyCfg.ID, "error", closeErr)
+			}
+		}()
+		result["status_code"] = resp.StatusCode
+		result["success"], result["message"] = proxyConnectivityStatus(resp.StatusCode)
 		return result
 	}
 	dialContext, err := proxyDialContext(proxyCfg)

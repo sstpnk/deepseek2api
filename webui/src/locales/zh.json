@@ -252,7 +252,20 @@
     "testFailedShort": "测试失败",
     "totalProxies": "代理总数",
     "socks5hCount": "socks5h 节点",
-    "authProxyCount": "带认证节点"
+    "authProxyCount": "带认证节点",
+    "switchTitle": "Resin / CF 快速切换",
+    "switchModeResin": "Resin 模式",
+    "switchModeCloudflare": "CF 模式",
+    "switchDescResin": "当前账号使用各自保存的 Resin 代理；新增账号会自动按 Resin 模板创建并绑定独立代理。",
+    "switchDescCloudflare": "当前账号统一使用 Cloudflare Worker 出口；切回 Resin 会恢复切换前的绑定，新增账号会生成新的 Resin 代理。",
+    "switchAccountStats": "CF 绑定 {cf}/{total}",
+    "switchSnapshotStats": "已保存 Resin 绑定 {count}",
+    "switchToCloudflare": "切换到 CF",
+    "switchToResin": "切回 Resin",
+    "switching": "切换中...",
+    "switchNoCloudflare": "还没有可用的 Cloudflare 代理，请先在 CF Worker 页面部署成功。",
+    "switchConfirm": "确认切换到 {mode}？当前账号代理绑定会被保存并更新。",
+    "switchSuccess": "已切换到 {mode}"
   },
   "apiTester": {
     "defaultMessage": "你好，请用一句话介绍你自己。",

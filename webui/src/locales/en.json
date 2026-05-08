@@ -252,7 +252,20 @@
     "testFailedShort": "Test failed",
     "totalProxies": "Total proxies",
     "socks5hCount": "socks5h nodes",
-    "authProxyCount": "Authenticated nodes"
+    "authProxyCount": "Authenticated nodes",
+    "switchTitle": "Resin / CF quick switch",
+    "switchModeResin": "Resin mode",
+    "switchModeCloudflare": "CF mode",
+    "switchDescResin": "Accounts are using their saved Resin proxies. New accounts will create and bind dedicated Resin proxies from the saved template.",
+    "switchDescCloudflare": "Accounts are using the Cloudflare Worker egress. Switching back restores saved Resin bindings; accounts added during CF mode get new Resin proxies.",
+    "switchAccountStats": "CF bound {cf}/{total}",
+    "switchSnapshotStats": "Saved Resin bindings {count}",
+    "switchToCloudflare": "Switch to CF",
+    "switchToResin": "Switch to Resin",
+    "switching": "Switching...",
+    "switchNoCloudflare": "No Cloudflare proxy is available yet. Deploy CF Worker first.",
+    "switchConfirm": "Switch to {mode}? Current account proxy bindings will be saved and updated.",
+    "switchSuccess": "Switched to {mode}"
   },
   "apiTester": {
     "defaultMessage": "Hello, please introduce yourself in one sentence.",

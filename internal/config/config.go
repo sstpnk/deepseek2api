@@ -19,6 +19,7 @@ type Config struct {
 	Responses         ResponsesConfig         `json:"responses,omitempty"`
 	Embeddings        EmbeddingsConfig        `json:"embeddings,omitempty"`
 	AutoDelete        AutoDeleteConfig        `json:"auto_delete"`
+	ProxySwitch       ProxySwitchConfig       `json:"proxy_switch,omitempty"`
 	CurrentInputFile  CurrentInputFileConfig  `json:"current_input_file,omitempty"`
 	ThinkingInjection ThinkingInjectionConfig `json:"thinking_injection,omitempty"`
 	Vercel            VercelConfig            `json:"vercel,omitempty"`
@@ -70,6 +71,13 @@ type Proxy struct {
 	Username   string `json:"username,omitempty"`
 	Password   string `json:"password,omitempty"`
 	WorkerHost string `json:"worker_host,omitempty"` // CF Worker subdomain (type=cloudflare)
+}
+
+type ProxySwitchConfig struct {
+	Mode               string            `json:"mode,omitempty"`
+	CFProxyID          string            `json:"cf_proxy_id,omitempty"`
+	ResinAssignments   map[string]string `json:"resin_assignments,omitempty"`
+	ResinProxyTemplate Proxy             `json:"resin_proxy_template,omitempty"`
 }
 
 func NormalizeProxy(p Proxy) Proxy {

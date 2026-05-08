@@ -10,6 +10,7 @@ import (
 func (h *Handler) getConfig(w http.ResponseWriter, _ *http.Request) {
 	accountCount := h.Store.RuntimeAccountCount()
 	vercelConfig := h.Store.VercelConfig()
+	snap := h.Store.Snapshot()
 	safe := map[string]any{
 		"keys":                  h.Store.Keys(),
 		"api_keys":              h.Store.APIKeys(),
@@ -21,6 +22,7 @@ func (h *Handler) getConfig(w http.ResponseWriter, _ *http.Request) {
 		"env_writeback_enabled": h.Store.IsEnvWritebackEnabled(),
 		"config_path":           h.Store.ConfigPath(),
 		"model_aliases":         h.Store.ConfiguredModelAliases(),
+		"proxy_switch_status":   proxySwitchStatus(snap),
 		"vercel": map[string]any{
 			"has_token":     strings.TrimSpace(vercelConfig.Token) != "",
 			"token_preview": maskSecretPreview(vercelConfig.Token),
@@ -58,6 +60,7 @@ func (h *Handler) getConfig(w http.ResponseWriter, _ *http.Request) {
 			"host":         proxy.Host,
 			"port":         proxy.Port,
 			"username":     proxy.Username,
+			"worker_host":  proxy.WorkerHost,
 			"has_password": strings.TrimSpace(proxy.Password) != "",
 		})
 	}

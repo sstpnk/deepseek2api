@@ -64,6 +64,9 @@ func ToProxy(m map[string]any) config.Proxy {
 func FindProxyByID(c config.Config, proxyID string) (config.Proxy, bool) {
 	return findProxyByID(c, proxyID)
 }
+func DefaultProxyForNewAccount(c *config.Config, acc config.Account) string {
+	return defaultProxyForNewAccount(c, acc)
+}
 func AccountDedupeKey(acc config.Account) string { return accountDedupeKey(acc) }
 func NormalizeAndDedupeAccounts(accounts []config.Account) []config.Account {
 	return normalizeAndDedupeAccounts(accounts)
@@ -329,13 +332,14 @@ func normalizeAccountForStorage(acc config.Account) config.Account {
 
 func toProxy(m map[string]any) config.Proxy {
 	return config.NormalizeProxy(config.Proxy{
-		ID:       fieldString(m, "id"),
-		Name:     fieldString(m, "name"),
-		Type:     fieldString(m, "type"),
-		Host:     fieldString(m, "host"),
-		Port:     intFrom(m["port"]),
-		Username: fieldString(m, "username"),
-		Password: fieldString(m, "password"),
+		ID:         fieldString(m, "id"),
+		Name:       fieldString(m, "name"),
+		Type:       fieldString(m, "type"),
+		Host:       fieldString(m, "host"),
+		Port:       intFrom(m["port"]),
+		Username:   fieldString(m, "username"),
+		Password:   fieldString(m, "password"),
+		WorkerHost: fieldString(m, "worker_host"),
 	})
 }
 
@@ -351,6 +355,158 @@ func findProxyByID(c config.Config, proxyID string) (config.Proxy, bool) {
 		}
 	}
 	return config.Proxy{}, false
+}
+
+func defaultProxyForNewAccount(c *config.Config, acc config.Account) string {
+	if c == nil || strings.TrimSpace(acc.ProxyID) != "" {
+		return strings.TrimSpace(acc.ProxyID)
+	}
+	switch strings.TrimSpace(c.ProxySwitch.Mode) {
+	case "cloudflare":
+		if proxy, ok := resolveCloudflareProxy(*c, c.ProxySwitch.CFProxyID); ok {
+			return proxy.ID
+		}
+	case "resin":
+		return ensureResinProxyForAccount(c, acc)
+	}
+	return ""
+}
+
+func EnsureResinProxyForAccount(c *config.Config, acc config.Account) string {
+	return ensureResinProxyForAccount(c, acc)
+}
+
+func ResinTemplateReady(proxy config.Proxy) bool {
+	return resinTemplateReady(proxy)
+}
+
+func ResolveCloudflareProxy(c config.Config, requestedID string) (config.Proxy, bool) {
+	return resolveCloudflareProxy(c, requestedID)
+}
+func ProxySwitchStatus(c config.Config) map[string]any {
+	cfProxy, hasCF := resolveCloudflareProxy(c, c.ProxySwitch.CFProxyID)
+	mode := strings.TrimSpace(c.ProxySwitch.Mode)
+	if mode == "" {
+		mode = "resin"
+		if hasCF && len(c.Accounts) > 0 {
+			cfBound := 0
+			for _, acc := range c.Accounts {
+				if strings.TrimSpace(acc.ProxyID) == cfProxy.ID {
+					cfBound++
+				}
+			}
+			if cfBound == len(c.Accounts) {
+				mode = "cloudflare"
+			}
+		}
+	}
+	status := map[string]any{
+		"mode":                 mode,
+		"cf_proxy_available":   hasCF,
+		"account_total":        len(c.Accounts),
+		"resin_snapshot_count": len(c.ProxySwitch.ResinAssignments),
+		"resin_template_ready": resinTemplateReady(c.ProxySwitch.ResinProxyTemplate),
+	}
+	if hasCF {
+		status["cf_proxy_id"] = cfProxy.ID
+		status["cf_proxy_name"] = cfProxy.Name
+		status["cf_proxy_host"] = firstNonEmpty(cfProxy.WorkerHost, cfProxy.Host)
+		cfBound := 0
+		for _, acc := range c.Accounts {
+			if strings.TrimSpace(acc.ProxyID) == cfProxy.ID {
+				cfBound++
+			}
+		}
+		status["cloudflare_bound"] = cfBound
+	} else {
+		status["cloudflare_bound"] = 0
+	}
+	tpl := config.NormalizeProxy(c.ProxySwitch.ResinProxyTemplate)
+	if resinTemplateReady(tpl) {
+		status["resin_template_name"] = tpl.Name
+		status["resin_template_host"] = tpl.Host
+		status["resin_template_port"] = tpl.Port
+		status["resin_template_type"] = tpl.Type
+		status["resin_template_username"] = tpl.Username
+	}
+	return status
+}
+
+func ensureResinProxyForAccount(c *config.Config, acc config.Account) string {
+	if c == nil || !resinTemplateReady(c.ProxySwitch.ResinProxyTemplate) {
+		return ""
+	}
+	local := accountProxyLocalPart(acc)
+	if local == "" {
+		return ""
+	}
+	tpl := config.NormalizeProxy(c.ProxySwitch.ResinProxyTemplate)
+	proxy := config.NormalizeProxy(config.Proxy{
+		Name:     applyProxyTemplate(firstNonEmpty(tpl.Name, "resin-{local}"), local),
+		Type:     firstNonEmpty(tpl.Type, "socks5"),
+		Host:     tpl.Host,
+		Port:     tpl.Port,
+		Username: applyProxyTemplate(tpl.Username, local),
+		Password: tpl.Password,
+	})
+	for _, existing := range c.Proxies {
+		existing = config.NormalizeProxy(existing)
+		if existing.ID == proxy.ID || (existing.Name != "" && existing.Name == proxy.Name) {
+			return existing.ID
+		}
+	}
+	c.Proxies = append(c.Proxies, proxy)
+	return proxy.ID
+}
+
+func resolveCloudflareProxy(c config.Config, requestedID string) (config.Proxy, bool) {
+	requestedID = strings.TrimSpace(requestedID)
+	if requestedID != "" {
+		for _, proxy := range c.Proxies {
+			proxy = config.NormalizeProxy(proxy)
+			if proxy.ID == requestedID && proxy.Type == "cloudflare" {
+				return proxy, true
+			}
+		}
+	}
+	for _, proxy := range c.Proxies {
+		proxy = config.NormalizeProxy(proxy)
+		if proxy.Type == "cloudflare" {
+			return proxy, true
+		}
+	}
+	return config.Proxy{}, false
+}
+
+func resinTemplateReady(proxy config.Proxy) bool {
+	proxy = config.NormalizeProxy(proxy)
+	return proxy.Host != "" && proxy.Port > 0 && (proxy.Type == "socks5" || proxy.Type == "socks5h")
+}
+
+func accountProxyLocalPart(acc config.Account) string {
+	if email := strings.TrimSpace(acc.Email); email != "" {
+		if idx := strings.Index(email, "@"); idx > 0 {
+			return strings.TrimSpace(email[:idx])
+		}
+		return email
+	}
+	return strings.TrimPrefix(config.CanonicalMobileKey(acc.Mobile), "+")
+}
+
+func applyProxyTemplate(tpl, local string) string {
+	if strings.TrimSpace(tpl) == "" {
+		return ""
+	}
+	return strings.ReplaceAll(strings.TrimSpace(tpl), "{local}", local)
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func accountDedupeKey(acc config.Account) string {

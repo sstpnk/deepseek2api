@@ -45,6 +45,9 @@ func (c Config) MarshalJSON() ([]byte, error) {
 		m["embeddings"] = c.Embeddings
 	}
 	m["auto_delete"] = c.AutoDelete
+	if c.ProxySwitch.Mode != "" || c.ProxySwitch.CFProxyID != "" || len(c.ProxySwitch.ResinAssignments) > 0 || strings.TrimSpace(c.ProxySwitch.ResinProxyTemplate.Host) != "" {
+		m["proxy_switch"] = c.ProxySwitch
+	}
 	if c.CurrentInputFile.Enabled != nil || c.CurrentInputFile.MinCharsSet || c.CurrentInputFile.MinChars != 0 {
 		m["current_input_file"] = c.CurrentInputFile
 	}
@@ -123,6 +126,10 @@ func (c *Config) UnmarshalJSON(b []byte) error {
 			}
 		case "auto_delete":
 			if err := json.Unmarshal(v, &c.AutoDelete); err != nil {
+				return fmt.Errorf("invalid field %q: %w", k, err)
+			}
+		case "proxy_switch":
+			if err := json.Unmarshal(v, &c.ProxySwitch); err != nil {
 				return fmt.Errorf("invalid field %q: %w", k, err)
 			}
 		case "history_split":
@@ -207,6 +214,12 @@ func (c Config) Clone() Config {
 		Responses:    c.Responses,
 		Embeddings:   c.Embeddings,
 		AutoDelete:   c.AutoDelete,
+		ProxySwitch: ProxySwitchConfig{
+			Mode:               c.ProxySwitch.Mode,
+			CFProxyID:          c.ProxySwitch.CFProxyID,
+			ResinAssignments:   cloneStringMap(c.ProxySwitch.ResinAssignments),
+			ResinProxyTemplate: c.ProxySwitch.ResinProxyTemplate,
+		},
 		CurrentInputFile: CurrentInputFileConfig{
 			Enabled:     cloneBoolPtr(c.CurrentInputFile.Enabled),
 			MinChars:    c.CurrentInputFile.MinChars,

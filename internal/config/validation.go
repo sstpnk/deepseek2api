@@ -24,6 +24,9 @@ func ValidateConfig(c Config) error {
 	if err := ValidateAutoDeleteConfig(c.AutoDelete); err != nil {
 		return err
 	}
+	if err := ValidateProxySwitchConfig(c.ProxySwitch, c.Proxies); err != nil {
+		return err
+	}
 	if err := ValidateCurrentInputFileConfig(c.CurrentInputFile); err != nil {
 		return err
 	}
@@ -41,9 +44,9 @@ func ValidateProxyConfig(proxies []Proxy) error {
 			return err
 		}
 		switch proxy.Type {
-		case "socks5", "socks5h":
+		case "socks5", "socks5h", "cloudflare":
 		default:
-			return fmt.Errorf("proxies.type must be one of socks5, socks5h")
+			return fmt.Errorf("proxies.type must be one of socks5, socks5h, cloudflare")
 		}
 		if err := ValidateTrimmedString("proxies.host", proxy.Host, true); err != nil {
 			return err
@@ -57,6 +60,28 @@ func ValidateProxyConfig(proxies []Proxy) error {
 		seen[proxy.ID] = struct{}{}
 	}
 	return nil
+}
+
+func ValidateProxySwitchConfig(proxySwitch ProxySwitchConfig, proxies []Proxy) error {
+	switch strings.TrimSpace(proxySwitch.Mode) {
+	case "", "resin", "cloudflare":
+	default:
+		return fmt.Errorf("proxy_switch.mode must be one of resin, cloudflare")
+	}
+	cfProxyID := strings.TrimSpace(proxySwitch.CFProxyID)
+	if cfProxyID == "" {
+		return nil
+	}
+	for _, proxy := range proxies {
+		proxy = NormalizeProxy(proxy)
+		if proxy.ID == cfProxyID {
+			if proxy.Type != "cloudflare" {
+				return fmt.Errorf("proxy_switch.cf_proxy_id must reference a cloudflare proxy")
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("proxy_switch.cf_proxy_id references unknown proxy: %s", cfProxyID)
 }
 
 func ValidateAccountProxyReferences(accounts []Account, proxies []Proxy) error {

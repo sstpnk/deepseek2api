@@ -80,7 +80,14 @@ func (h *Handler) addAccount(w http.ResponseWriter, r *http.Request) {
 				return fmt.Errorf("手机号已存在")
 			}
 		}
+		acc.ProxyID = defaultProxyForNewAccount(c, acc)
 		c.Accounts = append(c.Accounts, acc)
+		if err := config.ValidateProxyConfig(c.Proxies); err != nil {
+			return err
+		}
+		if err := config.ValidateAccountProxyReferences(c.Accounts, c.Proxies); err != nil {
+			return err
+		}
 		return nil
 	})
 	if err != nil {

@@ -13,6 +13,7 @@ import (
 
 	"ds2api/internal/account"
 	"ds2api/internal/config"
+	adminshared "ds2api/internal/httpapi/admin/shared"
 )
 
 func newAdminProxyTestHandler(t *testing.T, raw string) *Handler {
@@ -225,5 +226,129 @@ func TestTestProxyUsesStoredProxy(t *testing.T) {
 	}
 	if ok, _ := payload["success"].(bool); !ok {
 		t.Fatalf("expected success payload, got %#v", payload)
+	}
+}
+
+func TestProxySwitchCloudflareThenRestoreResin(t *testing.T) {
+	h := newAdminProxyTestHandler(t, `{
+		"proxies":[
+			{"id":"resin-a","name":"resin-u","type":"socks5","host":"161.118.201.199","port":21345,"username":"Default.u","password":"secret"},
+			{"id":"cf-1","name":"CF Worker","type":"cloudflare","host":"worker.example.workers.dev","port":443,"worker_host":"worker.example.workers.dev"}
+		],
+		"accounts":[{"email":"u@example.com","password":"pwd","proxy_id":"resin-a"}]
+	}`)
+
+	r := chi.NewRouter()
+	r.Post("/admin/proxies/switch", h.switchProxyMode)
+
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/admin/proxies/switch", bytes.NewBufferString(`{"mode":"cloudflare","cf_proxy_id":"cf-1"}`)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("switch to cf status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	snap := h.Store.Snapshot()
+	if snap.ProxySwitch.Mode != "cloudflare" || snap.Accounts[0].ProxyID != "cf-1" {
+		t.Fatalf("expected cloudflare mode and binding, got mode=%q account=%#v", snap.ProxySwitch.Mode, snap.Accounts[0])
+	}
+	if got := snap.ProxySwitch.ResinAssignments["u@example.com"]; got != "resin-a" {
+		t.Fatalf("expected resin snapshot, got %q", got)
+	}
+
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/admin/proxies/switch", bytes.NewBufferString(`{"mode":"resin"}`)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("switch to resin status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	snap = h.Store.Snapshot()
+	if snap.ProxySwitch.Mode != "resin" || snap.Accounts[0].ProxyID != "resin-a" {
+		t.Fatalf("expected resin mode and restored binding, got mode=%q account=%#v", snap.ProxySwitch.Mode, snap.Accounts[0])
+	}
+}
+
+func TestProxySwitchResinCreatesProxyForAccountAddedDuringCloudflareMode(t *testing.T) {
+	h := newAdminProxyTestHandler(t, `{
+		"proxies":[
+			{"id":"resin-a","name":"resin-u","type":"socks5","host":"161.118.201.199","port":21345,"username":"Default.u","password":"secret"},
+			{"id":"cf-1","name":"CF Worker","type":"cloudflare","host":"worker.example.workers.dev","port":443,"worker_host":"worker.example.workers.dev"}
+		],
+		"accounts":[{"email":"u@example.com","password":"pwd","proxy_id":"resin-a"}],
+		"proxy_switch":{
+			"mode":"cloudflare",
+			"cf_proxy_id":"cf-1",
+			"resin_assignments":{"u@example.com":"resin-a"},
+			"resin_proxy_template":{"name":"resin-{local}","type":"socks5","host":"161.118.201.199","port":21345,"username":"Default.{local}","password":"secret"}
+		}
+	}`)
+
+	if err := h.Store.Update(func(c *config.Config) error {
+		c.Accounts = append(c.Accounts, config.Account{Email: "new@example.com", Password: "pwd", ProxyID: "cf-1"})
+		return nil
+	}); err != nil {
+		t.Fatalf("seed new account: %v", err)
+	}
+
+	r := chi.NewRouter()
+	r.Post("/admin/proxies/switch", h.switchProxyMode)
+
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/admin/proxies/switch", bytes.NewBufferString(`{"mode":"resin"}`)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("switch to resin status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	snap := h.Store.Snapshot()
+	var newAcc config.Account
+	for _, acc := range snap.Accounts {
+		if acc.Email == "new@example.com" {
+			newAcc = acc
+		}
+	}
+	if newAcc.ProxyID == "" || newAcc.ProxyID == "cf-1" {
+		t.Fatalf("expected generated resin proxy for new account, got %#v", newAcc)
+	}
+	proxy, ok := adminshared.FindProxyByID(snap, newAcc.ProxyID)
+	if !ok {
+		t.Fatalf("generated proxy not found: %s", newAcc.ProxyID)
+	}
+	if proxy.Name != "resin-new" || proxy.Username != "Default.new" {
+		t.Fatalf("unexpected generated proxy: %#v", proxy)
+	}
+}
+
+func TestProxySwitchCloudflareSnapshotsCurrentResinAssignments(t *testing.T) {
+	h := newAdminProxyTestHandler(t, `{
+		"proxies":[
+			{"id":"resin-a","name":"resin-old","type":"socks5","host":"161.118.201.199","port":21345,"username":"Default.old","password":"secret"},
+			{"id":"resin-b","name":"resin-new","type":"socks5","host":"161.118.201.199","port":21345,"username":"Default.new","password":"secret"},
+			{"id":"cf-1","name":"CF Worker","type":"cloudflare","host":"worker.example.workers.dev","port":443,"worker_host":"worker.example.workers.dev"}
+		],
+		"accounts":[{"email":"u@example.com","password":"pwd","proxy_id":"resin-b"}],
+		"proxy_switch":{
+			"mode":"resin",
+			"cf_proxy_id":"cf-1",
+			"resin_assignments":{"u@example.com":"resin-a"},
+			"resin_proxy_template":{"name":"resin-{local}","type":"socks5","host":"161.118.201.199","port":21345,"username":"Default.{local}","password":"secret"}
+		}
+	}`)
+
+	r := chi.NewRouter()
+	r.Post("/admin/proxies/switch", h.switchProxyMode)
+
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/admin/proxies/switch", bytes.NewBufferString(`{"mode":"cloudflare"}`)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("switch to cf status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	snap := h.Store.Snapshot()
+	if got := snap.ProxySwitch.ResinAssignments["u@example.com"]; got != "resin-b" {
+		t.Fatalf("expected latest resin assignment to be snapshotted, got %q", got)
+	}
+
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/admin/proxies/switch", bytes.NewBufferString(`{"mode":"resin"}`)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("switch to resin status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := h.Store.Snapshot().Accounts[0].ProxyID; got != "resin-b" {
+		t.Fatalf("expected restored latest resin assignment, got %q", got)
 	}
 }

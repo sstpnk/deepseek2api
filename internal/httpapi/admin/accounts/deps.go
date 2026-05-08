@@ -44,6 +44,9 @@ func accountMatchesIdentifier(acc config.Account, identifier string) bool {
 func findProxyByID(c config.Config, proxyID string) (config.Proxy, bool) {
 	return adminshared.FindProxyByID(c, proxyID)
 }
+func defaultProxyForNewAccount(c *config.Config, acc config.Account) string {
+	return adminshared.DefaultProxyForNewAccount(c, acc)
+}
 func findAccountByIdentifier(store adminshared.ConfigStore, identifier string) (config.Account, bool) {
 	return adminshared.FindAccountByIdentifier(store, identifier)
 }

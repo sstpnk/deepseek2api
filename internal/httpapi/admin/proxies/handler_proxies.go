@@ -36,6 +36,7 @@ func proxyResponse(proxy config.Proxy) map[string]any {
 		"host":         proxy.Host,
 		"port":         proxy.Port,
 		"username":     proxy.Username,
+		"worker_host":  proxy.WorkerHost,
 		"has_password": strings.TrimSpace(proxy.Password) != "",
 	}
 }
@@ -52,6 +53,7 @@ func (h *Handler) listProxies(w http.ResponseWriter, _ *http.Request) {
 			"host":         proxy.Host,
 			"port":         proxy.Port,
 			"username":     proxy.Username,
+			"worker_host":  proxy.WorkerHost,
 			"has_password": strings.TrimSpace(proxy.Password) != "",
 		})
 	}
@@ -92,6 +94,9 @@ func (h *Handler) updateProxy(w http.ResponseWriter, r *http.Request) {
 			if proxy.Password == "" {
 				proxy.Password = existing.Password
 			}
+			if proxy.WorkerHost == "" {
+				proxy.WorkerHost = existing.WorkerHost
+			}
 			c.Proxies[i] = proxy
 			return validateProxyMutation(c)
 		}
@@ -126,6 +131,12 @@ func (h *Handler) deleteProxy(w http.ResponseWriter, r *http.Request) {
 			return newRequestError("代理不存在")
 		}
 		c.Proxies = append(c.Proxies[:idx], c.Proxies[idx+1:]...)
+		if strings.TrimSpace(c.ProxySwitch.CFProxyID) == strings.TrimSpace(proxyID) {
+			c.ProxySwitch.CFProxyID = ""
+			if c.ProxySwitch.Mode == "cloudflare" {
+				c.ProxySwitch.Mode = "resin"
+			}
+		}
 		for i := range c.Accounts {
 			if strings.TrimSpace(c.Accounts[i].ProxyID) == strings.TrimSpace(proxyID) {
 				c.Accounts[i].ProxyID = ""

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Pencil, Play, Plus, Shield, Trash2, X } from 'lucide-react'
+import { Cloud, Pencil, Play, Plus, Repeat2, Shield, Trash2, X } from 'lucide-react'
 import clsx from 'clsx'
 
 import { useI18n } from '../../i18n'
@@ -171,6 +171,69 @@ function ProxiesTable({
     )
 }
 
+function ProxySwitchPanel({ t, status, loading, onSwitch }) {
+    const mode = status?.mode || 'resin'
+    const isCloudflare = mode === 'cloudflare'
+    const canSwitchToCloudflare = Boolean(status?.cf_proxy_available)
+    const nextMode = isCloudflare ? 'resin' : 'cloudflare'
+    return (
+        <div className="bg-card border border-border rounded-xl p-5 shadow-sm">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Cloud className="w-4 h-4 text-primary" />
+                        <h2 className="text-base font-semibold">{t('proxyManager.switchTitle')}</h2>
+                        <span className={clsx(
+                            'inline-flex items-center rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide',
+                            isCloudflare
+                                ? 'border-sky-500/20 bg-sky-500/10 text-sky-500'
+                                : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-500'
+                        )}>
+                            {isCloudflare ? t('proxyManager.switchModeCloudflare') : t('proxyManager.switchModeResin')}
+                        </span>
+                    </div>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                        {isCloudflare ? t('proxyManager.switchDescCloudflare') : t('proxyManager.switchDescResin')}
+                    </p>
+                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        {status?.cf_proxy_host && (
+                            <span className="font-mono rounded border border-border bg-muted/30 px-2 py-1">
+                                {status.cf_proxy_host}
+                            </span>
+                        )}
+                        <span className="rounded border border-border bg-muted/20 px-2 py-1">
+                            {t('proxyManager.switchAccountStats', {
+                                cf: status?.cloudflare_bound || 0,
+                                total: status?.account_total || 0,
+                            })}
+                        </span>
+                        <span className="rounded border border-border bg-muted/20 px-2 py-1">
+                            {t('proxyManager.switchSnapshotStats', {
+                                count: status?.resin_snapshot_count || 0,
+                            })}
+                        </span>
+                    </div>
+                </div>
+                <button
+                    onClick={() => onSwitch(nextMode)}
+                    disabled={loading || (!isCloudflare && !canSwitchToCloudflare)}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors text-sm font-medium disabled:opacity-50"
+                >
+                    <Repeat2 className="w-4 h-4" />
+                    {loading
+                        ? t('proxyManager.switching')
+                        : (isCloudflare ? t('proxyManager.switchToResin') : t('proxyManager.switchToCloudflare'))}
+                </button>
+            </div>
+            {!canSwitchToCloudflare && (
+                <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-500">
+                    {t('proxyManager.switchNoCloudflare')}
+                </div>
+            )}
+        </div>
+    )
+}
+
 function ProxyFormModal({
     show,
     t,
@@ -314,10 +377,12 @@ export default function ProxyManagerContainer({ config, onRefresh, onMessage, au
     const [editingProxy, setEditingProxy] = useState(null)
     const [form, setForm] = useState(createEmptyProxyForm())
     const [saving, setSaving] = useState(false)
+    const [switching, setSwitching] = useState(false)
     const [testing, setTesting] = useState({})
     const [testResults, setTestResults] = useState({})
 
     const proxies = config?.proxies || []
+    const switchStatus = config?.proxy_switch_status || {}
 
     const openCreate = () => {
         setEditingProxy(null)
@@ -421,8 +486,41 @@ export default function ProxyManagerContainer({ config, onRefresh, onMessage, au
         }
     }
 
+    const switchProxyMode = async (mode) => {
+        const targetText = mode === 'cloudflare'
+            ? t('proxyManager.switchModeCloudflare')
+            : t('proxyManager.switchModeResin')
+        if (!confirm(t('proxyManager.switchConfirm', { mode: targetText }))) return
+        setSwitching(true)
+        try {
+            const res = await apiFetch('/admin/proxies/switch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode }),
+            })
+            const data = await readApiResponse(res, t('settings.nonJsonResponse', { status: res.status }))
+            if (!res.ok) {
+                onMessage('error', data.detail || t('messages.requestFailed'))
+                return
+            }
+            await onRefresh?.()
+            onMessage('success', t('proxyManager.switchSuccess', { mode: targetText }))
+        } catch (err) {
+            onMessage('error', err?.message || t('messages.networkError'))
+        } finally {
+            setSwitching(false)
+        }
+    }
+
     return (
         <div className="space-y-6">
+            <ProxySwitchPanel
+                t={t}
+                status={switchStatus}
+                loading={switching}
+                onSwitch={switchProxyMode}
+            />
+
             <div className="grid gap-4 md:grid-cols-3">
                 <div className="bg-card border border-border rounded-xl p-5 shadow-sm">
                     <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">{t('proxyManager.totalProxies')}</div>
