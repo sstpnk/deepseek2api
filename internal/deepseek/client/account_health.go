@@ -11,11 +11,11 @@ import (
 )
 
 const (
-	accountEmptyOutputThreshold         = 9999
-	accountEmptyOutputFailureWindow     = 1 * time.Minute
-	accountEmptyOutputRecoverySuccesses = 1
-	accountEmptyOutputGlobalWindow      = 1 * time.Minute
-	accountEmptyOutputGlobalMaxCooldown = 0
+	accountEmptyOutputThreshold         = 3
+	accountEmptyOutputFailureWindow     = 15 * time.Minute
+	accountEmptyOutputRecoverySuccesses = 2
+	accountEmptyOutputGlobalWindow      = 10 * time.Minute
+	accountEmptyOutputGlobalMaxCooldown = 50
 	completionProxyHeader               = "X-Ds2api-Proxy-Id"
 )
 

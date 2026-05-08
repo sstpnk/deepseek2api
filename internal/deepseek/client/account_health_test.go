@@ -53,16 +53,17 @@ func TestRecordAccountEmptyOutputCoolsAfterThreshold(t *testing.T) {
 func TestRecordAccountVisibleSuccessDecaysEmptyOutputPenalty(t *testing.T) {
 	client, pool, requestAuth := newAccountHealthClientForTest(t)
 
-	// 1 failure — not enough to cool
+	// 2 failures — not enough to cool (threshold=3)
+	client.RecordAccountEmptyOutput(requestAuth, "test")
 	client.RecordAccountEmptyOutput(requestAuth, "test")
 	if got := pool.Status()["cooling_down"]; got != 0 {
-		t.Fatalf("expected 1 failure to not cooldown, got %#v", got)
+		t.Fatalf("expected 2 failures to not cooldown, got %#v", got)
 	}
 
-	// 2nd failure → cooldown (new threshold=2)
+	// 3rd failure → cooldown
 	client.RecordAccountEmptyOutput(requestAuth, "test")
 	if got := pool.Status()["cooling_down"]; got != 1 {
-		t.Fatalf("expected 2 failures to cooldown, got %#v", got)
+		t.Fatalf("expected 3 failures to cooldown, got %#v", got)
 	}
 }
 
