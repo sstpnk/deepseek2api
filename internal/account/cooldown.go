@@ -8,9 +8,9 @@ import (
 )
 
 const (
-	accountCooldownInitial      = 30 * time.Minute
+	accountCooldownInitial      = 5 * time.Minute
 	accountCooldownMax          = 6 * time.Hour
-	accountCooldownGrowthFactor = 2
+	accountCooldownGrowthFactor = 3
 	accountCooldownRecoveryHits = 3
 )
 

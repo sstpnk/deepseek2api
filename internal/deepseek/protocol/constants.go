@@ -23,7 +23,6 @@ const (
 )
 
 var defaultStaticBaseHeaders = map[string]string{
-	"Host":           "chat.deepseek.com",
 	"Accept":         "application/json",
 	"Content-Type":   "application/json",
 	"accept-charset": "UTF-8",
