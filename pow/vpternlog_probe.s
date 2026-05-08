@@ -2,7 +2,14 @@
 
 #include "textflag.h"
 
-// Probe 0: imm8=0x00 → should return 0 regardless of inputs
+// Probe A4: imm8=0xA4 → should compute a^(~b&c)
+TEXT ·vpternlogProbe(SB), NOSPLIT, $0-32
+    MOVQ a+0(FP), AX; VMOVQ AX, X0
+    MOVQ b+8(FP), BX; VMOVQ BX, X1
+    MOVQ c+16(FP), CX; VMOVQ CX, X2
+    VPTERNLOGQ $0xA4, Z2, Z1, Z0
+    VMOVQ X0, AX; MOVQ AX, ret+24(FP)
+    RET
 TEXT ·vpternlogProbe00(SB), NOSPLIT, $0-32
     MOVQ a+0(FP), AX; VMOVQ AX, X0
     MOVQ b+8(FP), BX; VMOVQ BX, X1
