@@ -1,6 +1,7 @@
 package shared
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 )
@@ -26,22 +27,30 @@ func PromoteThinkingWhenTextEmpty(text, thinking string, contentFilter bool) (st
 	return thinking, true
 }
 
-func UpstreamEmptyOutputDetail(contentFilter bool, text, thinking string) (int, string, string) {
+func UpstreamEmptyOutputDetail(contentFilter bool, text, thinking string) (int, string, string, map[string]string) {
+	details := map[string]string{
+		"has_thinking": fmt.Sprintf("%v", strings.TrimSpace(thinking) != ""),
+		"has_text":     fmt.Sprintf("%v", strings.TrimSpace(text) != ""),
+		"text_len":     fmt.Sprintf("%d", len(text)),
+	}
 	_ = text
 	if contentFilter {
-		return http.StatusBadRequest, "Upstream content filtered the response and returned no output.", "content_filter"
+		details["reason"] = "content_filter"
+		return http.StatusBadRequest, "Upstream content filtered the response and returned no output.", "content_filter", details
 	}
-	if thinking != "" {
-		return http.StatusOK, "Upstream returned reasoning without visible output.", "empty_visible_output"
+	if strings.TrimSpace(thinking) != "" {
+		details["reason"] = "thinking_only_no_visible_text"
+		return http.StatusOK, "Upstream returned reasoning without visible output.", "empty_visible_output", details
 	}
-	return http.StatusTooManyRequests, "Upstream account hit a rate limit and returned empty output.", "upstream_empty_output"
+	details["reason"] = "truly_empty"
+	return http.StatusTooManyRequests, "Upstream account hit a rate limit and returned empty output.", "upstream_empty_output", details
 }
 
 func WriteUpstreamEmptyOutputError(w http.ResponseWriter, text, thinking string, contentFilter bool) bool {
 	if !ShouldWriteUpstreamEmptyOutputError(text, thinking) {
 		return false
 	}
-	status, message, code := UpstreamEmptyOutputDetail(contentFilter, text, thinking)
-	WriteOpenAIErrorWithCode(w, status, message, code)
+	status, message, code, details := UpstreamEmptyOutputDetail(contentFilter, text, thinking)
+	WriteOpenAIErrorWithDetails(w, status, message, code, details)
 	return true
 }

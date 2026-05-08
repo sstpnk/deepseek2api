@@ -150,7 +150,7 @@ func (h *Handler) finishChatNonStreamResult(w http.ResponseWriter, result chatNo
 			result.body["usage"] = openaifmt.BuildChatUsage(usagePrompt, result.thinking, result.text)
 			result.finishReason = "stop"
 		} else {
-			status, message, code := upstreamEmptyOutputDetail(result.contentFilter, result.text, result.thinking)
+			status, message, code, _ := upstreamEmptyOutputDetail(result.contentFilter, result.text, result.thinking)
 			if result.outputError != nil {
 				status, message, code = result.outputError.Status, result.outputError.Message, result.outputError.Code
 			}

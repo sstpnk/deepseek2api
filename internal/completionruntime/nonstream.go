@@ -136,6 +136,13 @@ func ExecuteNonStreamWithRetry(ctx context.Context, ds DeepSeekCaller, a *auth.R
 			if isUpstreamEmptyOutputTurn(turn) {
 				shared.RecordAccountEmptyOutput(ds, a, "completion_nonstream")
 			}
+			if turn.Error != nil {
+				if turn.Error.Details == nil {
+					turn.Error.Details = map[string]string{}
+				}
+				turn.Error.Details["retries"] = fmt.Sprintf("%d", attempts)
+				turn.Error.Details["account"] = maskAccount(a.AccountID)
+			}
 			return NonStreamResult{SessionID: sessionID, Payload: payload, Turn: turn, Attempts: attempts}, turn.Error
 		}
 
@@ -201,4 +208,15 @@ func authOutputError(a *auth.RequestAuth) *assistantturn.OutputError {
 
 func Errorf(status int, format string, args ...any) *assistantturn.OutputError {
 	return &assistantturn.OutputError{Status: status, Message: fmt.Sprintf(format, args...), Code: "error"}
+}
+
+func maskAccount(id string) string {
+	if len(id) <= 3 {
+		return "***"
+	}
+	at := strings.IndexByte(id, '@')
+	if at < 0 {
+		return id[:3] + "***"
+	}
+	return id[:3] + "***" + id[at:]
 }

@@ -7,17 +7,23 @@ func WriteOpenAIError(w http.ResponseWriter, status int, message string) {
 }
 
 func WriteOpenAIErrorWithCode(w http.ResponseWriter, status int, message, code string) {
+	WriteOpenAIErrorWithDetails(w, status, message, code, nil)
+}
+
+func WriteOpenAIErrorWithDetails(w http.ResponseWriter, status int, message, code string, details map[string]string) {
 	if code == "" {
 		code = OpenAIErrorCode(status)
 	}
-	WriteJSON(w, status, map[string]any{
-		"error": map[string]any{
-			"message": message,
-			"type":    OpenAIErrorType(status),
-			"code":    code,
-			"param":   nil,
-		},
-	})
+	errObj := map[string]any{
+		"message": message,
+		"type":    OpenAIErrorType(status),
+		"code":    code,
+		"param":   nil,
+	}
+	if len(details) > 0 {
+		errObj["details"] = details
+	}
+	WriteJSON(w, status, map[string]any{"error": errObj})
 }
 
 func OpenAIErrorType(status int) string {
