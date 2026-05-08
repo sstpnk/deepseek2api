@@ -237,7 +237,7 @@ func (c *Client) cooldownRefreshFailureAccount(a *auth.RequestAuth, err error, r
 }
 
 func (c *Client) authHeaders(token string) map[string]string {
-	headers := make(map[string]string, len(dsprotocol.BaseHeaders)+1)
+	headers := make(map[string]string, len(dsprotocol.BaseHeaders)+2)
 	for k, v := range dsprotocol.BaseHeaders {
 		headers[k] = v
 	}

@@ -141,6 +141,13 @@ func pumpAutoContinue(ctx context.Context, pw *io.PipeWriter, initial io.ReadClo
 // one final [DONE] at the very end.
 func streamBodyWithContinueState(ctx context.Context, pw *io.PipeWriter, body io.Reader, state *continueState) (bool, error) {
 	reader := bufio.NewReaderSize(body, 64*1024)
+	// Unblock pending ReadBytes when context is cancelled
+	stop := context.AfterFunc(ctx, func() {
+		if rc, ok := body.(io.ReadCloser); ok {
+			_ = rc.Close()
+		}
+	})
+	defer stop()
 	hadDone := false
 	for {
 		select {

@@ -79,3 +79,41 @@ go test ./pow/... -v -run TestDeepSeekHashV1
 ```bash
 cd pow && go test -v ./... && go test -bench=. -benchmem
 ```
+
+## 部署指南
+
+### Docker Compose 快速部署
+
+```bash
+# 1. 拉取最新代码
+cd /root/ds2api && git pull origin new
+
+# 2. 构建镜像
+docker compose build --no-cache
+
+# 3. 重启（用 up -d --force-recreate 而非 down+up，避免 SSH 断开）
+docker compose up -d --force-recreate
+
+# 4. 验证
+docker logs ds2api | grep PoW
+# 期望输出: [PoW] solver ready backend=avx512 validated=true
+
+curl http://localhost:6011/healthz
+# 期望输出: {"status":"ok"}
+```
+
+### 环境变量速查
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `DS2API_POW_BACKEND` | `auto` | 强制后端：`auto`/`generic`/`avx512`/`neon` |
+| `DS2API_POW_MODE` | `latency` | 并发模式：`latency`/`throughput`/`balanced` |
+| `DS2API_POW_INTERNAL_PARALLEL` | `GOMAXPROCS` | 内部 worker 数 |
+| `DS2API_POW_BACKEND_STRICT` | 关闭 | `1`=自测失败直接退出 |
+
+### 性能调优建议
+
+- **低延迟场景**：保持默认 `POW_MODE=latency`（单请求全核并行）
+- **高并发场景**：`POW_MODE=throughput`（每请求串行，多请求并发）
+- **通用场景**：`POW_MODE=balanced`（内部 4 worker，外部按配置）
+- **AVX-512 机器**：自动检测启用，无需手动配置
