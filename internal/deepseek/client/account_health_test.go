@@ -37,7 +37,7 @@ func newAccountHealthClientForTest(t *testing.T) (*Client, *account.Pool, *auth.
 func TestRecordAccountEmptyOutputCoolsAfterThreshold(t *testing.T) {
 	client, pool, requestAuth := newAccountHealthClientForTest(t)
 
-	for i := 0; i < accountEmptyOutputThreshold-1; i++ {
+	for i := 0; i < 10; i++ {
 		client.RecordAccountEmptyOutput(requestAuth, "test")
 	}
 	if got := pool.Status()["cooling_down"]; got != 0 {
@@ -45,8 +45,8 @@ func TestRecordAccountEmptyOutputCoolsAfterThreshold(t *testing.T) {
 	}
 
 	client.RecordAccountEmptyOutput(requestAuth, "test")
-	if got := pool.Status()["cooling_down"]; got != 1 {
-		t.Fatalf("expected cooldown at threshold, got %#v", got)
+	if got := pool.Status()["cooling_down"]; got != 0 {
+		t.Fatalf("expected cooldown disabled (never cools), got %#v", got)
 	}
 }
 
@@ -60,10 +60,9 @@ func TestRecordAccountVisibleSuccessDecaysEmptyOutputPenalty(t *testing.T) {
 		t.Fatalf("expected 2 failures to not cooldown, got %#v", got)
 	}
 
-	// 3rd failure → cooldown
-	client.RecordAccountEmptyOutput(requestAuth, "test")
-	if got := pool.Status()["cooling_down"]; got != 1 {
-		t.Fatalf("expected 3 failures to cooldown, got %#v", got)
+	// Cooldown is disabled — even many failures never cool
+	if got := pool.Status()["cooling_down"]; got != 0 {
+		t.Fatalf("expected cooldown disabled, got %#v", got)
 	}
 }
 
@@ -72,7 +71,7 @@ func TestRecordAccountEmptyOutputSuppressesGlobalCooldownStorm(t *testing.T) {
 	client.accountEmptyOutputGlobal.cooldowns = accountEmptyOutputGlobalMaxCooldown
 	client.accountEmptyOutputGlobal.windowStart = time.Now()
 
-	for i := 0; i < accountEmptyOutputThreshold; i++ {
+	for i := 0; i < 10; i++ {
 		client.RecordAccountEmptyOutput(requestAuth, "test")
 	}
 

@@ -11,11 +11,11 @@ import (
 )
 
 const (
-	accountEmptyOutputThreshold         = 3
+	accountEmptyOutputThreshold         = 1 << 30 // effectively disabled
 	accountEmptyOutputFailureWindow     = 15 * time.Minute
 	accountEmptyOutputRecoverySuccesses = 2
 	accountEmptyOutputGlobalWindow      = 10 * time.Minute
-	accountEmptyOutputGlobalMaxCooldown = 50
+	accountEmptyOutputGlobalMaxCooldown = 0 // disabled
 	completionProxyHeader               = "X-Ds2api-Proxy-Id"
 )
 
