@@ -57,6 +57,7 @@ func TestRecordAccountVisibleSuccessDecaysEmptyOutputPenalty(t *testing.T) {
 	client.RecordAccountEmptyOutput(requestAuth, "test")
 	client.RecordAccountVisibleSuccess(requestAuth, "test")
 	client.RecordAccountVisibleSuccess(requestAuth, "test")
+	client.RecordAccountVisibleSuccess(requestAuth, "test")
 	client.RecordAccountEmptyOutput(requestAuth, "test")
 
 	if got := pool.Status()["cooling_down"]; got != 0 {
