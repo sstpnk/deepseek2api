@@ -65,7 +65,7 @@ func TestBuildTurnFromCollectedToolCall(t *testing.T) {
 
 func TestBuildTurnFromCollectedThinkingOnlyIsEmptyOutput(t *testing.T) {
 	turn := BuildTurnFromCollected(sse.CollectResult{Thinking: "hidden"}, BuildOptions{})
-	if turn.Error == nil || turn.Error.Code != "upstream_empty_output" {
+	if turn.Error == nil || turn.Error.Code != "empty_visible_output" {
 		t.Fatalf("expected empty output error, got %#v", turn.Error)
 	}
 }
