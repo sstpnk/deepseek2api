@@ -69,7 +69,7 @@ func (c *Client) UploadFile(ctx context.Context, a *auth.RequestAuth, req Upload
 	if modelType != "" {
 		capturePayload["model_type"] = modelType
 	}
-	captureSession := c.capture.Start("deepseek_upload_file", dsprotocol.DeepSeekUploadFileURL, a.AccountID, capturePayload)
+	captureSession := c.capture.Start("deepseek_upload_file", dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekUploadFileURL), a.AccountID, capturePayload)
 	attempts := 0
 	refreshed := false
 	powHeader := ""
@@ -100,7 +100,7 @@ func (c *Client) UploadFile(ctx context.Context, a *auth.RequestAuth, req Upload
 			}
 		headers["x-file-size"] = strconv.Itoa(len(req.Data))
 		headers["x-thinking-enabled"] = "1"
-		resp, err := c.doUpload(uploadCtx, clients.regular, clients.fallback, dsprotocol.DeepSeekUploadFileURL, headers, body)
+		resp, err := c.doUpload(uploadCtx, clients.regular, clients.fallback, dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekUploadFileURL), headers, body)
 		if err != nil {
 			baseCtx = withAvoidedProxyID(baseCtx, activeProxyIDFromContext(uploadCtx))
 			config.Logger.Warn("[upload_file] request error", "error", err, "account", a.AccountID, "filename", filename)

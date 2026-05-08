@@ -55,6 +55,9 @@ func (c *Client) callContinue(ctx context.Context, a *auth.RequestAuth, sessionI
 	}
 	clients := c.requestClientsForAuth(ctx, a)
 	ctx = withActiveProxyID(ctx, clients.proxyID)
+	if clients.workerHost != "" {
+		ctx = withWorkerHost(ctx, clients.workerHost)
+	}
 	headers := c.authHeaders(a.DeepSeekToken)
 	if powResp != "" {
 		headers["x-ds-pow-response"] = powResp
@@ -65,8 +68,8 @@ func (c *Client) callContinue(ctx context.Context, a *auth.RequestAuth, sessionI
 		"fallback_to_resume": true,
 	}
 	config.Logger.Info("[auto_continue] calling continue", "session_id", sessionID, "message_id", responseMessageID)
-	captureSession := c.capture.Start("deepseek_continue", dsprotocol.DeepSeekContinueURL, a.AccountID, payload)
-	resp, err := c.streamPost(ctx, clients.stream, clients.fallbackS, dsprotocol.DeepSeekContinueURL, headers, payload)
+	captureSession := c.capture.Start("deepseek_continue", dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekContinueURL), a.AccountID, payload)
+	resp, err := c.streamPost(ctx, clients.stream, clients.fallbackS, dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekContinueURL), headers, payload)
 	if err != nil {
 		return nil, err
 	}
