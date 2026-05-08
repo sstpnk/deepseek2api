@@ -543,5 +543,36 @@
       "three": "更新 Vercel 项目中的环境变量：",
       "four": "触发重新部署以应用新的环境变量。"
     }
+  },
+  "cfworker": {
+    "title": "Cloudflare Worker 代理",
+    "desc": "在 Cloudflare 全球边缘网络部署反向代理，增加出口 IP 多样性",
+    "deployed": "已部署",
+    "proxyId": "代理 ID",
+    "accountsUsing": "使用账号数",
+    "apiToken": "CF API 令牌",
+    "apiTokenHint": "在 Cloudflare 控制台 → 个人资料 → API 令牌 → Workers (编辑) 创建",
+    "accountId": "账户 ID",
+    "workerName": "Worker 名称",
+    "deployBtn": "部署 Worker",
+    "deploying": "部署中...",
+    "deleteBtn": "删除 Worker",
+    "deleting": "删除中...",
+    "checkStatus": "检查状态",
+    "successTitle": "Worker 部署成功！",
+    "successUrl": "地址",
+    "successProxyId": "代理 ID：{id} — 将此代理分配给账号即可通过 CF 边缘网络路由",
+    "errorDeployFailed": "部署失败",
+    "errorNetwork": "网络错误",
+    "errorDeleteFailed": "删除失败",
+    "confirmDelete": "确认删除此 Cloudflare Worker？此操作不可撤销。",
+    "howToTitle": "使用说明",
+    "howTo1": "创建具有 Workers 编辑权限的 CF API 令牌",
+    "howTo2": "填写您的账户 ID（可在 CF 控制台 URL 中找到）和 Worker 名称",
+    "howTo3": "点击部署 Worker -- Worker 将在几秒内部署到全球",
+    "howTo4": "部署后会自动创建代理条目，在代理管理页面分配给账号即可使用",
+    "howTo5": "分配了 CF 代理的账号将通过 Cloudflare 边缘 IP 而非 SOCKS5 代理路由",
+    "howTo6": "每个 CF 边缘节点提供不同的出口 IP，提高 IP 多样性",
+    "freeTier": "免费额度：每天 100,000 次请求。部署多个不同子域名的 Worker 可获得更多容量。"
   }
 }

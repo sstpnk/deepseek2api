@@ -543,5 +543,36 @@
       "three": "Update the env var in Vercel:",
       "four": "Trigger a redeploy to apply the updated environment variables."
     }
+  },
+  "cfworker": {
+    "title": "Cloudflare Worker Proxy",
+    "desc": "Deploy a reverse proxy on Cloudflare edge network to diversify egress IPs",
+    "deployed": "Deployed",
+    "proxyId": "Proxy ID",
+    "accountsUsing": "Accounts using",
+    "apiToken": "CF API Token",
+    "apiTokenHint": "Create at Cloudflare Dashboard → Profile → API Tokens → Workers (Edit)",
+    "accountId": "Account ID",
+    "workerName": "Worker Name",
+    "deployBtn": "Deploy Worker",
+    "deploying": "Deploying...",
+    "deleteBtn": "Delete Worker",
+    "deleting": "Deleting...",
+    "checkStatus": "Check Status",
+    "successTitle": "Worker deployed successfully!",
+    "successUrl": "URL",
+    "successProxyId": "Proxy ID: {id} — assign this proxy to accounts to route through CF edge",
+    "errorDeployFailed": "Deploy failed",
+    "errorNetwork": "Network error",
+    "errorDeleteFailed": "Delete failed",
+    "confirmDelete": "Delete this Cloudflare Worker? This cannot be undone.",
+    "howToTitle": "Usage",
+    "howTo1": "Create a CF API Token with Workers Edit permission",
+    "howTo2": "Fill in your Account ID (found in CF Dashboard URL) and a worker name",
+    "howTo3": "Click Deploy Worker -- the worker is deployed globally in seconds",
+    "howTo4": "After deployment, a proxy is created. Assign it to accounts in the Proxies tab",
+    "howTo5": "Accounts with CF proxy will route through Cloudflare edge IPs instead of SOCKS5",
+    "howTo6": "Each CF edge location presents a different egress IP, improving IP diversity",
+    "freeTier": "Free tier: 100,000 requests/day. Deploy multiple workers with different subdomains for more capacity."
   }
 }
