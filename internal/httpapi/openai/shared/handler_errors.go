@@ -1,6 +1,9 @@
 package shared
 
-import "net/http"
+import (
+	"net/http"
+	"strings"
+)
 
 func WriteOpenAIError(w http.ResponseWriter, status int, message string) {
 	WriteOpenAIErrorWithCode(w, status, message, "")
@@ -66,4 +69,15 @@ func OpenAIErrorCode(status int) string {
 		}
 		return "invalid_request"
 	}
+}
+
+func MaskAccount(id string) string {
+	if len(id) <= 3 {
+		return "***"
+	}
+	at := strings.IndexByte(id, '@')
+	if at < 0 {
+		return id[:3] + "***"
+	}
+	return id[:3] + "***" + id[at:]
 }

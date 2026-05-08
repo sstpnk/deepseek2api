@@ -30,7 +30,7 @@ func (c *Client) CallCompletion(ctx context.Context, a *auth.RequestAuth, payloa
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		resp, err := c.streamPost(ctx, clients.stream, clients.fallbackS, dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekCompletionURL), headers, payload)
+		resp, err := c.streamPost(ctx, clients.stream, clients.fallback, dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekCompletionURL), headers, payload)
 		if err != nil {
 			baseCtx = withAvoidedProxyID(baseCtx, activeProxyIDFromContext(ctx))
 			attempts++

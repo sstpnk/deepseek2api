@@ -164,18 +164,22 @@ func (s *chatStreamRuntime) sendDone() {
 	}
 }
 
-func (s *chatStreamRuntime) sendFailedChunk(status int, message, code string) {
+func (s *chatStreamRuntime) sendFailedChunk(status int, message, code string, details map[string]string) {
 	s.finalErrorStatus = status
 	s.finalErrorMessage = message
 	s.finalErrorCode = code
+	errObj := map[string]any{
+		"message": message,
+		"type":    openAIErrorType(status),
+		"code":    code,
+		"param":   nil,
+	}
+	if len(details) > 0 {
+		errObj["details"] = details
+	}
 	s.sendChunk(map[string]any{
 		"status_code": status,
-		"error": map[string]any{
-			"message": message,
-			"type":    openAIErrorType(status),
-			"code":    code,
-			"param":   nil,
-		},
+		"error":       errObj,
 	})
 	s.sendDone()
 }
@@ -295,7 +299,7 @@ func (s *chatStreamRuntime) finalize(finishReason string, deferEmptyOutput bool)
 				AlreadyEmittedToolCalls: s.toolCallsEmitted || s.toolCallsDoneEmitted,
 			})
 		} else {
-			s.sendFailedChunk(outcome.Error.Status, outcome.Error.Message, outcome.Error.Code)
+			s.sendFailedChunk(outcome.Error.Status, outcome.Error.Message, outcome.Error.Code, outcome.Error.Details)
 			return true
 		}
 	}

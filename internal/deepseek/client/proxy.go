@@ -20,8 +20,7 @@ import (
 type requestClients struct {
 	regular    trans.Doer
 	stream     trans.Doer
-	fallback   *http.Client
-	fallbackS  *http.Client
+	fallback   *http.Client // shared between regular and stream paths
 	proxyID    string
 	workerHost string // set for cloudflare proxies
 }
@@ -164,10 +163,9 @@ func proxyDialContext(proxyCfg config.Proxy) (trans.DialContextFunc, error) {
 
 func (c *Client) defaultRequestClients() requestClients {
 	return requestClients{
-		regular:   c.regular,
-		stream:    c.stream,
-		fallback:  c.fallback,
-		fallbackS: c.fallbackS,
+		regular:  c.regular,
+		stream:   c.stream,
+		fallback: c.fallback,
 	}
 }
 
@@ -247,8 +245,7 @@ func (c *Client) requestClientsForAccountWithAvoid(acc config.Account, avoid map
 		bundle := requestClients{
 			regular:    trans.New(60 * time.Second),
 			stream:     trans.New(0),
-			fallback:   trans.NewFallbackClient(60*time.Second, nil),
-			fallbackS:  trans.NewFallbackClient(0, nil),
+			fallback:   trans.NewFallbackClient(0, nil),
 			proxyID:    proxyCfg.ID,
 			workerHost: proxyCfg.WorkerHost,
 		}
@@ -278,8 +275,7 @@ func (c *Client) requestClientsForAccountWithAvoid(acc config.Account, avoid map
 	bundle := requestClients{
 		regular:   trans.NewWithDialContext(60*time.Second, dialContext),
 		stream:    trans.NewWithDialContext(0, dialContext),
-		fallback:  trans.NewFallbackClient(60*time.Second, dialContext),
-		fallbackS: trans.NewFallbackClient(0, dialContext),
+		fallback:  trans.NewFallbackClient(0, dialContext),
 		proxyID:   proxyCfg.ID,
 	}
 
