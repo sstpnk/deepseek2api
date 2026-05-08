@@ -6,6 +6,7 @@ import (
 	"ds2api/internal/chathistory"
 	adminaccounts "ds2api/internal/httpapi/admin/accounts"
 	adminauth "ds2api/internal/httpapi/admin/auth"
+	admincfworker "ds2api/internal/httpapi/admin/cfworker"
 	adminconfig "ds2api/internal/httpapi/admin/configmgmt"
 	admindevcapture "ds2api/internal/httpapi/admin/devcapture"
 	adminhistory "ds2api/internal/httpapi/admin/history"
@@ -41,6 +42,7 @@ func RegisterRoutes(r chi.Router, h *Handler) {
 	configHandler := &adminconfig.Handler{Store: deps.Store, Pool: deps.Pool, DS: deps.DS, OpenAI: deps.OpenAI, ChatHistory: deps.ChatHistory}
 	settingsHandler := &adminsettings.Handler{Store: deps.Store, Pool: deps.Pool, DS: deps.DS, OpenAI: deps.OpenAI, ChatHistory: deps.ChatHistory}
 	proxiesHandler := &adminproxies.Handler{Store: deps.Store, Pool: deps.Pool, DS: deps.DS, OpenAI: deps.OpenAI, ChatHistory: deps.ChatHistory}
+	cfWorkerHandler := &admincfworker.Handler{Store: deps.Store, Pool: deps.Pool, DS: deps.DS, OpenAI: deps.OpenAI, ChatHistory: deps.ChatHistory}
 	rawSamplesHandler := &adminrawsamples.Handler{Store: deps.Store, Pool: deps.Pool, DS: deps.DS, OpenAI: deps.OpenAI, ChatHistory: deps.ChatHistory}
 	vercelHandler := &adminvercel.Handler{Store: deps.Store, Pool: deps.Pool, DS: deps.DS, OpenAI: deps.OpenAI, ChatHistory: deps.ChatHistory}
 	historyHandler := &adminhistory.Handler{Store: deps.Store, Pool: deps.Pool, DS: deps.DS, OpenAI: deps.OpenAI, ChatHistory: deps.ChatHistory}
@@ -54,6 +56,7 @@ func RegisterRoutes(r chi.Router, h *Handler) {
 		adminconfig.RegisterRoutes(pr, configHandler)
 		adminsettings.RegisterRoutes(pr, settingsHandler)
 		adminproxies.RegisterRoutes(pr, proxiesHandler)
+			admincfworker.RegisterRoutes(pr, cfWorkerHandler)
 		adminaccounts.RegisterRoutes(pr, accountsHandler)
 		adminrawsamples.RegisterRoutes(pr, rawSamplesHandler)
 		adminvercel.RegisterRoutes(pr, vercelHandler)

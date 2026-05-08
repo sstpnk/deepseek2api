@@ -28,16 +28,17 @@ func New(timeout time.Duration) *Client {
 func NewWithDialContext(timeout time.Duration, dialContext DialContextFunc) *Client {
 	useEnvProxy := dialContext == nil
 	if dialContext == nil {
-		dialContext = (&net.Dialer{Timeout: 15 * time.Second, KeepAlive: 30 * time.Second}).DialContext
+		dialContext = (&net.Dialer{Timeout: 15 * time.Second, KeepAlive: 15 * time.Second}).DialContext
 	}
 	base := &http.Transport{
-		ForceAttemptHTTP2:   false,
-		MaxIdleConns:        200,
-		MaxIdleConnsPerHost: 100,
-		IdleConnTimeout:     90 * time.Second,
-		DialContext:         dialContext,
-		DialTLSContext:      safariTLSDialer(dialContext),
-		TLSClientConfig:     &tls.Config{MinVersion: tls.VersionTLS12},
+		ForceAttemptHTTP2:     false,
+		MaxIdleConns:          16,
+		MaxIdleConnsPerHost:   4,
+		IdleConnTimeout:       10 * time.Second,
+		ResponseHeaderTimeout: 30 * time.Second,
+		DialContext:           dialContext,
+		DialTLSContext:        safariTLSDialer(dialContext),
+		TLSClientConfig:       &tls.Config{MinVersion: tls.VersionTLS12},
 	}
 	if useEnvProxy {
 		base.Proxy = http.ProxyFromEnvironment
@@ -52,15 +53,16 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 func NewFallbackClient(timeout time.Duration, dialContext DialContextFunc) *http.Client {
 	useEnvProxy := dialContext == nil
 	if dialContext == nil {
-		dialContext = (&net.Dialer{Timeout: 15 * time.Second, KeepAlive: 30 * time.Second}).DialContext
+		dialContext = (&net.Dialer{Timeout: 15 * time.Second, KeepAlive: 15 * time.Second}).DialContext
 	}
 	base := &http.Transport{
-		ForceAttemptHTTP2:   false,
-		MaxIdleConns:        200,
-		MaxIdleConnsPerHost: 100,
-		IdleConnTimeout:     90 * time.Second,
-		DialContext:         dialContext,
-		TLSClientConfig:     &tls.Config{MinVersion: tls.VersionTLS12},
+		ForceAttemptHTTP2:     false,
+		MaxIdleConns:          16,
+		MaxIdleConnsPerHost:   4,
+		IdleConnTimeout:       10 * time.Second,
+		ResponseHeaderTimeout: 30 * time.Second,
+		DialContext:           dialContext,
+		TLSClientConfig:       &tls.Config{MinVersion: tls.VersionTLS12},
 	}
 	if useEnvProxy {
 		base.Proxy = http.ProxyFromEnvironment

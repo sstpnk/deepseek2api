@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 const (
@@ -22,8 +23,25 @@ const (
 	DeepSeekUploadTargetPath     = "/api/v0/file/upload_file"
 )
 
+// deepseekBaseURL overrides the default https://chat.deepseek.com host for ALL
+// API URLs. Set via SetBaseURL, e.g. to a Cloudflare Worker reverse proxy.
+// Empty string (default) means use the built-in constants.
+var deepseekBaseURL string
+
+func SetBaseURL(u string) {
+	u = strings.TrimRight(strings.TrimSpace(u), "/")
+	deepseekBaseURL = u
+}
+
+// DeepSeekAPIURL returns the given default URL or the base-overridden version.
+func DeepSeekAPIURL(defaultURL string) string {
+	if deepseekBaseURL == "" {
+		return defaultURL
+	}
+	return deepseekBaseURL + defaultURL[len("https://chat.deepseek.com"):]
+}
+
 var defaultStaticBaseHeaders = map[string]string{
-	"Host":           "chat.deepseek.com",
 	"Accept":         "application/json",
 	"Content-Type":   "application/json",
 	"accept-charset": "UTF-8",

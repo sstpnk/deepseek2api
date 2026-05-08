@@ -12,6 +12,7 @@ type Pool struct {
 	store                  *config.Store
 	mu                     sync.RWMutex
 	queue                  []string
+	nextIdx                int      // cursor for O(1) round-robin rotation
 	inUse                  map[string]int
 	waiters                []chan struct{}
 	cooldowns              map[string]*accountCooldown

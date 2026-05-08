@@ -49,7 +49,7 @@ func (c *Client) DeleteSession(ctx context.Context, a *auth.RequestAuth, session
 			"chat_session_id": sessionID,
 		}
 
-		resp, status, err := c.postJSONWithStatus(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekDeleteSessionURL, headers, payload)
+		resp, status, err := c.postJSONWithStatus(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekDeleteSessionURL), headers, payload)
 		if err != nil {
 			baseCtx = withAvoidedProxyID(baseCtx, activeProxyIDFromContext(ctx))
 			config.Logger.Warn("[delete_session] request error", "error", err, "session_id", sessionID)
@@ -125,7 +125,7 @@ func (c *Client) DeleteSessionForToken(ctx context.Context, token string, sessio
 		"chat_session_id": sessionID,
 	}
 
-	resp, status, err := c.postJSONWithStatus(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekDeleteSessionURL, headers, payload)
+	resp, status, err := c.postJSONWithStatus(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekDeleteSessionURL), headers, payload)
 	if err != nil {
 		result.ErrorMessage = err.Error()
 		return result, err
@@ -149,7 +149,7 @@ func (c *Client) DeleteAllSessions(ctx context.Context, a *auth.RequestAuth) err
 	headers := c.authHeaders(a.DeepSeekToken)
 	payload := map[string]any{}
 
-	resp, status, err := c.postJSONWithStatus(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekDeleteAllSessionsURL, headers, payload)
+	resp, status, err := c.postJSONWithStatus(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekDeleteAllSessionsURL), headers, payload)
 	if err != nil {
 		config.Logger.Warn("[delete_all_sessions] request error", "error", err)
 		return err
@@ -172,7 +172,7 @@ func (c *Client) DeleteAllSessionsForToken(ctx context.Context, token string) er
 	headers := c.authHeaders(token)
 	payload := map[string]any{}
 
-	resp, status, err := c.postJSONWithStatus(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekDeleteAllSessionsURL, headers, payload)
+	resp, status, err := c.postJSONWithStatus(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekDeleteAllSessionsURL), headers, payload)
 	if err != nil {
 		config.Logger.Warn("[delete_all_sessions_for_token] request error", "error", err)
 		return err

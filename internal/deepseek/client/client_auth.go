@@ -30,7 +30,7 @@ func (c *Client) Login(ctx context.Context, acc config.Account) (string, error) 
 	} else {
 		return "", errors.New("missing email/mobile")
 	}
-	resp, err := c.postJSON(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekLoginURL, dsprotocol.BaseHeaders, payload)
+	resp, err := c.postJSON(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekLoginURL), dsprotocol.BaseHeaders, payload)
 	if err != nil {
 		return "", err
 	}
@@ -65,7 +65,7 @@ func (c *Client) CreateSession(ctx context.Context, a *auth.RequestAuth, maxAtte
 			return "", err
 		}
 		headers := c.authHeaders(a.DeepSeekToken)
-		resp, status, err := c.postJSONWithStatus(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekCreateSessionURL, headers, map[string]any{"agent": "chat"})
+		resp, status, err := c.postJSONWithStatus(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekCreateSessionURL), headers, map[string]any{"agent": "chat"})
 		if err != nil {
 			baseCtx = withAvoidedProxyID(baseCtx, activeProxyIDFromContext(ctx))
 			config.Logger.Warn("[create_session] request error", "error", err, "account", a.AccountID)
@@ -145,7 +145,7 @@ func (c *Client) GetPowForTarget(ctx context.Context, a *auth.RequestAuth, targe
 			return "", err
 		}
 		headers := c.authHeaders(a.DeepSeekToken)
-		resp, status, err := c.postJSONWithStatus(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekCreatePowURL, headers, map[string]any{"target_path": targetPath})
+		resp, status, err := c.postJSONWithStatus(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekCreatePowURL), headers, map[string]any{"target_path": targetPath})
 		if err != nil {
 			baseCtx = withAvoidedProxyID(baseCtx, activeProxyIDFromContext(ctx))
 			config.Logger.Warn("[get_pow] request error", "error", err, "account", a.AccountID, "target_path", targetPath)
@@ -237,11 +237,13 @@ func (c *Client) cooldownRefreshFailureAccount(a *auth.RequestAuth, err error, r
 }
 
 func (c *Client) authHeaders(token string) map[string]string {
-	headers := make(map[string]string, len(dsprotocol.BaseHeaders)+1)
+	headers := make(map[string]string, len(dsprotocol.BaseHeaders)+2)
 	for k, v := range dsprotocol.BaseHeaders {
 		headers[k] = v
 	}
-	headers["authorization"] = "Bearer " + token
+	if token != "" {
+		headers["authorization"] = "Bearer " + token
+	}
 	return headers
 }
 

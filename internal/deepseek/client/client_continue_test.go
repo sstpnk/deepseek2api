@@ -34,7 +34,7 @@ func TestCallContinuePropagatesPowHeaderToFallbackRequest(t *testing.T) {
 
 	client := &Client{
 		stream: failingDoer{err: errors.New("stream transport failed")},
-		fallbackS: &http.Client{
+		fallback: &http.Client{
 			Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
 				seenPow = req.Header.Get("x-ds-pow-response")
 				seenURL = req.URL.String()
@@ -82,7 +82,7 @@ func TestCallCompletionAutoContinueThreadsPowHeader(t *testing.T) {
 				Body:       io.NopCloser(strings.NewReader(initialBody)),
 			},
 		},
-		fallbackS: &http.Client{
+		fallback: &http.Client{
 			Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
 				seenPow = req.Header.Get("x-ds-pow-response")
 				seenContinueURL = req.URL.String()

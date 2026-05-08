@@ -58,7 +58,6 @@ func (p *Pool) acquireLocked(target string, exclude map[string]bool) (config.Acc
 			return config.Account{}, false
 		}
 		p.inUse[target]++
-		p.bumpQueue(target)
 		return acc, true
 	}
 
@@ -67,8 +66,14 @@ func (p *Pool) acquireLocked(target string, exclude map[string]bool) (config.Acc
 
 func (p *Pool) tryAcquire(exclude map[string]bool) (config.Account, bool) {
 	now := time.Now()
-	for i := 0; i < len(p.queue); i++ {
-		id := p.queue[i]
+	n := len(p.queue)
+	if n == 0 {
+		return config.Account{}, false
+	}
+	// Start from cursor for O(1) round-robin instead of O(n) bumpQueue
+	start := p.nextIdx % n
+	for offset := 0; offset < n; offset++ {
+		id := p.queue[(start+offset)%n]
 		if exclude[id] || p.accountOnCooldownLocked(id, now) || !p.canAcquireIDLocked(id) {
 			continue
 		}
@@ -77,21 +82,10 @@ func (p *Pool) tryAcquire(exclude map[string]bool) (config.Account, bool) {
 			continue
 		}
 		p.inUse[id]++
-		p.bumpQueue(id)
+		p.nextIdx = (start + offset + 1) % n // advance cursor past acquired account
 		return acc, true
 	}
 	return config.Account{}, false
-}
-
-func (p *Pool) bumpQueue(accountID string) {
-	for i, id := range p.queue {
-		if id != accountID {
-			continue
-		}
-		p.queue = append(p.queue[:i], p.queue[i+1:]...)
-		p.queue = append(p.queue, accountID)
-		return
-	}
 }
 
 func normalizeExclude(exclude map[string]bool) map[string]bool {

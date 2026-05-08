@@ -115,7 +115,7 @@ func cleanVisibleOutput(text string, stripReferenceMarkers bool) string {
 	return shared.CleanVisibleOutput(text, stripReferenceMarkers)
 }
 
-func upstreamEmptyOutputDetail(contentFilter bool, text, thinking string) (int, string, string) {
+func upstreamEmptyOutputDetail(contentFilter bool, text, thinking string) (int, string, string, map[string]string) {
 	return shared.UpstreamEmptyOutputDetail(contentFilter, text, thinking)
 }
 

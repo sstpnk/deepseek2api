@@ -52,13 +52,12 @@ GLOBL rc<>(SB), RODATA, $184
 // Theta and Rho+Pi remain scalar; state on stack.
 //
 // Stack: 0(SP)..192(SP)=state, 200(SP)..392(SP)=b[] scratch,
-// 400(SP)..424(SP)=saved callee-saved regs (R12,R13,R14,R15,BP)
-TEXT ·keccakF23AVX512(SB), $432-8
+// 400(SP)..416(SP)=saved callee-saved regs (R12,R13,BP)
+TEXT ·keccakF23AVX512(SB), $424-8
     // Save callee-saved registers (Go amd64 ABI: BP, R12-R15)
     MOVQ R12, 400(SP)
     MOVQ R13, 408(SP)
-    MOVQ R14, 416(SP)
-    MOVQ R15, 424(SP)
+    MOVQ BP, 416(SP)
 
     MOVQ s+0(FP), DI
 
@@ -184,68 +183,69 @@ round:
     MOVQ 184(SP), AX; ROLQ $56, AX; MOVQ AX, 352(SP)
     MOVQ 192(SP), AX; ROLQ $14, AX; MOVQ AX, 232(SP)
 
-    // === Chi: a[x] = b[x] ^ ((~b[x+1]) & b[x+2]), 5 rows, scalar ANDN ===
-    // ANDNQ src2, src1, dst → dst = (^src1) & src2
+    // === Chi: a[x] = b[x] ^ ((~b[x+1]) & b[x+2]) with VPTERNLOGQ 0xD2 ===
+    // Load via XMM (SSE2 MOVQ), compute via ZMM VPTERNLOGQ, store via XMM.
+    // 0xD2 computes a^(~b&c) with Go asm's (dst,src1,src2) bit ordering.
     //
     // Row 0 (0,1,2,3,4)
-    MOVQ 200(SP), R8; MOVQ 208(SP), R9; MOVQ 216(SP), R10
-    ANDNQ R10, R9, AX; XORQ AX, R8; MOVQ R8, 0(SP)        // a[0]
-    MOVQ 224(SP), R11
-    ANDNQ R11, R10, AX; XORQ AX, R9; MOVQ R9, 8(SP)        // a[1]
-    MOVQ 232(SP), R12
-    ANDNQ R12, R11, AX; XORQ AX, R10; MOVQ R10, 16(SP)     // a[2]
-    MOVQ 200(SP), R8
-    ANDNQ R8, R12, AX; XORQ AX, R11; MOVQ R11, 24(SP)      // a[3]
-    MOVQ 208(SP), R15
-    ANDNQ R15, R8, AX; XORQ AX, R12; MOVQ R12, 32(SP)      // a[4]
+    MOVQ 200(SP), X0; MOVQ 208(SP), X1; MOVQ 216(SP), X2
+    VPTERNLOGQ $0xD2, Z2, Z1, Z0; MOVQ X0, 0(SP)         // a[0]
+    MOVQ 224(SP), X3
+    VPTERNLOGQ $0xD2, Z3, Z2, Z1; MOVQ X1, 8(SP)         // a[1]
+    MOVQ 232(SP), X4
+    VPTERNLOGQ $0xD2, Z4, Z3, Z2; MOVQ X2, 16(SP)        // a[2]
+    MOVQ 200(SP), X0
+    VPTERNLOGQ $0xD2, Z0, Z4, Z3; MOVQ X3, 24(SP)        // a[3]
+    MOVQ 208(SP), X1
+    VPTERNLOGQ $0xD2, Z1, Z0, Z4; MOVQ X4, 32(SP)        // a[4]
 
     // Row 1 (5,6,7,8,9)
-    MOVQ 240(SP), R8; MOVQ 248(SP), R9; MOVQ 256(SP), R10
-    ANDNQ R10, R9, AX; XORQ AX, R8; MOVQ R8, 40(SP)
-    MOVQ 264(SP), R11
-    ANDNQ R11, R10, AX; XORQ AX, R9; MOVQ R9, 48(SP)
-    MOVQ 272(SP), R12
-    ANDNQ R12, R11, AX; XORQ AX, R10; MOVQ R10, 56(SP)
-    MOVQ 240(SP), R8
-    ANDNQ R8, R12, AX; XORQ AX, R11; MOVQ R11, 64(SP)
-    MOVQ 248(SP), R15
-    ANDNQ R15, R8, AX; XORQ AX, R12; MOVQ R12, 72(SP)
+    MOVQ 240(SP), X0; MOVQ 248(SP), X1; MOVQ 256(SP), X2
+    VPTERNLOGQ $0xD2, Z2, Z1, Z0; MOVQ X0, 40(SP)
+    MOVQ 264(SP), X3
+    VPTERNLOGQ $0xD2, Z3, Z2, Z1; MOVQ X1, 48(SP)
+    MOVQ 272(SP), X4
+    VPTERNLOGQ $0xD2, Z4, Z3, Z2; MOVQ X2, 56(SP)
+    MOVQ 240(SP), X0
+    VPTERNLOGQ $0xD2, Z0, Z4, Z3; MOVQ X3, 64(SP)
+    MOVQ 248(SP), X1
+    VPTERNLOGQ $0xD2, Z1, Z0, Z4; MOVQ X4, 72(SP)
 
     // Row 2 (10,11,12,13,14)
-    MOVQ 280(SP), R8; MOVQ 288(SP), R9; MOVQ 296(SP), R10
-    ANDNQ R10, R9, AX; XORQ AX, R8; MOVQ R8, 80(SP)
-    MOVQ 304(SP), R11
-    ANDNQ R11, R10, AX; XORQ AX, R9; MOVQ R9, 88(SP)
-    MOVQ 312(SP), R12
-    ANDNQ R12, R11, AX; XORQ AX, R10; MOVQ R10, 96(SP)
-    MOVQ 280(SP), R8
-    ANDNQ R8, R12, AX; XORQ AX, R11; MOVQ R11, 104(SP)
-    MOVQ 288(SP), R15
-    ANDNQ R15, R8, AX; XORQ AX, R12; MOVQ R12, 112(SP)
+    MOVQ 280(SP), X0; MOVQ 288(SP), X1; MOVQ 296(SP), X2
+    VPTERNLOGQ $0xD2, Z2, Z1, Z0; MOVQ X0, 80(SP)
+    MOVQ 304(SP), X3
+    VPTERNLOGQ $0xD2, Z3, Z2, Z1; MOVQ X1, 88(SP)
+    MOVQ 312(SP), X4
+    VPTERNLOGQ $0xD2, Z4, Z3, Z2; MOVQ X2, 96(SP)
+    MOVQ 280(SP), X0
+    VPTERNLOGQ $0xD2, Z0, Z4, Z3; MOVQ X3, 104(SP)
+    MOVQ 288(SP), X1
+    VPTERNLOGQ $0xD2, Z1, Z0, Z4; MOVQ X4, 112(SP)
 
     // Row 3 (15,16,17,18,19)
-    MOVQ 320(SP), R8; MOVQ 328(SP), R9; MOVQ 336(SP), R10
-    ANDNQ R10, R9, AX; XORQ AX, R8; MOVQ R8, 120(SP)
-    MOVQ 344(SP), R11
-    ANDNQ R11, R10, AX; XORQ AX, R9; MOVQ R9, 128(SP)
-    MOVQ 352(SP), R12
-    ANDNQ R12, R11, AX; XORQ AX, R10; MOVQ R10, 136(SP)
-    MOVQ 320(SP), R8
-    ANDNQ R8, R12, AX; XORQ AX, R11; MOVQ R11, 144(SP)
-    MOVQ 328(SP), R15
-    ANDNQ R15, R8, AX; XORQ AX, R12; MOVQ R12, 152(SP)
+    MOVQ 320(SP), X0; MOVQ 328(SP), X1; MOVQ 336(SP), X2
+    VPTERNLOGQ $0xD2, Z2, Z1, Z0; MOVQ X0, 120(SP)
+    MOVQ 344(SP), X3
+    VPTERNLOGQ $0xD2, Z3, Z2, Z1; MOVQ X1, 128(SP)
+    MOVQ 352(SP), X4
+    VPTERNLOGQ $0xD2, Z4, Z3, Z2; MOVQ X2, 136(SP)
+    MOVQ 320(SP), X0
+    VPTERNLOGQ $0xD2, Z0, Z4, Z3; MOVQ X3, 144(SP)
+    MOVQ 328(SP), X1
+    VPTERNLOGQ $0xD2, Z1, Z0, Z4; MOVQ X4, 152(SP)
 
     // Row 4 (20,21,22,23,24)
-    MOVQ 360(SP), R8; MOVQ 368(SP), R9; MOVQ 376(SP), R10
-    ANDNQ R10, R9, AX; XORQ AX, R8; MOVQ R8, 160(SP)
-    MOVQ 384(SP), R11
-    ANDNQ R11, R10, AX; XORQ AX, R9; MOVQ R9, 168(SP)
-    MOVQ 392(SP), R12
-    ANDNQ R12, R11, AX; XORQ AX, R10; MOVQ R10, 176(SP)
-    MOVQ 360(SP), R8
-    ANDNQ R8, R12, AX; XORQ AX, R11; MOVQ R11, 184(SP)
-    MOVQ 368(SP), R15
-    ANDNQ R15, R8, AX; XORQ AX, R12; MOVQ R12, 192(SP)
+    MOVQ 360(SP), X0; MOVQ 368(SP), X1; MOVQ 376(SP), X2
+    VPTERNLOGQ $0xD2, Z2, Z1, Z0; MOVQ X0, 160(SP)
+    MOVQ 384(SP), X3
+    VPTERNLOGQ $0xD2, Z3, Z2, Z1; MOVQ X1, 168(SP)
+    MOVQ 392(SP), X4
+    VPTERNLOGQ $0xD2, Z4, Z3, Z2; MOVQ X2, 176(SP)
+    MOVQ 360(SP), X0
+    VPTERNLOGQ $0xD2, Z0, Z4, Z3; MOVQ X3, 184(SP)
+    MOVQ 368(SP), X1
+    VPTERNLOGQ $0xD2, Z1, Z0, Z4; MOVQ X4, 192(SP)
 
     // === Iota ===
     MOVQ 0(BP)(SI*8), AX; XORQ AX, 0(SP)
@@ -284,6 +284,5 @@ round:
     // Restore callee-saved registers
     MOVQ 400(SP), R12
     MOVQ 408(SP), R13
-    MOVQ 416(SP), R14
-    MOVQ 424(SP), R15
+    MOVQ 416(SP), BP
     RET

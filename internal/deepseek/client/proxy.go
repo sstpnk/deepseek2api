@@ -18,11 +18,11 @@ import (
 )
 
 type requestClients struct {
-	regular   trans.Doer
-	stream    trans.Doer
-	fallback  *http.Client
-	fallbackS *http.Client
-	proxyID   string
+	regular    trans.Doer
+	stream     trans.Doer
+	fallback   *http.Client // shared between regular and stream paths
+	proxyID    string
+	workerHost string // set for cloudflare proxies
 }
 
 type proxyIDCtxKey struct{}
@@ -36,6 +36,31 @@ func withActiveProxyID(ctx context.Context, proxyID string) context.Context {
 		return ctx
 	}
 	return context.WithValue(ctx, proxyIDCtxKey{}, proxyID)
+}
+
+type workerHostCtxKey struct{}
+
+func withWorkerHost(ctx context.Context, host string) context.Context {
+	if ctx == nil || host == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, workerHostCtxKey{}, host)
+}
+
+func workerHostFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	v, _ := ctx.Value(workerHostCtxKey{}).(string)
+	return v
+}
+
+func rewriteURLForWorker(ctx context.Context, url string) string {
+	wh := workerHostFromContext(ctx)
+	if wh == "" {
+		return url
+	}
+	return strings.Replace(url, "chat.deepseek.com", wh, 1)
 }
 
 func activeProxyIDFromContext(ctx context.Context) string {
@@ -138,10 +163,9 @@ func proxyDialContext(proxyCfg config.Proxy) (trans.DialContextFunc, error) {
 
 func (c *Client) defaultRequestClients() requestClients {
 	return requestClients{
-		regular:   c.regular,
-		stream:    c.stream,
-		fallback:  c.fallback,
-		fallbackS: c.fallbackS,
+		regular:  c.regular,
+		stream:   c.stream,
+		fallback: c.fallback,
 	}
 }
 
@@ -165,9 +189,26 @@ func (c *Client) requestClientsFromContext(ctx context.Context) requestClients {
 
 func (c *Client) requestClientsForAuth(ctx context.Context, a *auth.RequestAuth) requestClients {
 	if a != nil {
-		return c.requestClientsForAccountWithAvoid(a.Account, avoidedProxyIDsFromContext(ctx))
+		clients := c.requestClientsForAccountWithAvoid(a.Account, avoidedProxyIDsFromContext(ctx))
+		if clients.workerHost != "" {
+			ctx = withWorkerHost(ctx, clients.workerHost)
+		}
+		return clients
 	}
 	return c.requestClientsFromContext(ctx)
+}
+
+// requestClientsForAuthWithContext is like requestClientsForAuth but returns
+// the context enriched with worker host for URL rewriting.
+func (c *Client) requestClientsForAuthWithContext(ctx context.Context, a *auth.RequestAuth) (requestClients, context.Context) {
+	if a != nil {
+		clients := c.requestClientsForAccountWithAvoid(a.Account, avoidedProxyIDsFromContext(ctx))
+		if clients.workerHost != "" {
+			ctx = withWorkerHost(ctx, clients.workerHost)
+		}
+		return clients, ctx
+	}
+	return c.requestClientsFromContext(ctx), ctx
 }
 
 func (c *Client) requestClientsForAccount(acc config.Account) requestClients {
@@ -192,6 +233,31 @@ func (c *Client) requestClientsForAccountWithAvoid(acc config.Account, avoid map
 		}
 	}
 
+	// Cloudflare Worker proxy: connect directly, override target host via context
+	if proxyCfg.Type == "cloudflare" && proxyCfg.WorkerHost != "" {
+		key := proxyCacheKey(proxyCfg)
+		c.proxyClientsMu.RLock()
+		cached, ok := c.proxyClients[key]
+		c.proxyClientsMu.RUnlock()
+		if ok {
+			return cached
+		}
+		bundle := requestClients{
+			regular:    trans.New(60 * time.Second),
+			stream:     trans.New(0),
+			fallback:   trans.NewFallbackClient(0, nil),
+			proxyID:    proxyCfg.ID,
+			workerHost: proxyCfg.WorkerHost,
+		}
+		c.proxyClientsMu.Lock()
+		if c.proxyClients == nil {
+			c.proxyClients = make(map[string]requestClients)
+		}
+		c.proxyClients[key] = bundle
+		c.proxyClientsMu.Unlock()
+		return bundle
+	}
+
 	key := proxyCacheKey(proxyCfg)
 	c.proxyClientsMu.RLock()
 	cached, ok := c.proxyClients[key]
@@ -209,8 +275,7 @@ func (c *Client) requestClientsForAccountWithAvoid(acc config.Account, avoid map
 	bundle := requestClients{
 		regular:   trans.NewWithDialContext(60*time.Second, dialContext),
 		stream:    trans.NewWithDialContext(0, dialContext),
-		fallback:  trans.NewFallbackClient(60*time.Second, dialContext),
-		fallbackS: trans.NewFallbackClient(0, dialContext),
+		fallback:  trans.NewFallbackClient(0, dialContext),
 		proxyID:   proxyCfg.ID,
 	}
 

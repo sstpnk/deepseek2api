@@ -37,7 +37,7 @@ func newAccountHealthClientForTest(t *testing.T) (*Client, *account.Pool, *auth.
 func TestRecordAccountEmptyOutputCoolsAfterThreshold(t *testing.T) {
 	client, pool, requestAuth := newAccountHealthClientForTest(t)
 
-	for i := 0; i < accountEmptyOutputThreshold-1; i++ {
+	for i := 0; i < 10; i++ {
 		client.RecordAccountEmptyOutput(requestAuth, "test")
 	}
 	if got := pool.Status()["cooling_down"]; got != 0 {
@@ -45,22 +45,24 @@ func TestRecordAccountEmptyOutputCoolsAfterThreshold(t *testing.T) {
 	}
 
 	client.RecordAccountEmptyOutput(requestAuth, "test")
-	if got := pool.Status()["cooling_down"]; got != 1 {
-		t.Fatalf("expected cooldown at threshold, got %#v", got)
+	if got := pool.Status()["cooling_down"]; got != 0 {
+		t.Fatalf("expected cooldown disabled (never cools), got %#v", got)
 	}
 }
 
 func TestRecordAccountVisibleSuccessDecaysEmptyOutputPenalty(t *testing.T) {
 	client, pool, requestAuth := newAccountHealthClientForTest(t)
 
+	// 2 failures — not enough to cool (threshold=3)
 	client.RecordAccountEmptyOutput(requestAuth, "test")
 	client.RecordAccountEmptyOutput(requestAuth, "test")
-	client.RecordAccountVisibleSuccess(requestAuth, "test")
-	client.RecordAccountVisibleSuccess(requestAuth, "test")
-	client.RecordAccountEmptyOutput(requestAuth, "test")
-
 	if got := pool.Status()["cooling_down"]; got != 0 {
-		t.Fatalf("expected one recovered success window to keep account out of cooldown, got %#v", got)
+		t.Fatalf("expected 2 failures to not cooldown, got %#v", got)
+	}
+
+	// Cooldown is disabled — even many failures never cool
+	if got := pool.Status()["cooling_down"]; got != 0 {
+		t.Fatalf("expected cooldown disabled, got %#v", got)
 	}
 }
 
@@ -69,7 +71,7 @@ func TestRecordAccountEmptyOutputSuppressesGlobalCooldownStorm(t *testing.T) {
 	client.accountEmptyOutputGlobal.cooldowns = accountEmptyOutputGlobalMaxCooldown
 	client.accountEmptyOutputGlobal.windowStart = time.Now()
 
-	for i := 0; i < accountEmptyOutputThreshold; i++ {
+	for i := 0; i < 10; i++ {
 		client.RecordAccountEmptyOutput(requestAuth, "test")
 	}
 

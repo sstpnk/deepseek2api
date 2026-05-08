@@ -76,7 +76,7 @@ func (c *Client) FetchUploadedFile(ctx context.Context, a *auth.RequestAuth, fil
 	}
 	clients := c.requestClientsForAuth(ctx, a)
 	ctx = withActiveProxyID(ctx, clients.proxyID)
-	reqURL := dsprotocol.DeepSeekFetchFilesURL + "?file_ids=" + url.QueryEscape(fileID)
+	reqURL := dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekFetchFilesURL) + "?file_ids=" + url.QueryEscape(fileID)
 	headers := c.authHeaders(a.DeepSeekToken)
 
 	resp, status, err := c.getJSONWithStatus(ctx, clients.regular, clients.fallback, reqURL, headers)

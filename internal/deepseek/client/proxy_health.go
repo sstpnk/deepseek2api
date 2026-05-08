@@ -186,3 +186,54 @@ func (c *Client) proxyHealthScore(proxyID string) int {
 	}
 	return score
 }
+
+// proxyHealthGC removes proxy health entries for proxies no longer in the store.
+// Called periodically (every 5 minutes) to prevent memory leak from deleted proxies.
+func (c *Client) proxyHealthGC() {
+	if c == nil || c.Store == nil {
+		return
+	}
+	active := map[string]bool{}
+	for _, p := range c.Store.Proxies() {
+		active[p.ID] = true
+	}
+	c.proxyHealthMu.Lock()
+	for id := range c.proxyHealthMap {
+		if !active[id] {
+			delete(c.proxyHealthMap, id)
+		}
+	}
+	c.proxyHealthMu.Unlock()
+}
+
+// accountEmptyOutputGC removes expired empty-output health entries that haven't
+// been updated within 2x the failure window.
+func (c *Client) accountEmptyOutputGC() {
+	if c == nil {
+		return
+	}
+	c.accountHealthMu.Lock()
+	for id, h := range c.accountHealthMap {
+		if time.Since(h.lastFailure) > 2*accountEmptyOutputFailureWindow {
+			delete(c.accountHealthMap, id)
+		}
+	}
+	c.accountHealthMu.Unlock()
+}
+
+// StartBackgroundGC launches periodic cleanup goroutines for proxy health,
+// empty-output accounts, and proxy client caches. Call once at startup.
+func (c *Client) StartBackgroundGC() {
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			c.proxyHealthGC()
+			c.accountEmptyOutputGC()
+			c.proxyClientsMu.Lock()
+			// Clear client cache so stale proxy configs are rebuilt
+			c.proxyClients = make(map[string]requestClients)
+			c.proxyClientsMu.Unlock()
+		}
+	}()
+}

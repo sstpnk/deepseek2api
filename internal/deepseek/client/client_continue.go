@@ -1,6 +1,7 @@
 package client
 
 import (
+	"sync"
 	"bufio"
 	"bytes"
 	"context"
@@ -55,16 +56,21 @@ func (c *Client) callContinue(ctx context.Context, a *auth.RequestAuth, sessionI
 	}
 	clients := c.requestClientsForAuth(ctx, a)
 	ctx = withActiveProxyID(ctx, clients.proxyID)
+	if clients.workerHost != "" {
+		ctx = withWorkerHost(ctx, clients.workerHost)
+	}
 	headers := c.authHeaders(a.DeepSeekToken)
-	headers["x-ds-pow-response"] = powResp
+	if powResp != "" {
+		headers["x-ds-pow-response"] = powResp
+	}
 	payload := map[string]any{
 		"chat_session_id":    sessionID,
 		"message_id":         responseMessageID,
 		"fallback_to_resume": true,
 	}
 	config.Logger.Info("[auto_continue] calling continue", "session_id", sessionID, "message_id", responseMessageID)
-	captureSession := c.capture.Start("deepseek_continue", dsprotocol.DeepSeekContinueURL, a.AccountID, payload)
-	resp, err := c.streamPost(ctx, clients.stream, clients.fallbackS, dsprotocol.DeepSeekContinueURL, headers, payload)
+	captureSession := c.capture.Start("deepseek_continue", dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekContinueURL), a.AccountID, payload)
+	resp, err := c.streamPost(ctx, clients.stream, clients.fallback, dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekContinueURL), headers, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -139,8 +145,19 @@ func pumpAutoContinue(ctx context.Context, pw *io.PipeWriter, initial io.ReadClo
 // line through to pw while observing state signals. Intermediate [DONE]
 // sentinels are consumed (not forwarded) so that the downstream only sees
 // one final [DONE] at the very end.
+var sseBufPool = sync.Pool{New: func() any { return bufio.NewReaderSize(nil, 64*1024) }}
+
 func streamBodyWithContinueState(ctx context.Context, pw *io.PipeWriter, body io.Reader, state *continueState) (bool, error) {
-	reader := bufio.NewReaderSize(body, 64*1024)
+	reader := sseBufPool.Get().(*bufio.Reader)
+	reader.Reset(body)
+	defer sseBufPool.Put(reader)
+	// Unblock pending ReadBytes when context is cancelled
+	stop := context.AfterFunc(ctx, func() {
+		if rc, ok := body.(io.ReadCloser); ok {
+			_ = rc.Close()
+		}
+	})
+	defer stop()
 	hadDone := false
 	for {
 		select {

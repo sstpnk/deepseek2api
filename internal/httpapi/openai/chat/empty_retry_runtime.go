@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"fmt"
 	"context"
 	"io"
 	"net/http"
@@ -150,14 +151,17 @@ func (h *Handler) finishChatNonStreamResult(w http.ResponseWriter, result chatNo
 			result.body["usage"] = openaifmt.BuildChatUsage(usagePrompt, result.thinking, result.text)
 			result.finishReason = "stop"
 		} else {
-			status, message, code := upstreamEmptyOutputDetail(result.contentFilter, result.text, result.thinking)
+			status, message, code, _ := upstreamEmptyOutputDetail(result.contentFilter, result.text, result.thinking)
 			if result.outputError != nil {
 				status, message, code = result.outputError.Status, result.outputError.Message, result.outputError.Code
 			}
 			if historySession != nil {
 				historySession.error(status, message, code, result.historyThinking(), result.historyText())
 			}
-			writeOpenAIErrorWithCode(w, status, message, code)
+			shared.WriteOpenAIErrorWithDetails(w, status, message, code, map[string]string{
+				"retries": fmt.Sprintf("%d", attempts),
+				"stream":  "false",
+			})
 			config.Logger.Info("[openai_empty_retry] terminal empty output", "surface", "chat.completions", "stream", false, "retry_attempts", attempts, "success_source", "none", "content_filter", result.contentFilter)
 			return
 		}
@@ -221,14 +225,14 @@ func (h *Handler) handleStreamWithRetry(w http.ResponseWriter, r *http.Request, 
 		}
 		nextResp, err := h.DS.CallCompletion(retryCtx, a, clonePayloadForEmptyOutputRetry(payload, streamRuntime.responseMessageID), retryPow, 2)
 		if err != nil {
-			failChatStreamRetry(streamRuntime, historySession, http.StatusInternalServerError, "Failed to get completion.", "error")
+			failChatStreamRetry(streamRuntime, historySession, http.StatusInternalServerError, "Failed to get completion.", "error", nil)
 			config.Logger.Warn("[openai_empty_retry] retry request failed", "surface", "chat.completions", "stream", true, "retry_attempt", attempts, "error", err)
 			return
 		}
 		if nextResp.StatusCode != http.StatusOK {
 			defer func() { _ = nextResp.Body.Close() }()
 			body, _ := io.ReadAll(nextResp.Body)
-			failChatStreamRetry(streamRuntime, historySession, nextResp.StatusCode, string(body), "error")
+			failChatStreamRetry(streamRuntime, historySession, nextResp.StatusCode, string(body), "error", nil)
 			return
 		}
 		streamRuntime.finalPrompt = usagePromptWithEmptyOutputRetry(finalPrompt, attempts)
@@ -336,8 +340,8 @@ func recordChatStreamHistory(streamRuntime *chatStreamRuntime, historySession *c
 	historySession.success(http.StatusOK, streamRuntime.historyThinking(), streamRuntime.historyText(), streamRuntime.finalFinishReason, streamRuntime.finalUsage)
 }
 
-func failChatStreamRetry(streamRuntime *chatStreamRuntime, historySession *chatHistorySession, status int, message, code string) {
-	streamRuntime.sendFailedChunk(status, message, code)
+func failChatStreamRetry(streamRuntime *chatStreamRuntime, historySession *chatHistorySession, status int, message, code string, details map[string]string) {
+	streamRuntime.sendFailedChunk(status, message, code, details)
 	if historySession != nil {
 		historySession.error(status, message, code, streamRuntime.historyThinking(), streamRuntime.historyText())
 	}

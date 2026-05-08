@@ -28,6 +28,7 @@ func (c *Client) postJSONWithStatus(ctx context.Context, doer trans.Doer, fallba
 		return nil, 0, err
 	}
 	headers = c.jsonHeaders(headers)
+	url = rewriteURLForWorker(ctx, url)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(b))
 	if err != nil {
 		return nil, 0, err

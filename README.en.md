@@ -133,8 +133,9 @@ For the full module-by-module architecture and directory responsibilities, see [
 | Gemini compatible | `POST /v1beta/models/{model}:generateContent`, `POST /v1beta/models/{model}:streamGenerateContent` (plus `/v1/models/{model}:*` paths) |
 | Unified CORS compatibility | `/v1/*`, `/anthropic/*`, `/v1beta/models/*`, and `/admin/*` share one CORS policy; on Vercel, the Node Runtime for `/v1/chat/completions` mirrors the same relaxed preflight behavior for third-party clients |
 | Multi-account rotation | Auto token refresh, email/mobile dual login |
-| Concurrency control | Per-account in-flight limit + waiting queue, dynamic recommended concurrency |
-| DeepSeek PoW | Pure Go high-performance solver (DeepSeekHashV1), adaptive multi-core parallelism, arm64 NEON acceleration, ms-level response |
+| Concurrency control | Per-account in-flight limit + waiting queue, O(1) cursor round-robin, dynamic recommended concurrency |
+| DeepSeek PoW | Pure Go high-performance solver (DeepSeekHashV1), adaptive multi-core parallelism, AVX-512 / arm64 NEON acceleration |
+| Connection management | HTTP Transport tuned, idle connection auto-recycle, ResponseHeaderTimeout, dual LimitReader OOM defense |
 | Tool Calling | Anti-leak handling: non-code-block feature match, early `delta.tool_calls`, structured incremental output |
 | Admin API | Config management, runtime settings hot-reload, proxy management, account testing/batch test, session cleanup, import/export, Vercel sync, version check |
 | WebUI Admin Panel | SPA at `/admin` (bilingual Chinese/English, dark mode, with server-side conversation history) |

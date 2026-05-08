@@ -14,9 +14,7 @@ func init() {
 	if backendRequested == "avx512" {
 		backendName = "avx512"
 	} else if backendName == "" && cpu.X86.HasAVX512F && cpu.X86.HasAVX512VL {
-		// AVX-512 is experimental — don't auto-select. User must opt in via
-		// DS2API_POW_BACKEND=avx512. Remove this guard once validated on real hardware.
-		backendName = "generic"
+		backendName = "avx512"
 	} else if backendName == "" {
 		backendName = "generic"
 	}

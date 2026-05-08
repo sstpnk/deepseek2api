@@ -97,7 +97,14 @@ func NewApp() (*App, error) {
 	healthzHandler := func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
+		cfg := store.Snapshot()
+		out := map[string]any{
+			"status":      "ok",
+			"accounts":    len(cfg.Accounts),
+			"proxies":     len(cfg.Proxies),
+			"pow_backend": pow.BackendName(),
+		}
+		json.NewEncoder(w).Encode(out)
 	}
 	readyzHandler := func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
