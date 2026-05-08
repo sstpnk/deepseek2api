@@ -56,7 +56,9 @@ func (c *Client) callContinue(ctx context.Context, a *auth.RequestAuth, sessionI
 	clients := c.requestClientsForAuth(ctx, a)
 	ctx = withActiveProxyID(ctx, clients.proxyID)
 	headers := c.authHeaders(a.DeepSeekToken)
-	headers["x-ds-pow-response"] = powResp
+	if powResp != "" {
+		headers["x-ds-pow-response"] = powResp
+	}
 	payload := map[string]any{
 		"chat_session_id":    sessionID,
 		"message_id":         responseMessageID,
