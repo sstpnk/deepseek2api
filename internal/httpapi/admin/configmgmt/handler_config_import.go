@@ -75,6 +75,7 @@ func (h *Handler) configImport(w http.ResponseWriter, r *http.Request) {
 				if _, ok := existingAccounts[key]; ok {
 					continue
 				}
+				acc.ProxyID = defaultProxyForNewAccount(&next, acc)
 				existingAccounts[key] = struct{}{}
 				next.Accounts = append(next.Accounts, acc)
 				importedAccounts++

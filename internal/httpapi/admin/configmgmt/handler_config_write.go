@@ -52,6 +52,8 @@ func (h *Handler) updateConfig(w http.ResponseWriter, r *http.Request) {
 					if strings.TrimSpace(acc.Password) == "" {
 						acc.Password = prev.Password
 					}
+				} else {
+					acc.ProxyID = defaultProxyForNewAccount(c, acc)
 				}
 				seen[key] = struct{}{}
 				accounts = append(accounts, acc)
@@ -211,6 +213,7 @@ func (h *Handler) batchImport(w http.ResponseWriter, r *http.Request) {
 				if key == "" || existing[key] {
 					continue
 				}
+				acc.ProxyID = defaultProxyForNewAccount(c, acc)
 				c.Accounts = append(c.Accounts, acc)
 				existing[key] = true
 				importedAccounts++

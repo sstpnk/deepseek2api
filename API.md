@@ -143,6 +143,8 @@ Gemini 兼容客户端还可以使用 `x-goog-api-key`、`?key=` 或 `?api_key=`
 | PUT | `/admin/proxies/{proxyID}` | Admin | 更新代理（留空 password 表示保留原密码） |
 | DELETE | `/admin/proxies/{proxyID}` | Admin | 删除代理（自动解绑引用该代理的账号） |
 | POST | `/admin/proxies/test` | Admin | 测试代理连通性 |
+| GET | `/admin/proxies/switch/status` | Admin | 查询 Resin / CF 代理切换状态 |
+| POST | `/admin/proxies/switch` | Admin | 切换 Resin / CF 代理模式 |
 | GET | `/admin/accounts` | Admin | 分页账号列表 |
 | POST | `/admin/accounts` | Admin | 添加账号 |
 | PUT | `/admin/accounts/{identifier}` | Admin | 更新账号 name/remark |
@@ -852,6 +854,14 @@ data: {"type":"message_stop"}
 
 测试代理连通性：传 `proxy_id` 时测试已保存代理；不传时按请求体代理字段做临时连通性测试。
 
+### `GET /admin/proxies/switch/status`
+
+查询 Resin / Cloudflare 快速切换状态。`mode` 为空配置会按当前账号绑定推断：所有账号都绑定同一个 CF 代理时视为 `cloudflare`，否则视为 `resin`。
+
+### `POST /admin/proxies/switch`
+
+请求体：`{"mode":"cloudflare","cf_proxy_id":"cf-1"}` 或 `{"mode":"resin"}`。切到 CF 时会保存当前 Resin 绑定并把账号统一绑定到 CF 代理；切回 Resin 时会恢复保存的 Resin 绑定，缺失或错误的 Resin 绑定会按保存的 Resin 模板自动补建。
+
 ### `GET /admin/accounts`
 
 **查询参数**：
@@ -889,6 +899,8 @@ data: {"type":"message_stop"}
 ```json
 {"email": "user@example.com", "password": "pwd"}
 ```
+
+未显式传 `proxy_id` 时，新账号会跟随当前代理模式自动绑定：CF 模式绑定当前 CF 代理；Resin 模式按 Resin 模板创建/复用独立 Resin 代理。
 
 **响应**：`{"success": true, "total_accounts": 6}`
 

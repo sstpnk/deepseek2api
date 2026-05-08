@@ -87,6 +87,18 @@ func (h *Handler) bulkImportAccounts(w http.ResponseWriter, r *http.Request) {
 				existingProxyByName[p.Name] = p.ID
 			}
 		}
+		currentMode := proxySwitchMode(*c)
+		if tpl.Enabled {
+			c.ProxySwitch.ResinProxyTemplate = config.NormalizeProxy(config.Proxy{
+				Name:     tpl.NameTemplate,
+				Type:     tpl.Type,
+				Host:     strings.TrimSpace(tpl.Host),
+				Port:     tpl.Port,
+				Username: tpl.UsernameTemplate,
+				Password: tpl.Password,
+			})
+			c.ProxySwitch.ResinProxyTemplate.ID = ""
+		}
 
 		for _, e := range entries {
 			emailKey := strings.ToLower(e.Email)
@@ -101,7 +113,7 @@ func (h *Handler) bulkImportAccounts(w http.ResponseWriter, r *http.Request) {
 			}
 
 			var proxyID string
-			if tpl.Enabled {
+			if tpl.Enabled && currentMode != "cloudflare" {
 				proxyName := strings.ReplaceAll(tpl.NameTemplate, "{local}", local)
 				if existingID, ok := existingProxyByName[proxyName]; ok {
 					proxyID = existingID

@@ -40,6 +40,9 @@ func accountDedupeKey(acc config.Account) string { return adminshared.AccountDed
 func normalizeAndDedupeAccounts(accounts []config.Account) []config.Account {
 	return adminshared.NormalizeAndDedupeAccounts(accounts)
 }
+func defaultProxyForNewAccount(c *config.Config, acc config.Account) string {
+	return adminshared.DefaultProxyForNewAccount(c, acc)
+}
 func newRequestError(detail string) error { return adminshared.NewRequestError(detail) }
 func requestErrorDetail(err error) (string, bool) {
 	return adminshared.RequestErrorDetail(err)

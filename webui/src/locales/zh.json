@@ -257,7 +257,7 @@
     "switchModeResin": "Resin 模式",
     "switchModeCloudflare": "CF 模式",
     "switchDescResin": "当前账号使用各自保存的 Resin 代理；新增账号会自动按 Resin 模板创建并绑定独立代理。",
-    "switchDescCloudflare": "当前账号统一使用 Cloudflare Worker 出口；切回 Resin 会恢复切换前的绑定，新增账号会生成新的 Resin 代理。",
+    "switchDescCloudflare": "当前账号统一使用 Cloudflare Worker 出口；新增账号会自动绑定 CF，切回 Resin 时会恢复或补建 Resin 代理。",
     "switchAccountStats": "CF 绑定 {cf}/{total}",
     "switchSnapshotStats": "已保存 Resin 绑定 {count}",
     "switchToCloudflare": "切换到 CF",

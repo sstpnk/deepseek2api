@@ -67,6 +67,9 @@ func FindProxyByID(c config.Config, proxyID string) (config.Proxy, bool) {
 func DefaultProxyForNewAccount(c *config.Config, acc config.Account) string {
 	return defaultProxyForNewAccount(c, acc)
 }
+func ProxySwitchMode(c config.Config) string {
+	return proxySwitchMode(c)
+}
 func AccountDedupeKey(acc config.Account) string { return accountDedupeKey(acc) }
 func NormalizeAndDedupeAccounts(accounts []config.Account) []config.Account {
 	return normalizeAndDedupeAccounts(accounts)
@@ -361,7 +364,7 @@ func defaultProxyForNewAccount(c *config.Config, acc config.Account) string {
 	if c == nil || strings.TrimSpace(acc.ProxyID) != "" {
 		return strings.TrimSpace(acc.ProxyID)
 	}
-	switch strings.TrimSpace(c.ProxySwitch.Mode) {
+	switch proxySwitchMode(*c) {
 	case "cloudflare":
 		if proxy, ok := resolveCloudflareProxy(*c, c.ProxySwitch.CFProxyID); ok {
 			return proxy.ID
@@ -385,21 +388,7 @@ func ResolveCloudflareProxy(c config.Config, requestedID string) (config.Proxy, 
 }
 func ProxySwitchStatus(c config.Config) map[string]any {
 	cfProxy, hasCF := resolveCloudflareProxy(c, c.ProxySwitch.CFProxyID)
-	mode := strings.TrimSpace(c.ProxySwitch.Mode)
-	if mode == "" {
-		mode = "resin"
-		if hasCF && len(c.Accounts) > 0 {
-			cfBound := 0
-			for _, acc := range c.Accounts {
-				if strings.TrimSpace(acc.ProxyID) == cfProxy.ID {
-					cfBound++
-				}
-			}
-			if cfBound == len(c.Accounts) {
-				mode = "cloudflare"
-			}
-		}
-	}
+	mode := proxySwitchMode(c)
 	status := map[string]any{
 		"mode":                 mode,
 		"cf_proxy_available":   hasCF,
@@ -430,6 +419,28 @@ func ProxySwitchStatus(c config.Config) map[string]any {
 		status["resin_template_username"] = tpl.Username
 	}
 	return status
+}
+
+func proxySwitchMode(c config.Config) string {
+	switch strings.ToLower(strings.TrimSpace(c.ProxySwitch.Mode)) {
+	case "cloudflare":
+		return "cloudflare"
+	case "resin":
+		return "resin"
+	}
+	cfProxy, hasCF := resolveCloudflareProxy(c, c.ProxySwitch.CFProxyID)
+	if hasCF && len(c.Accounts) > 0 {
+		cfBound := 0
+		for _, acc := range c.Accounts {
+			if strings.TrimSpace(acc.ProxyID) == cfProxy.ID {
+				cfBound++
+			}
+		}
+		if cfBound == len(c.Accounts) {
+			return "cloudflare"
+		}
+	}
+	return "resin"
 }
 
 func ensureResinProxyForAccount(c *config.Config, acc config.Account) string {

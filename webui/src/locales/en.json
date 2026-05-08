@@ -257,7 +257,7 @@
     "switchModeResin": "Resin mode",
     "switchModeCloudflare": "CF mode",
     "switchDescResin": "Accounts are using their saved Resin proxies. New accounts will create and bind dedicated Resin proxies from the saved template.",
-    "switchDescCloudflare": "Accounts are using the Cloudflare Worker egress. Switching back restores saved Resin bindings; accounts added during CF mode get new Resin proxies.",
+    "switchDescCloudflare": "Accounts are using the Cloudflare Worker egress. New accounts bind to CF automatically; switching back restores or creates Resin proxies.",
     "switchAccountStats": "CF bound {cf}/{total}",
     "switchSnapshotStats": "Saved Resin bindings {count}",
     "switchToCloudflare": "Switch to CF",

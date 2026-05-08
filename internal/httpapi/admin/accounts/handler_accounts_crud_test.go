@@ -1,6 +1,7 @@
 package accounts
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -84,6 +85,33 @@ func TestUpdateAccountMetadataPreservesCredentials(t *testing.T) {
 	}
 	if acc.Password != "secret" {
 		t.Fatalf("password should be preserved, got %#v", acc)
+	}
+}
+
+func TestAddAccountUsesCloudflareProxyWhenInCloudflareMode(t *testing.T) {
+	h := newAdminTestHandler(t, `{
+		"proxies":[
+			{"id":"resin-a","name":"resin-u","type":"socks5","host":"161.118.201.199","port":21345,"username":"Default.u","password":"secret"},
+			{"id":"cf-1","name":"CF Worker","type":"cloudflare","host":"worker.example.workers.dev","port":443,"worker_host":"worker.example.workers.dev"}
+		],
+		"accounts":[{"email":"u@example.com","password":"pwd","proxy_id":"cf-1"}],
+		"proxy_switch":{"cf_proxy_id":"cf-1"}
+	}`)
+
+	r := chi.NewRouter()
+	r.Post("/admin/accounts", h.addAccount)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/admin/accounts", bytes.NewBufferString(`{"email":"new@example.com","password":"pwd"}`)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	snap := h.Store.Snapshot()
+	if len(snap.Accounts) != 2 {
+		t.Fatalf("expected 2 accounts, got %#v", snap.Accounts)
+	}
+	if got := snap.Accounts[1].ProxyID; got != "cf-1" {
+		t.Fatalf("expected new account to use cloudflare proxy, got %q", got)
 	}
 }
 

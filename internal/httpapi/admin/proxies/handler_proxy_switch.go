@@ -107,10 +107,7 @@ type proxySwitchStatusPayload struct {
 
 func buildProxySwitchStatus(c config.Config) proxySwitchStatusPayload {
 	raw := adminshared.ProxySwitchStatus(c)
-	mode := strings.TrimSpace(c.ProxySwitch.Mode)
-	if mode == "" {
-		mode, _ = raw["mode"].(string)
-	}
+	mode, _ := raw["mode"].(string)
 
 	status := proxySwitchStatusPayload{
 		Mode:               mode,
@@ -139,7 +136,7 @@ func applyCloudflareProxyMode(c *config.Config, requestedCFProxyID string) (prox
 	if !ok {
 		return proxySwitchStatusPayload{}, fmt.Errorf("未找到可用的 Cloudflare 代理，请先部署 CF Worker")
 	}
-	currentMode := strings.TrimSpace(c.ProxySwitch.Mode)
+	currentMode := adminshared.ProxySwitchMode(*c)
 	assignments := make(map[string]string, len(c.Accounts))
 	if currentMode == proxySwitchModeCloudflare {
 		assignments = cloneStringMap(c.ProxySwitch.ResinAssignments)
@@ -185,27 +182,26 @@ func applyResinProxyMode(c *config.Config) (proxySwitchStatusPayload, error) {
 	for i, acc := range c.Accounts {
 		id := acc.Identifier()
 		proxyID, hasSnapshot := assignments[id]
-		if hasSnapshot && strings.TrimSpace(proxyID) != "" {
-			if proxyIDs[strings.TrimSpace(proxyID)] {
-				c.Accounts[i].ProxyID = strings.TrimSpace(proxyID)
-			} else {
-				c.Accounts[i].ProxyID = adminshared.EnsureResinProxyForAccount(c, acc)
-				if c.Accounts[i].ProxyID == "" {
-					missingRestores++
-				}
+		proxyID = strings.TrimSpace(proxyID)
+		if hasSnapshot && proxyID != "" && proxyIDs[proxyID] && !proxyIsCloudflare(proxyID, c.Proxies) {
+			c.Accounts[i].ProxyID = proxyID
+			if id != "" {
+				assignments[id] = proxyID
 			}
-			continue
-		}
-		if hasSnapshot {
-			c.Accounts[i].ProxyID = ""
 			continue
 		}
 		c.Accounts[i].ProxyID = adminshared.EnsureResinProxyForAccount(c, acc)
 		if c.Accounts[i].ProxyID == "" {
 			missingRestores++
+			if id != "" {
+				delete(assignments, id)
+			}
+		} else if id != "" {
+			assignments[id] = c.Accounts[i].ProxyID
 		}
 	}
 	c.ProxySwitch.Mode = proxySwitchModeResin
+	c.ProxySwitch.ResinAssignments = assignments
 	status := buildProxySwitchStatus(*c)
 	status.MissingResinRestores = missingRestores
 	return status, nil
@@ -280,6 +276,20 @@ func proxyIDSet(proxies []config.Proxy) map[string]bool {
 		out[proxy.ID] = true
 	}
 	return out
+}
+
+func proxyIsCloudflare(proxyID string, proxies []config.Proxy) bool {
+	proxyID = strings.TrimSpace(proxyID)
+	if proxyID == "" {
+		return false
+	}
+	for _, proxy := range proxies {
+		proxy = config.NormalizeProxy(proxy)
+		if proxy.ID == proxyID {
+			return proxy.Type == "cloudflare"
+		}
+	}
+	return false
 }
 
 func cloneStringMap(in map[string]string) map[string]string {
