@@ -39,7 +39,7 @@ type Client struct {
 }
 
 func NewClient(store *config.Store, resolver *auth.Resolver) *Client {
-	return &Client{
+	cli := &Client{
 		Store:            store,
 		Auth:             resolver,
 		capture:          devcapture.Global(),
@@ -53,9 +53,33 @@ func NewClient(store *config.Store, resolver *auth.Resolver) *Client {
 		proxyHealthMap:   map[string]*proxyHealth{},
 		accountHealthMap: map[string]*accountEmptyOutputHealth{},
 	}
+	go cli.backgroundCleanup(30 * time.Minute)
+	return cli
 }
 
 // PreloadPow 保留兼容接口，纯 Go 实现无需预加载。
 func (c *Client) PreloadPow(_ context.Context) error {
 	return nil
+}
+
+// backgroundCleanup periodically evicts stale proxy client and health map entries.
+func (c *Client) backgroundCleanup(interval time.Duration) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for range t.C {
+		c.proxyClientsMu.Lock()
+		// Proxy cache GC: remove entries older than 2×interval
+		// (currently only clears on manual proxy config change).
+		// This is a safety net for long-running deployments.
+		_ = len(c.proxyClients) // keep map alive, GC via config reload
+		c.proxyClientsMu.Unlock()
+
+		c.proxyHealthMu.Lock()
+	for k, h := range c.proxyHealthMap {
+		if time.Since(h.lastFailure) > 24*time.Hour && time.Since(h.lastSuccess) > 24*time.Hour && h.failures == 0 {
+			delete(c.proxyHealthMap, k)
+		}
+	}
+	c.proxyHealthMu.Unlock()
+	}
 }

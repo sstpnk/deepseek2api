@@ -31,13 +31,14 @@ func NewWithDialContext(timeout time.Duration, dialContext DialContextFunc) *Cli
 		dialContext = (&net.Dialer{Timeout: 15 * time.Second, KeepAlive: 30 * time.Second}).DialContext
 	}
 	base := &http.Transport{
-		ForceAttemptHTTP2:   false,
-		MaxIdleConns:        200,
-		MaxIdleConnsPerHost: 100,
-		IdleConnTimeout:     90 * time.Second,
-		DialContext:         dialContext,
-		DialTLSContext:      safariTLSDialer(dialContext),
-		TLSClientConfig:     &tls.Config{MinVersion: tls.VersionTLS12},
+		ForceAttemptHTTP2:     false,
+		MaxIdleConns:          16,
+		MaxIdleConnsPerHost:   8,
+		IdleConnTimeout:       30 * time.Second,
+		ResponseHeaderTimeout: 30 * time.Second,
+		DialContext:           dialContext,
+		DialTLSContext:        safariTLSDialer(dialContext),
+		TLSClientConfig:       &tls.Config{MinVersion: tls.VersionTLS12},
 	}
 	if useEnvProxy {
 		base.Proxy = http.ProxyFromEnvironment
@@ -55,12 +56,13 @@ func NewFallbackClient(timeout time.Duration, dialContext DialContextFunc) *http
 		dialContext = (&net.Dialer{Timeout: 15 * time.Second, KeepAlive: 30 * time.Second}).DialContext
 	}
 	base := &http.Transport{
-		ForceAttemptHTTP2:   false,
-		MaxIdleConns:        200,
-		MaxIdleConnsPerHost: 100,
-		IdleConnTimeout:     90 * time.Second,
-		DialContext:         dialContext,
-		TLSClientConfig:     &tls.Config{MinVersion: tls.VersionTLS12},
+		ForceAttemptHTTP2:     false,
+		MaxIdleConns:          16,
+		MaxIdleConnsPerHost:   8,
+		IdleConnTimeout:       30 * time.Second,
+		ResponseHeaderTimeout: 30 * time.Second,
+		DialContext:           dialContext,
+		TLSClientConfig:       &tls.Config{MinVersion: tls.VersionTLS12},
 	}
 	if useEnvProxy {
 		base.Proxy = http.ProxyFromEnvironment
