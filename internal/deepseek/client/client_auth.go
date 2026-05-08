@@ -241,7 +241,9 @@ func (c *Client) authHeaders(token string) map[string]string {
 	for k, v := range dsprotocol.BaseHeaders {
 		headers[k] = v
 	}
-	headers["authorization"] = "Bearer " + token
+	if token != "" {
+		headers["authorization"] = "Bearer " + token
+	}
 	return headers
 }
 
