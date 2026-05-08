@@ -95,7 +95,9 @@ func (c *Client) UploadFile(ctx context.Context, a *auth.RequestAuth, req Upload
 		if modelType != "" {
 			headers["x-model-type"] = modelType
 		}
-		headers["x-ds-pow-response"] = powHeader
+		if powHeader != "" {
+				headers["x-ds-pow-response"] = powHeader
+			}
 		headers["x-file-size"] = strconv.Itoa(len(req.Data))
 		headers["x-thinking-enabled"] = "1"
 		resp, err := c.doUpload(uploadCtx, clients.regular, clients.fallback, dsprotocol.DeepSeekUploadFileURL, headers, body)
