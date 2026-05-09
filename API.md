@@ -760,7 +760,7 @@ data: {"type":"message_stop"}
 - `runtime`（`account_max_inflight`、`account_max_queue`、`global_max_inflight`、`pow_max_concurrency`、`token_refresh_interval_hours`）
 - `responses` / `embeddings`
 - `auto_delete`（`mode`：`none` / `single` / `all`；旧配置 `sessions=true` 仍按 `all` 处理）
-- `current_input_file`（`enabled` 默认返回 `true`、普通模型 `min_chars` 默认 `12000`；显式设为 `0` 表示任意非空输入都上传，`-rp` 模型开启后始终上传）
+- `current_input_file`（`enabled` 默认返回 `true`、`min_chars` 默认 `0`，表示任意非空输入都上传；`-rp` 模型开启后始终上传）
 - `model_aliases`
 - `env_backed`、`needs_vercel_sync`
 - `toolcall` 策略已固定为 `feature_match + high`，不再通过 settings 返回或修改

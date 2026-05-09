@@ -521,6 +521,48 @@ func TestApplyCurrentInputFileRoleplayIgnoresMinCharsThreshold(t *testing.T) {
 	}
 }
 
+func TestApplyCurrentInputFileRoleplayTruncatesLiveLatestUserOnly(t *testing.T) {
+	ds := &inlineUploadDSStub{}
+	h := &openAITestSurface{
+		Store: mockOpenAIConfig{
+			currentInputEnabled: true,
+			currentInputMin:     0,
+		},
+		DS: ds,
+	}
+	longPrefix := strings.Repeat("p", 150010)
+	latest := longPrefix + "TAIL"
+	req := map[string]any{
+		"model": "deepseek-v4-pro-rp",
+		"messages": []any{
+			map[string]any{"role": "system", "content": "rp system"},
+			map[string]any{"role": "user", "content": latest},
+		},
+	}
+	stdReq, err := promptcompat.NormalizeOpenAIChatRequest(h.Store, req, "")
+	if err != nil {
+		t.Fatalf("normalize failed: %v", err)
+	}
+
+	out, err := h.applyCurrentInputFile(context.Background(), &auth.RequestAuth{DeepSeekToken: "token"}, stdReq)
+	if err != nil {
+		t.Fatalf("apply current input file failed: %v", err)
+	}
+	if len(ds.uploadCalls) != 1 {
+		t.Fatalf("expected RP current input upload, got %d", len(ds.uploadCalls))
+	}
+	fileText := string(ds.uploadCalls[0].Data)
+	if !strings.Contains(fileText, latest) {
+		t.Fatalf("expected uploaded file to keep full latest user text")
+	}
+	if strings.Contains(out.FinalPrompt, longPrefix) {
+		t.Fatalf("expected RP live prompt to truncate latest user prefix")
+	}
+	if !strings.Contains(out.FinalPrompt, strings.Repeat("p", 149996)+"TAIL") {
+		t.Fatalf("expected RP live prompt to keep latest user tail")
+	}
+}
+
 func TestApplyCurrentInputFilePreservesFullContextPromptForTokenCounting(t *testing.T) {
 	ds := &inlineUploadDSStub{}
 	h := &openAITestSurface{

@@ -61,8 +61,8 @@ func TestGetSettingsIncludesCurrentInputFileDefaults(t *testing.T) {
 	if got := boolFrom(currentInputFile["enabled"]); !got {
 		t.Fatalf("expected current_input_file.enabled=true, body=%v", body)
 	}
-	if got := intFrom(currentInputFile["min_chars"]); got != 12000 {
-		t.Fatalf("expected current_input_file.min_chars=12000, got %d body=%v", got, body)
+	if got := intFrom(currentInputFile["min_chars"]); got != 0 {
+		t.Fatalf("expected current_input_file.min_chars=0, got %d body=%v", got, body)
 	}
 	thinkingInjection, _ := body["thinking_injection"].(map[string]any)
 	if got := boolFrom(thinkingInjection["enabled"]); !got {

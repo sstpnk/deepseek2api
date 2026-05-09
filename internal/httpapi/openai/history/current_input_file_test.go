@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"ds2api/internal/auth"
@@ -75,5 +76,44 @@ func TestApplyCurrentInputFileRoleplayIgnoresThreshold(t *testing.T) {
 	}
 	if len(uploader.uploads) != 1 {
 		t.Fatalf("expected one upload, got %d", len(uploader.uploads))
+	}
+}
+
+func TestApplyCurrentInputFileRoleplayTruncatesLiveLatestUserOnly(t *testing.T) {
+	uploader := &currentInputTestUploader{}
+	longPrefix := strings.Repeat("a", roleplayLiveUserMaxRunes+10)
+	latest := longPrefix + "TAIL"
+	req := promptcompat.StandardRequest{
+		Surface:       "openai_chat",
+		ResolvedModel: "deepseek-v4-pro-rp",
+		Messages: []any{
+			map[string]any{"role": "system", "content": "system context"},
+			map[string]any{"role": "user", "content": latest},
+		},
+		LatestUserInputText: latest,
+	}
+
+	out, err := (Service{
+		Store: currentInputTestStore{enabled: true, minChars: 0},
+		DS:    uploader,
+	}).ApplyCurrentInputFile(context.Background(), &auth.RequestAuth{DeepSeekToken: "token"}, req)
+	if err != nil {
+		t.Fatalf("ApplyCurrentInputFile error: %v", err)
+	}
+	if !out.CurrentInputFileApplied {
+		t.Fatal("expected roleplay current input file to apply")
+	}
+	if len(uploader.uploads) != 1 {
+		t.Fatalf("expected one upload, got %d", len(uploader.uploads))
+	}
+	fileText := string(uploader.uploads[0].Data)
+	if !strings.Contains(fileText, latest) {
+		t.Fatalf("expected uploaded file to keep full latest user text")
+	}
+	if strings.Contains(out.FinalPrompt, longPrefix) {
+		t.Fatalf("expected live prompt to truncate latest user prefix")
+	}
+	if !strings.Contains(out.FinalPrompt, strings.Repeat("a", roleplayLiveUserMaxRunes-4)+"TAIL") {
+		t.Fatalf("expected live prompt to keep latest user tail")
 	}
 }

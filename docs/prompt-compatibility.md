@@ -277,7 +277,7 @@ OpenAI 的文件上传现在不再是“只传文件本体”的通用路径，�
 
 兼容层现在只保留 `current_input_file` 这一种拆分方式；旧的 `history_split` 配置字段已移除，读取旧配置时会忽略它且不会再写回。
 
-- `current_input_file` 默认开启；它在统一 completion runtime 入口全局生效，用于把“完整上下文”合并进 `DS2API_HISTORY.txt` 上下文文件。当最新 user turn 的纯文本长度达到 `current_input_file.min_chars`（普通模型默认 `12000`；显式设为 `0` 表示任意非空输入都上传）时，runtime 会上传一个文件名为 `DS2API_HISTORY.txt` 的上下文文件。`-rp` 模型只要 `current_input_file.enabled=true` 就忽略 `min_chars` 阈值并始终上传。文件内容会先经过各协议入口的标准化，再序列化成按轮次编号的 `DS2API_HISTORY.txt` 风格 transcript，带有 `# DS2API_HISTORY.txt` 标题和 `=== N. ROLE ===` 分段；普通模型的 live prompt 中会给出一个 continuation 语气的 user 消息，引导模型从 `DS2API_HISTORY.txt` 的最新状态继续推进，并直接回答最新请求，避免把任务拉回起点。`-rp` 模型的文件内容仍是同一份完整上下文与最新 user turn，但 live prompt 会换成 RP 专用结构：短边界句、最新 user turn 原文、RP continuation 约束、thinking injection。
+- `current_input_file` 默认开启；它在统一 completion runtime 入口全局生效，用于把“完整上下文”合并进 `DS2API_HISTORY.txt` 上下文文件。当最新 user turn 的纯文本长度达到 `current_input_file.min_chars`（默认 `0`，表示任意非空输入都上传）时，runtime 会上传一个文件名为 `DS2API_HISTORY.txt` 的上下文文件。`-rp` 模型只要 `current_input_file.enabled=true` 就忽略 `min_chars` 阈值并始终上传。文件内容会先经过各协议入口的标准化，再序列化成按轮次编号的 `DS2API_HISTORY.txt` 风格 transcript，带有 `# DS2API_HISTORY.txt` 标题和 `=== N. ROLE ===` 分段；普通模型的 live prompt 中会给出一个 continuation 语气的 user 消息，引导模型从 `DS2API_HISTORY.txt` 的最新状态继续推进，并直接回答最新请求，避免把任务拉回起点。`-rp` 模型的文件内容仍是同一份完整上下文与最新 user turn，但 live prompt 会换成 RP 专用结构：短边界句、最新 user turn 原文、RP continuation 约束、thinking injection；如果最新 user turn 本身超过 live prompt 限制，live prompt 中只保留该 user turn 的尾部约 `150000` 字符，上传文件中的完整上下文不截断。
 - 如果 `current_input_file.enabled=false`，请求会直接透传，不上传任何拆分上下文文件。
 - 即使触发 `current_input_file` 后 live prompt 被缩短，对客户端回包里的上下文 token 统计，仍会沿用**拆分前的完整 prompt 语义**做计数，而不是按缩短后的占位 prompt 计算；否则会把真实上下文显著算小。
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"ds2api/internal/auth"
 	"ds2api/internal/config"
@@ -14,9 +15,10 @@ import (
 )
 
 const (
-	currentInputFilename    = promptcompat.CurrentInputContextFilename
-	currentInputContentType = "text/plain; charset=utf-8"
-	currentInputPurpose     = "assistants"
+	currentInputFilename     = promptcompat.CurrentInputContextFilename
+	currentInputContentType  = "text/plain; charset=utf-8"
+	currentInputPurpose      = "assistants"
+	roleplayLiveUserMaxRunes = 150000
 )
 
 type CurrentInputConfigReader interface {
@@ -142,6 +144,7 @@ func standardCurrentInputFilePrompt() string {
 
 func roleplayCurrentInputFilePrompt(latestUserText, thinkingPrompt string) string {
 	latestUserText = strings.TrimSpace(latestUserText)
+	latestUserText = trailingRunes(latestUserText, roleplayLiveUserMaxRunes)
 	parts := []string{
 		"Context boundary: use the attached DS2API_HISTORY.txt as prior state, ignore corrupted fragments, and answer only the latest user input below.",
 	}
@@ -153,6 +156,25 @@ func roleplayCurrentInputFilePrompt(latestUserText, thinkingPrompt string) strin
 		parts = append(parts, thinkingPrompt)
 	}
 	return strings.Join(parts, "\n\n")
+}
+
+func trailingRunes(text string, maxRunes int) string {
+	if maxRunes <= 0 {
+		return ""
+	}
+	count := 0
+	for i := len(text); i > 0; {
+		_, size := utf8.DecodeLastRuneInString(text[:i])
+		if size <= 0 {
+			break
+		}
+		i -= size
+		count++
+		if count == maxRunes {
+			return text[i:]
+		}
+	}
+	return text
 }
 
 func roleplayLiveThinkingPrompt(store CurrentInputConfigReader, stdReq promptcompat.StandardRequest) string {

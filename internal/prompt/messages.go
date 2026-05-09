@@ -65,21 +65,11 @@ func MessagesPrepareWithOptions(messages []map[string]any, opts PrepareOptions) 
 	parts := make([]string, 0, len(merged)+2)
 	parts = append(parts, beginSentenceMarker)
 	lastRole := ""
-	lastIdx := len(merged) - 1
-	for i, m := range merged {
+	for _, m := range merged {
 		lastRole = m.Role
 		switch m.Role {
 		case "assistant":
-			// The final assistant block is treated as a prefill/continuation
-			// prefix: the model should continue writing from this text, so we
-			// leave the turn half-open (no end-of-sentence marker). Closing it
-			// causes the upstream reasoner to open a brand-new turn and emit
-			// the entire visible answer inside the thinking channel.
-			suffix := endSentenceMarker
-			if i == lastIdx {
-				suffix = ""
-			}
-			parts = append(parts, formatRoleBlock(assistantMarker, m.Text, suffix))
+			parts = append(parts, formatRoleBlock(assistantMarker, m.Text, endSentenceMarker))
 		case "tool":
 			if strings.TrimSpace(m.Text) != "" {
 				parts = append(parts, formatRoleBlock(toolMarker, m.Text, endToolResultsMarker))

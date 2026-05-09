@@ -189,12 +189,11 @@ func TestMessagesPrepareAssistantMarkers(t *testing.T) {
 	if !strings.Contains(got, "<｜Assistant｜>") {
 		t.Fatalf("expected assistant marker, got %q", got)
 	}
-	// Final assistant turn is a prefill prefix — must NOT be closed.
-	if strings.Contains(got, "<｜end▁of▁sentence｜>") {
-		t.Fatalf("final assistant should remain half-open, got %q", got)
+	if !strings.Contains(got, "<｜end▁of▁sentence｜>") {
+		t.Fatalf("expected assistant turn to be closed, got %q", got)
 	}
-	if !strings.HasSuffix(got, "<｜Assistant｜>Hello!") {
-		t.Fatalf("expected trailing assistant prefix, got %q", got)
+	if !strings.HasSuffix(got, "<｜Assistant｜>Hello!<｜end▁of▁sentence｜>") {
+		t.Fatalf("expected trailing assistant block, got %q", got)
 	}
 	if strings.Contains(got, "<think>") || strings.Contains(got, "</think>") {
 		t.Fatalf("did not expect think tags in prompt, got %q", got)

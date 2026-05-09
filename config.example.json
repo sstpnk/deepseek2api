@@ -48,7 +48,7 @@
   },
   "current_input_file": {
     "enabled": true,
-    "min_chars": 12000
+    "min_chars": 0
   },
   "thinking_injection": {
     "enabled": true,

@@ -28,7 +28,7 @@ type Config struct {
 	AdditionalFields  map[string]any          `json:"-"`
 }
 
-const DefaultCurrentInputFileMinChars = 12000
+const DefaultCurrentInputFileMinChars = 0
 
 // QuarantinedAccount is an account that failed an auto-delete verification but
 // has not yet been confirmed dead. The background sweeper re-verifies it every
