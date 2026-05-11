@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { RefreshCw, RotateCcw, Trash2, Play } from 'lucide-react'
 import clsx from 'clsx'
 
+const QUARANTINE_PAGE_SIZE = 50
+
 // QuarantinePanel renders the observation-zone state pulled from
 // /admin/accounts/quarantine. Refresh on mount and whenever the user kicks
 // off a manual sweep — the backend sweeper otherwise runs every 2h, so the
@@ -12,6 +14,8 @@ export default function QuarantinePanel({ t, apiFetch, onMessage, onChange }) {
     const [loading, setLoading] = useState(false)
     const [sweeping, setSweeping] = useState(false)
     const [actingOn, setActingOn] = useState({})
+    const [visibleCount, setVisibleCount] = useState(QUARANTINE_PAGE_SIZE)
+    const visibleItems = items.slice(0, visibleCount)
 
     const fetchList = useCallback(async () => {
         setLoading(true)
@@ -23,6 +27,7 @@ export default function QuarantinePanel({ t, apiFetch, onMessage, onChange }) {
             }
             const data = await res.json()
             setItems(Array.isArray(data.items) ? data.items : [])
+            setVisibleCount(QUARANTINE_PAGE_SIZE)
         } catch (_e) {
             onMessage('error', t('messages.networkError'))
         } finally {
@@ -142,7 +147,7 @@ export default function QuarantinePanel({ t, apiFetch, onMessage, onChange }) {
                 <div className="p-8 text-center text-muted-foreground text-sm">{t('accountManager.quarantineEmpty')}</div>
             ) : (
                 <div className="divide-y divide-border">
-                    {items.map((entry) => (
+                    {visibleItems.map((entry) => (
                         <div key={entry.identifier} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-muted/50 transition-colors">
                             <div className="flex items-center gap-3 min-w-0">
                                 <div className={clsx(
@@ -208,6 +213,16 @@ export default function QuarantinePanel({ t, apiFetch, onMessage, onChange }) {
                             </div>
                         </div>
                     ))}
+                    {visibleCount < items.length && (
+                        <div className="p-4 text-center">
+                            <button
+                                onClick={() => setVisibleCount(count => Math.min(count + QUARANTINE_PAGE_SIZE, items.length))}
+                                className="px-3 py-2 text-xs font-medium rounded-lg border border-border hover:bg-secondary transition-colors"
+                            >
+                                {t('actions.showMore')} ({visibleCount}/{items.length})
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
         </div>

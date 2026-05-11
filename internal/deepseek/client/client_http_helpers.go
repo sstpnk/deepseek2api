@@ -9,7 +9,7 @@ import (
 	"github.com/andybalholm/brotli"
 )
 
-const maxCompressedBytes = 50 << 20   // 50 MiB compressed (network wire)
+const maxCompressedBytes = 50 << 20    // 50 MiB compressed (network wire)
 const maxDecompressedBytes = 200 << 20 // 200 MiB decompressed (defense against zip bombs)
 
 func readResponseBody(resp *http.Response) ([]byte, error) {
@@ -38,6 +38,10 @@ func preview(b []byte) string {
 }
 
 func (c *Client) jsonHeaders(headers map[string]string) map[string]string {
-	headers["Content-Type"] = "application/json"
-	return headers
+	out := make(map[string]string, len(headers)+1)
+	for k, v := range headers {
+		out[k] = v
+	}
+	out["Content-Type"] = "application/json"
+	return out
 }

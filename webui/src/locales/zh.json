@@ -63,7 +63,8 @@
     "generate": "生成",
     "test": "刷新 Token",
     "testing": "正在刷新...",
-    "loading": "加载中..."
+    "loading": "加载中...",
+    "showMore": "显示更多"
   },
   "messages": {
     "deleted": "删除成功",

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 
+const MAX_ACCOUNT_PAGE_SIZE = 100
+
 export function useAccountsData({ apiFetch }) {
     const [queueStatus, setQueueStatus] = useState(null)
     const [keysExpanded, setKeysExpanded] = useState(false)
@@ -19,9 +21,10 @@ export function useAccountsData({ apiFetch }) {
     const [searchQuery, setSearchQuery] = useState('')
 
     const fetchAccounts = async (targetPage = page, targetPageSize = pageSize, targetQuery = searchQuery) => {
+        const safePageSize = Math.min(Math.max(Number(targetPageSize) || pageSize, 1), MAX_ACCOUNT_PAGE_SIZE)
         setLoadingAccounts(true)
         try {
-            let url = `/admin/accounts?page=${targetPage}&page_size=${targetPageSize}`
+            let url = `/admin/accounts?page=${targetPage}&page_size=${safePageSize}`
             if (targetQuery.trim()) url += `&q=${encodeURIComponent(targetQuery.trim())}`
             const res = await apiFetch(url)
             if (res.ok) {
@@ -39,8 +42,9 @@ export function useAccountsData({ apiFetch }) {
     }
 
     const changePageSize = (newSize) => {
-        setPageSize(newSize)
-        fetchAccounts(1, newSize)
+        const safePageSize = Math.min(Math.max(Number(newSize) || pageSize, 1), MAX_ACCOUNT_PAGE_SIZE)
+        setPageSize(safePageSize)
+        fetchAccounts(1, safePageSize)
     }
 
     const handleSearchChange = (query) => {

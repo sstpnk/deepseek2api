@@ -2,6 +2,15 @@ import { useState } from 'react'
 import { ChevronLeft, ChevronRight, Check, Copy, Pencil, Play, Plus, Trash2, FolderX } from 'lucide-react'
 import clsx from 'clsx'
 
+const ACCOUNT_PAGE_SIZES = [10, 20, 50, 100]
+const BATCH_PROGRESS_LIMIT = 100
+const PROXY_OPTION_LIMIT = 100
+
+function proxyLabel(proxy) {
+    if (!proxy) return ''
+    return proxy.name || `${proxy.host}:${proxy.port}`
+}
+
 export default function AccountsTable({
     t,
     accounts,
@@ -35,6 +44,10 @@ export default function AccountsTable({
     onRefreshOptionsChange = () => {},
 }) {
     const [copiedId, setCopiedId] = useState(null)
+    const proxyOptionBase = proxies.length > PROXY_OPTION_LIMIT
+        ? proxies.slice(0, PROXY_OPTION_LIMIT)
+        : proxies
+    const visibleBatchResults = batchProgress.results.slice(-BATCH_PROGRESS_LIMIT)
 
     const copyId = (id) => {
         navigator.clipboard.writeText(id).then(() => {
@@ -126,9 +139,9 @@ export default function AccountsTable({
                             style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
                         />
                     </div>
-                    {batchProgress.results.length > 0 && (
+                    {visibleBatchResults.length > 0 && (
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 max-h-32 overflow-y-auto custom-scrollbar">
-                            {batchProgress.results.map((r, i) => (
+                            {visibleBatchResults.map((r, i) => (
                                 <div key={i} className={clsx(
                                     "text-xs px-2 py-1 rounded border truncate",
                                     r.quarantined
@@ -152,6 +165,9 @@ export default function AccountsTable({
                     accounts.map((acc, i) => {
                         const id = resolveAccountIdentifier(acc)
                         const assignedProxy = proxies.find(proxy => proxy.id === acc.proxy_id)
+                        const proxyOptions = assignedProxy && !proxyOptionBase.some(proxy => proxy.id === assignedProxy.id)
+                            ? [assignedProxy, ...proxyOptionBase]
+                            : proxyOptionBase
                         const runtimeUnknown = envBacked && !acc.test_status
                         const isActive = acc.test_status === 'ok' || acc.has_token
                         return (
@@ -220,9 +236,9 @@ export default function AccountsTable({
                                         className="max-w-[180px] px-2.5 py-1.5 text-[10px] lg:text-xs bg-secondary border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
                                     >
                                         <option value="">{t('accountManager.proxyNone')}</option>
-                                        {proxies.map(proxy => (
+                                        {proxyOptions.map(proxy => (
                                             <option key={proxy.id} value={proxy.id}>
-                                                {proxy.name || `${proxy.host}:${proxy.port}`}
+                                                {proxyLabel(proxy)}
                                             </option>
                                         ))}
                                     </select>
@@ -267,7 +283,7 @@ export default function AccountsTable({
                             onChange={e => onPageSizeChange(Number(e.target.value))}
                             className="text-sm border border-border rounded-md px-2 py-1 bg-background text-foreground"
                         >
-                            {[10, 20, 50, 100, 500, 1000, 2000, 5000].map(s => (
+                            {ACCOUNT_PAGE_SIZES.map(s => (
                                 <option key={s} value={s}>{s}</option>
                             ))}
                         </select>

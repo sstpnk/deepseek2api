@@ -63,7 +63,8 @@
     "generate": "Generate",
     "test": "Refresh token",
     "testing": "Refreshing...",
-    "loading": "Loading..."
+    "loading": "Loading...",
+    "showMore": "Show more"
   },
   "messages": {
     "deleted": "Deleted successfully",

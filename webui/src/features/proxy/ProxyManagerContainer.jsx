@@ -4,6 +4,8 @@ import clsx from 'clsx'
 
 import { useI18n } from '../../i18n'
 
+const PROXY_PAGE_SIZE = 50
+
 async function readApiResponse(res, nonJsonMessage) {
     const contentType = String(res.headers.get('content-type') || '').toLowerCase()
     const raw = await res.text()
@@ -85,6 +87,9 @@ function ProxiesTable({
     onEdit,
     onDelete,
 }) {
+    const [visibleCount, setVisibleCount] = useState(PROXY_PAGE_SIZE)
+    const visibleProxies = proxies.slice(0, visibleCount)
+
     return (
         <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm">
             <div className="p-6 border-b border-border flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -105,7 +110,7 @@ function ProxiesTable({
                 <div className="p-10 text-center text-muted-foreground">{t('proxyManager.noProxies')}</div>
             ) : (
                 <div className="divide-y divide-border">
-                    {proxies.map((proxy) => {
+                    {visibleProxies.map((proxy) => {
                         const result = testResults[proxy.id]
                         return (
                             <div key={proxy.id} className="p-4 md:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 hover:bg-muted/40 transition-colors">
@@ -165,6 +170,16 @@ function ProxiesTable({
                             </div>
                         )
                     })}
+                    {visibleCount < proxies.length && (
+                        <div className="p-4 text-center">
+                            <button
+                                onClick={() => setVisibleCount(count => Math.min(count + PROXY_PAGE_SIZE, proxies.length))}
+                                className="px-3 py-2 text-xs font-medium rounded-lg border border-border hover:bg-secondary transition-colors"
+                            >
+                                {t('actions.showMore')} ({visibleCount}/{proxies.length})
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
         </div>
