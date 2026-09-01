@@ -1,71 +1,48 @@
 # Git
 .git
 .gitignore
+.gitattributes
 
-# Python
-__pycache__
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/*
-!dist/docker-input/
-!dist/docker-input/*.tar.gz
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# 虚拟环境
-venv/
-env/
-ENV/
-.venv
-
-# 环境配置（通过 docker-compose 挂载或环境变量传递）
+# Secrets (mount via docker-compose volume, not in image)
 .env
 .env.local
 .env.*.local
 config.json
+data/
 
-# 开发工具
+# Editor / OS
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+.DS_Store
+Thumbs.db
 
-# 测试
-tests/
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Node.js / WebUI 开发依赖
-node_modules/
-webui/node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# 文档
-*.md
-!README*.md
+# Go test/build artifacts
+*.test
+*.out
+coverage.txt
 
 # CI/CD
 .github/
+.gitlab-ci.yml
 .releaserc.json
 
-# 其他
-.DS_Store
-Thumbs.db
+# Docs (kept locally, not needed in image)
+*.md
+!README.md
+docs/
+plans/
+
+# Frontend leftovers from upstream
+webui/
+node_modules/
+app/
+api/
+start.mjs
+vercel.json
+zeabur.yaml
+
+# Tests (slim build doesn't run them inside image)
+tests/

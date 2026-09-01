@@ -1,9 +1,0 @@
-name = "ds2api-proxy"
-main = "cf-worker.js"
-compatibility_date = "2025-01-01"
-
-[vars]
-TARGET_HOST = "chat.deepseek.com"
-
-# Deploy with: npx wrangler deploy
-# Then update ds2api config to point at https://ds2api-proxy.YOUR-SUBDOMAIN.workers.dev

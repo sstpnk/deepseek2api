@@ -44,7 +44,7 @@ func (s *Store) findAccountIndexLocked(identifier string) (int, bool) {
 }
 
 func (s *Store) setAccountTestStatusLocked(acc Account, status, hintedIdentifier string) {
-	status = lower(status)
+	status = strings.ToLower(status)
 	if status == "" {
 		return
 	}
@@ -57,7 +57,7 @@ func (s *Store) setAccountTestStatusLocked(acc Account, status, hintedIdentifier
 	if mobile := CanonicalMobileKey(acc.Mobile); mobile != "" {
 		s.accTest[mobile] = status
 	}
-	if hintedIdentifier = lower(hintedIdentifier); hintedIdentifier != "" {
+	if hintedIdentifier = strings.ToLower(hintedIdentifier); hintedIdentifier != "" {
 		s.accTest[hintedIdentifier] = status
 	}
 }
