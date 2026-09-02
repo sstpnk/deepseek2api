@@ -1,56 +1,156 @@
-// Package chat exposes the OpenAI-compatible /v1/chat/completions handler.
 package chat
 
 import (
-	"encoding/json"
-	"errors"
+	"context"
 	"net/http"
+	"sync"
+	"time"
 
 	"ds2api/internal/auth"
+	"ds2api/internal/chathistory"
+	"ds2api/internal/config"
+	"ds2api/internal/httpapi/openai/files"
+	"ds2api/internal/httpapi/openai/history"
 	"ds2api/internal/httpapi/openai/shared"
+	"ds2api/internal/promptcompat"
+	"ds2api/internal/textclean"
+	"ds2api/internal/toolcall"
+	"ds2api/internal/toolstream"
 )
 
-// Handler is the /v1/chat/completions handler.
+const openAIGeneralMaxSize = shared.GeneralMaxSize
+
+var writeJSON = shared.WriteJSON
+
 type Handler struct {
-	Deps *shared.Deps
+	Store       shared.ConfigReader
+	Auth        shared.AuthResolver
+	DS          shared.DeepSeekCaller
+	ChatHistory *chathistory.Store
+
+	leaseMu      sync.Mutex
+	streamLeases map[string]streamLease
 }
 
-// NewHandler returns a new chat handler.
-func NewHandler(deps *shared.Deps) *Handler { return &Handler{Deps: deps} }
+type streamLease struct {
+	Auth      *auth.RequestAuth
+	ExpiresAt time.Time
+}
 
-// ServeHTTP handles the request.
-func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+func stripReferenceMarkersEnabled() bool {
+	return textclean.StripReferenceMarkersEnabled()
+}
+
+func (h *Handler) applyCurrentInputFile(ctx context.Context, a *auth.RequestAuth, stdReq promptcompat.StandardRequest) (promptcompat.StandardRequest, error) {
+	if h == nil {
+		return stdReq, nil
 	}
-	var body struct {
-		Model    string           `json:"model"`
-		Messages []map[string]any `json:"messages"`
-		Stream   bool             `json:"stream"`
-	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, shared.GeneralMaxSize)).Decode(&body); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
-		return
-	}
-	a, _ := h.Deps.Auth.Determine(r.Context())
-	ctx := auth.WithAuth(r.Context(), a)
-	resp, err := h.Deps.DS.CallCompletion(ctx, a, map[string]any{
-		"model":    body.Model,
-		"messages": body.Messages,
-		"stream":   body.Stream,
-	}, "", 1)
-	if err != nil {
-		if errors.Is(err, auth.ErrNoAccount) {
-			http.Error(w, "no account available", http.StatusServiceUnavailable)
-			return
+	if config.IsRoleplayPromptModel(stdReq.ResolvedModel) {
+		svc := history.Service{Store: h.Store, DS: h.DS}
+		out, err := svc.ApplyCurrentInputFile(ctx, a, stdReq)
+		if err != nil || out.CurrentInputFileApplied {
+			return out, err
 		}
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
+		return shared.ApplyThinkingInjection(h.Store, out), nil
 	}
-	defer resp.Body.Close()
-	w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
-	w.WriteHeader(resp.StatusCode)
-	_ = http.NewResponseController(w)
+	stdReq = shared.ApplyThinkingInjection(h.Store, stdReq)
+	svc := history.Service{Store: h.Store, DS: h.DS}
+	out, err := svc.ApplyCurrentInputFile(ctx, a, stdReq)
+	if err != nil || out.CurrentInputFileApplied {
+		return out, err
+	}
+	return out, nil
+}
+
+func (h *Handler) preprocessInlineFileInputs(ctx context.Context, a *auth.RequestAuth, req map[string]any) error {
+	if h == nil {
+		return nil
+	}
+	return (&files.Handler{Store: h.Store, Auth: h.Auth, DS: h.DS, ChatHistory: h.ChatHistory}).PreprocessInlineFileInputs(ctx, a, req)
+}
+
+func (h *Handler) toolcallFeatureMatchEnabled() bool {
+	if h == nil {
+		return shared.ToolcallFeatureMatchEnabled(nil)
+	}
+	return shared.ToolcallFeatureMatchEnabled(h.Store)
+}
+
+func (h *Handler) toolcallEarlyEmitHighConfidence() bool {
+	if h == nil {
+		return shared.ToolcallEarlyEmitHighConfidence(nil)
+	}
+	return shared.ToolcallEarlyEmitHighConfidence(h.Store)
+}
+
+func writeOpenAIError(w http.ResponseWriter, status int, message string) {
+	shared.WriteOpenAIError(w, status, message)
+}
+
+func writeOpenAIErrorWithCode(w http.ResponseWriter, status int, message, code string) {
+	shared.WriteOpenAIErrorWithCode(w, status, message, code)
+}
+
+func openAIErrorType(status int) string {
+	return shared.OpenAIErrorType(status)
+}
+
+func writeOpenAIInlineFileError(w http.ResponseWriter, err error) {
+	files.WriteInlineFileError(w, err)
+}
+
+func mapCurrentInputFileError(err error) (int, string) {
+	return history.MapError(err)
+}
+
+func requestTraceID(r *http.Request) string {
+	return shared.RequestTraceID(r)
+}
+
+func asString(v any) string {
+	return shared.AsString(v)
+}
+
+func cleanVisibleOutput(text string, stripReferenceMarkers bool) string {
+	return shared.CleanVisibleOutput(text, stripReferenceMarkers)
+}
+
+func upstreamEmptyOutputDetail(contentFilter bool, text, thinking string) (int, string, string, map[string]string) {
+	return shared.UpstreamEmptyOutputDetail(contentFilter, text, thinking)
+}
+
+func promoteThinkingWhenTextEmpty(text, thinking string, contentFilter bool) (string, bool) {
+	return shared.PromoteThinkingWhenTextEmpty(text, thinking, contentFilter)
+}
+
+func emptyOutputRetryEnabled() bool {
+	return shared.EmptyOutputRetryEnabled()
+}
+
+func emptyOutputRetryMaxAttempts() int {
+	return shared.EmptyOutputRetryMaxAttempts()
+}
+
+func clonePayloadForEmptyOutputRetry(payload map[string]any, parentMessageID int) map[string]any {
+	return shared.ClonePayloadForEmptyOutputRetry(payload, parentMessageID)
+}
+
+func usagePromptWithEmptyOutputRetry(originalPrompt string, retryAttempts int) string {
+	return shared.UsagePromptWithEmptyOutputRetry(originalPrompt, retryAttempts)
+}
+
+func formatIncrementalStreamToolCallDeltas(deltas []toolstream.ToolCallDelta, ids map[int]string) []map[string]any {
+	return shared.FormatIncrementalStreamToolCallDeltas(deltas, ids)
+}
+
+func filterIncrementalToolCallDeltasByAllowed(deltas []toolstream.ToolCallDelta, seenNames map[int]string) []toolstream.ToolCallDelta {
+	return shared.FilterIncrementalToolCallDeltasByAllowed(deltas, seenNames)
+}
+
+func formatFinalStreamToolCallsWithStableIDs(calls []toolcall.ParsedToolCall, ids map[int]string, toolsRaw any) []map[string]any {
+	return shared.FormatFinalStreamToolCallsWithStableIDs(calls, ids, toolsRaw)
+}
+
+func detectAssistantToolCalls(rawText, visibleText, exposedThinking, detectionThinking string, toolNames []string) toolcall.ToolCallParseResult {
+	return shared.DetectAssistantToolCalls(rawText, visibleText, exposedThinking, detectionThinking, toolNames)
 }

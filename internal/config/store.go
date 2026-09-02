@@ -443,14 +443,6 @@ func (s *Store) saveLocked() error {
 	return nil
 }
 
-func (s *Store) ReloadFromFile() error {
-	cfg, err := loadConfigFromFile(s.path)
-	if err != nil {
-		return err
-	}
-	return s.Replace(cfg)
-}
-
 func (s *Store) IsEnvBacked() bool {
 	if s == nil {
 		return false

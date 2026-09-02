@@ -1,76 +1,61 @@
-// Package shared hosts common dependencies and helpers for the slim
-// OpenAI-compatible HTTP surface.
 package shared
 
 import (
 	"context"
 	"net/http"
-	"time"
 
 	"ds2api/internal/auth"
+	"ds2api/internal/chathistory"
+	"ds2api/internal/config"
+	dsclient "ds2api/internal/deepseek/client"
+	"ds2api/internal/util"
 )
 
-// DeepSeekCaller is the subset of the DeepSeek client used by handlers.
-type DeepSeekCaller interface {
-	CallCompletion(ctx context.Context, a *auth.RequestAuth, payload map[string]any, powAnswer string, attempts int) (*http.Response, error)
-}
+const (
+	// UploadMaxSize limits total multipart request body size (100 MiB).
+	UploadMaxSize = 100 << 20
+	// GeneralMaxSize limits total JSON request body size (100 MiB).
+	GeneralMaxSize = 100 << 20
+)
 
-// AuthResolver selects and releases accounts.
 type AuthResolver interface {
-	Determine(ctx context.Context) (*auth.RequestAuth, error)
-	DetermineCaller(ctx context.Context, caller string) (*auth.RequestAuth, error)
+	Determine(req *http.Request) (*auth.RequestAuth, error)
+	DetermineCaller(req *http.Request) (*auth.RequestAuth, error)
 	Release(a *auth.RequestAuth)
 }
 
-// ConfigReader is the subset of the config Store handlers depend on.
+type DeepSeekCaller interface {
+	CreateSession(ctx context.Context, a *auth.RequestAuth, maxAttempts int) (string, error)
+	GetPow(ctx context.Context, a *auth.RequestAuth, maxAttempts int) (string, error)
+	UploadFile(ctx context.Context, a *auth.RequestAuth, req dsclient.UploadFileRequest, maxAttempts int) (*dsclient.UploadFileResult, error)
+	CallCompletion(ctx context.Context, a *auth.RequestAuth, payload map[string]any, powResp string, maxAttempts int) (*http.Response, error)
+	DeleteSessionForToken(ctx context.Context, token string, sessionID string) (*dsclient.DeleteSessionResult, error)
+	DeleteAllSessionsForToken(ctx context.Context, token string) error
+}
+
 type ConfigReader interface {
 	ModelAliases() map[string]string
-	ThinkingInjectionEnabled() bool
-	ThinkingInjectionMinChars() int
-	ThinkingInjectionPrompt() string
+	ToolcallMode() string
+	ToolcallEarlyEmitConfidence() string
+	ResponsesStoreTTLSeconds() int
+	EmbeddingsProvider() string
+	AutoDeleteMode() string
+	AutoDeleteSessions() bool
 	CurrentInputFileEnabled() bool
 	CurrentInputFileMinChars() int
-	CurrentInputFilePrompt() string
+	ThinkingInjectionEnabled() bool
+	ThinkingInjectionPrompt() string
 }
 
-// Deps bundles the dependencies for a handler.
 type Deps struct {
-	Store ConfigReader
-	Auth  AuthResolver
-	DS    DeepSeekCaller
+	Store       ConfigReader
+	Auth        AuthResolver
+	DS          DeepSeekCaller
+	ChatHistory *chathistory.Store
 }
 
-// Size limits used by the slim handlers.
-const (
-	UploadMaxSize  = 50 << 20 // 50 MiB
-	GeneralMaxSize = 4 << 20  // 4 MiB
-)
+var WriteJSON = util.WriteJSON
 
-// ModelsHandler returns a JSON model list derived from the store.
-type ModelsHandler struct {
-	Store ConfigReader
-}
-
-// ServeHTTP writes the OpenAI-style /v1/models list.
-func (h *ModelsHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write([]byte(`{"object":"list","data":[]}`))
-}
-
-// compile-time interface checks.
-var (
-	_ AuthResolver   = (*auth.Resolver)(nil)
-	_ DeepSeekCaller = (DeepSeekCaller)(nil)
-	_ ConfigReader   = (*StoreConfigReader)(nil)
-)
-
-// maxWait is a small helper used by retry loops.
-func maxWait(d time.Duration, cap time.Duration) time.Duration {
-	if d > cap {
-		return cap
-	}
-	if d < 0 {
-		return 0
-	}
-	return d
-}
+var _ AuthResolver = (*auth.Resolver)(nil)
+var _ DeepSeekCaller = (*dsclient.Client)(nil)
+var _ ConfigReader = (*config.Store)(nil)

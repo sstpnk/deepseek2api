@@ -1,154 +1,85 @@
-// Package client provides minimal types and stubs for the slim ds2api build.
-//
-// In the upstream codebase this package holds the real DeepSeek HTTP client
-// implementation. The slim build replaces it with placeholder types that let
-// the OpenAI-compatible HTTP surface compile and run end-to-end, while the
-// actual DeepSeek request pipeline is wired up in a follow-up change.
 package client
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"sync"
 	"time"
 
+	"ds2api/internal/auth"
 	"ds2api/internal/config"
+	trans "ds2api/internal/deepseek/transport"
+	"ds2api/internal/devcapture"
+	"ds2api/internal/util"
 )
 
-// ErrNoAccount is returned when no account is available to serve a request.
-var ErrNoAccount = errors.New("no account available")
+// intFrom is a package-internal alias for the shared util version.
+var intFrom = util.IntFrom
 
-// ErrNotImplemented is returned by stubbed DeepSeek client methods.
-var ErrNotImplemented = errors.New("deepseek client: not implemented in slim build")
+type Client struct {
+	Store      *config.Store
+	Auth       *auth.Resolver
+	capture    *devcapture.Store
+	regular    trans.Doer
+	stream     trans.Doer
+	fallback   *http.Client
+	fallbackS  *http.Client
+	maxRetries int
+	pow        *powRuntime
 
-// RequestAuth is the per-request authentication context passed from the
-// resolver into the client and HTTP handlers.
-type RequestAuth struct {
-	DeepSeekToken  string
-	AccountID      string
-	Account        any
-	UseConfigToken bool
-	CallerID       string
+	proxyClientsMu sync.RWMutex
+	proxyClients   map[string]requestClients
+
+	proxyHealthMu  sync.Mutex
+	proxyHealthMap map[string]*proxyHealth
+
+	accountHealthMu          sync.Mutex
+	accountHealthMap         map[string]*accountEmptyOutputHealth
+	accountEmptyOutputGlobal accountEmptyOutputGlobalHealth
 }
 
-// Resolver selects an account from the pool for a given request.
-type Resolver struct {
-	mu   sync.Mutex
-	pool Pool
-}
-
-// NewResolver returns a resolver that draws accounts from the given pool.
-func NewResolver(p Pool) *Resolver {
-	return &Resolver{pool: p}
-}
-
-// Pool is the minimal subset of the account pool interface used by the
-// resolver. The real implementation lives in internal/account.
-type Pool interface {
-	Acquire(target string, exclude map[string]bool) (any, bool)
-	Release(id string)
-	Success(id, reason string)
-	Cooldown(id, reason string)
-}
-
-// Determine picks an account for the request. With no pool wired up it
-// returns a stub auth that uses the config token.
-func (r *Resolver) Determine(_ context.Context) (*RequestAuth, error) {
-	if r == nil {
-		return nil, ErrNoAccount
+func NewClient(store *config.Store, resolver *auth.Resolver) *Client {
+	cli := &Client{
+		Store:            store,
+		Auth:             resolver,
+		capture:          devcapture.Global(),
+		regular:          trans.New(60 * time.Second),
+		stream:           trans.New(0),
+		fallback:         &http.Client{Timeout: 60 * time.Second},
+		fallbackS:        &http.Client{Timeout: 0},
+		maxRetries:       2,
+		pow:              newPowRuntime(store),
+		proxyClients:     map[string]requestClients{},
+		proxyHealthMap:   map[string]*proxyHealth{},
+		accountHealthMap: map[string]*accountEmptyOutputHealth{},
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.pool == nil {
-		return &RequestAuth{UseConfigToken: true, CallerID: "slim"}, nil
-	}
-	acc, ok := r.pool.Acquire("", nil)
-	if !ok {
-		return &RequestAuth{UseConfigToken: true, CallerID: "slim"}, ErrNoAccount
-	}
-	accountID := ""
-	if acc != nil {
-		if m, ok := acc.(interface{ Name() string }); ok {
-			accountID = m.Name()
-		} else if s, ok := acc.(interface{ ID() string }); ok {
-			accountID = s.ID()
+	go cli.backgroundCleanup(30 * time.Minute)
+	return cli
+}
+
+// PreloadPow 保留兼容接口，纯 Go 实现无需预加载。
+func (c *Client) PreloadPow(_ context.Context) error {
+	return nil
+}
+
+// backgroundCleanup periodically evicts stale proxy client and health map entries.
+func (c *Client) backgroundCleanup(interval time.Duration) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for range t.C {
+		c.proxyClientsMu.Lock()
+		// Proxy cache GC: remove entries older than 2×interval
+		// (currently only clears on manual proxy config change).
+		// This is a safety net for long-running deployments.
+		_ = len(c.proxyClients) // keep map alive, GC via config reload
+		c.proxyClientsMu.Unlock()
+
+		c.proxyHealthMu.Lock()
+	for k, h := range c.proxyHealthMap {
+		if time.Since(h.lastFailure) > 24*time.Hour && time.Since(h.lastSuccess) > 24*time.Hour && h.failures == 0 {
+			delete(c.proxyHealthMap, k)
 		}
 	}
-	return &RequestAuth{
-		AccountID:      accountID,
-		Account:        acc,
-		UseConfigToken: false,
-		CallerID:       "slim",
-	}, nil
-}
-
-// DetermineCaller is a convenience wrapper.
-func (r *Resolver) DetermineCaller(ctx context.Context, _ string) (*RequestAuth, error) {
-	return r.Determine(ctx)
-}
-
-// Release returns an account to the pool.
-func (r *Resolver) Release(a *RequestAuth) {
-	if r == nil || a == nil || r.pool == nil {
-		return
+	c.proxyHealthMu.Unlock()
 	}
-	if a.AccountID != "" {
-		r.pool.Release(a.AccountID)
-	}
-}
-
-// CooldownAccount marks an account as temporarily unavailable.
-func (r *Resolver) CooldownAccount(a *RequestAuth, _ time.Duration, reason string) {
-	if r == nil || a == nil || r.pool == nil {
-		return
-	}
-	if a.AccountID != "" {
-		r.pool.Cooldown(a.AccountID, reason)
-	}
-}
-
-// RecordAccountSuccess records a successful response for an account.
-func (r *Resolver) RecordAccountSuccess(a *RequestAuth, reason string) {
-	if r == nil || a == nil || r.pool == nil {
-		return
-	}
-	if a.AccountID != "" {
-		r.pool.Success(a.AccountID, reason)
-	}
-}
-
-// Client is the slim DeepSeek client stub.
-type Client struct {
-	store  *config.Store
-	auth   *Resolver
-	mu     sync.Mutex
-	closed bool
-}
-
-// NewClient returns a new slim client. pool may be nil.
-func NewClient(store *config.Store, pool Pool) *Client {
-	return &Client{store: store, auth: NewResolver(pool)}
-}
-
-// PreloadPow is a no-op in the slim build.
-func (c *Client) PreloadPow(_ context.Context) {}
-
-// Close releases client resources.
-func (c *Client) Close() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.closed = true
-}
-
-// Auth returns the account resolver.
-func (c *Client) Auth() *Resolver { return c.auth }
-
-// Store returns the config store.
-func (c *Client) Store() any { return c.store }
-
-// CallCompletion is the slim stub for the DeepSeek completion call. It
-// always returns ErrNotImplemented so callers can fail fast.
-func (c *Client) CallCompletion(_ context.Context, _ *RequestAuth, _ map[string]any, _ string, _ int) (*http.Response, error) {
-	return nil, ErrNotImplemented
 }

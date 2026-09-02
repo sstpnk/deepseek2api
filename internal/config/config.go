@@ -181,8 +181,8 @@ func (c *Config) normalizeModelAliases() {
 
 	aliases := map[string]string{}
 	for k, v := range c.ModelAliases {
-		key := strings.TrimSpace(strings.ToLower(k))
-		val := strings.TrimSpace(strings.ToLower(v))
+		key := strings.TrimSpace(lower(k))
+		val := strings.TrimSpace(lower(v))
 		if key == "" || val == "" {
 			continue
 		}

@@ -3,22 +3,21 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: runtime
-    image: ds2api:latest
+      target: runtime-from-source
+    image: ds2api-local:latest
     container_name: ds2api
-    restart: unless-stopped
+    restart: always
     env_file:
       - .env
     ports:
-      - "${DS2API_HOST_PORT:-8080}:8080"
+      # Host port is configurable via DS2API_HOST_PORT; container port stays fixed at 5001.
+      - "${DS2API_HOST_PORT:-6011}:5001"
     volumes:
-      # Mount your config.json to /app/config.json (default DS2API_CONFIG_PATH).
-      - ./config.json:/app/config.json:ro
-      # Persistent state (e.g. runtime_stats, response store).
-      - ./data:/app/data
+      - ./config.json:/data/config.json   # 配置文件（持久化推荐路径，跟随 dev 4.2.0）
+      - ./data:/app/data                  # 聊天历史与持久化数据（host bind 保留）
     environment:
-      - TZ=UTC
+      - TZ=Asia/Shanghai
       - LOG_LEVEL=INFO
-      - DS2API_CONFIG_PATH=/app/config.json
-      # Set DS2API_HOT_RELOAD=true to enable fsnotify-based config reload.
-      - DS2API_HOT_RELOAD=${DS2API_HOT_RELOAD:-false}
+      - DS2API_ADMIN_KEY=${DS2API_ADMIN_KEY:-ds2api}
+      - DS2API_CONFIG_PATH=/data/config.json
+      - DS2API_RUNTIME_STATS_PATH=/app/data/runtime_stats.json
