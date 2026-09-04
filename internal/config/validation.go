@@ -9,9 +9,6 @@ func ValidateConfig(c Config) error {
 	if err := ValidateProxyConfig(c.Proxies); err != nil {
 		return err
 	}
-	if err := ValidateAdminConfig(c.Admin); err != nil {
-		return err
-	}
 	if err := ValidateRuntimeConfig(c.Runtime); err != nil {
 		return err
 	}
@@ -102,10 +99,6 @@ func ValidateAccountProxyReferences(accounts []Account, proxies []Proxy) error {
 		}
 	}
 	return nil
-}
-
-func ValidateAdminConfig(admin AdminConfig) error {
-	return ValidateIntRange("admin.jwt_expire_hours", admin.JWTExpireHours, 1, 720, false)
 }
 
 func ValidateRuntimeConfig(runtime RuntimeConfig) error {

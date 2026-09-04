@@ -294,7 +294,7 @@ func TestHandleStreamContextCancelledMarksHistoryStopped(t *testing.T) {
 	}
 }
 
-func TestChatCompletionsRecordsAdminWebUISource(t *testing.T) {
+func TestChatCompletionsRecordsSourceHeader(t *testing.T) {
 	historyStore := newTestChatHistoryStore(t)
 	h := &Handler{
 		Store:       mockOpenAIConfig{},
@@ -307,7 +307,7 @@ func TestChatCompletionsRecordsAdminWebUISource(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(reqBody))
 	req.Header.Set("Authorization", "Bearer direct-token")
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Ds2-Source", "admin-webui-api-tester")
+	req.Header.Set("X-Ds2-Source", "openai-api-tester")
 	rec := httptest.NewRecorder()
 	h.ChatCompletions(rec, req)
 
@@ -319,7 +319,7 @@ func TestChatCompletionsRecordsAdminWebUISource(t *testing.T) {
 		t.Fatalf("snapshot failed: %v", err)
 	}
 	if len(snapshot.Items) != 1 {
-		t.Fatalf("expected admin webui source to be recorded, got %#v", snapshot.Items)
+		t.Fatalf("expected source header request to be recorded, got %#v", snapshot.Items)
 	}
 }
 

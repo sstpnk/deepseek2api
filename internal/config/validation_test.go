@@ -12,11 +12,6 @@ func TestValidateConfigRejectsInvalidValues(t *testing.T) {
 		want string
 	}{
 		{
-			name: "admin",
-			cfg:  Config{Admin: AdminConfig{JWTExpireHours: 721}},
-			want: "admin.jwt_expire_hours",
-		},
-		{
 			name: "runtime relation",
 			cfg: Config{Runtime: RuntimeConfig{
 				AccountMaxInflight: 8,

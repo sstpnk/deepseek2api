@@ -48,9 +48,9 @@ func TestParseToolCallsSupportsHyphenatedDSMLShellWithHereDocCDATA(t *testing.T)
 docs: add missing directory entries and package descriptions to architecture docs
 Fill gaps identified in architecture audit: add artifacts/ and static/ to
 directory tree, and document 7 auxiliary internal/ packages (textclean,
-claudeconv, compat, rawsample, devcapture, util, version) in Section 3.
+compat, prompt, stream, util, version) in Section 3.
 
-Co-Authored-By: Claude Opus 4.7 noreply@anthropic.com
+Co-Authored-By: Example Reviewer <reviewer@example.com>
 EOF
 )"]]></dsml-parameter>
 <dsml-parameter name="description"><![CDATA[Create commit with architecture doc updates]]></dsml-parameter>
@@ -64,7 +64,7 @@ EOF
 		t.Fatalf("expected Bash tool, got %#v", calls[0])
 	}
 	command, _ := calls[0].Input["command"].(string)
-	if !strings.Contains(command, `git commit -m "$(cat <<'EOF'`) || !strings.Contains(command, "Co-Authored-By: Claude Opus 4.7") {
+	if !strings.Contains(command, `git commit -m "$(cat <<'EOF'`) || !strings.Contains(command, "Co-Authored-By: Example Reviewer") {
 		t.Fatalf("expected here-doc CDATA command to be preserved, got %q", command)
 	}
 	if calls[0].Input["description"] != "Create commit with architecture doc updates" {

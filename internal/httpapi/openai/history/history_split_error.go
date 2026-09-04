@@ -9,7 +9,7 @@ import (
 func MapError(err error) (int, string) {
 	switch {
 	case dsclient.IsManagedUnauthorizedError(err):
-		return http.StatusUnauthorized, "Account token is invalid. Please re-login the account in admin."
+		return http.StatusUnauthorized, "Account token is invalid. Refresh the configured DeepSeek account credentials."
 	case dsclient.IsDirectUnauthorizedError(err):
 		return http.StatusUnauthorized, "Invalid token. If this should be a DS2API key, add it to config.keys first."
 	default:

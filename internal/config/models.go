@@ -29,38 +29,6 @@ var deepSeekBaseModels = []ModelInfo{
 
 var DeepSeekModels = appendDeepSeekVariants(deepSeekBaseModels)
 
-var claudeBaseModels = []ModelInfo{
-	// Current aliases
-	{ID: "claude-opus-4-6", Object: "model", Created: 1715635200, OwnedBy: "anthropic"},
-	{ID: "claude-sonnet-4-6", Object: "model", Created: 1715635200, OwnedBy: "anthropic"},
-	{ID: "claude-haiku-4-5", Object: "model", Created: 1715635200, OwnedBy: "anthropic"},
-
-	// Claude 4.x snapshots and prior aliases kept for compatibility
-	{ID: "claude-sonnet-4-5", Object: "model", Created: 1715635200, OwnedBy: "anthropic"},
-	{ID: "claude-opus-4-1", Object: "model", Created: 1715635200, OwnedBy: "anthropic"},
-	{ID: "claude-opus-4-1-20250805", Object: "model", Created: 1715635200, OwnedBy: "anthropic"},
-	{ID: "claude-opus-4-0", Object: "model", Created: 1715635200, OwnedBy: "anthropic"},
-	{ID: "claude-opus-4-20250514", Object: "model", Created: 1715635200, OwnedBy: "anthropic"},
-	{ID: "claude-sonnet-4-5-20250929", Object: "model", Created: 1715635200, OwnedBy: "anthropic"},
-	{ID: "claude-sonnet-4-0", Object: "model", Created: 1715635200, OwnedBy: "anthropic"},
-	{ID: "claude-sonnet-4-20250514", Object: "model", Created: 1715635200, OwnedBy: "anthropic"},
-	{ID: "claude-haiku-4-5-20251001", Object: "model", Created: 1715635200, OwnedBy: "anthropic"},
-
-	// Claude 3.x (legacy/deprecated snapshots and aliases)
-	{ID: "claude-3-7-sonnet-latest", Object: "model", Created: 1715635200, OwnedBy: "anthropic"},
-	{ID: "claude-3-7-sonnet-20250219", Object: "model", Created: 1715635200, OwnedBy: "anthropic"},
-	{ID: "claude-3-5-sonnet-latest", Object: "model", Created: 1715635200, OwnedBy: "anthropic"},
-	{ID: "claude-3-5-sonnet-20240620", Object: "model", Created: 1715635200, OwnedBy: "anthropic"},
-	{ID: "claude-3-5-sonnet-20241022", Object: "model", Created: 1715635200, OwnedBy: "anthropic"},
-	{ID: "claude-3-opus-20240229", Object: "model", Created: 1715635200, OwnedBy: "anthropic"},
-	{ID: "claude-3-sonnet-20240229", Object: "model", Created: 1715635200, OwnedBy: "anthropic"},
-	{ID: "claude-3-5-haiku-latest", Object: "model", Created: 1715635200, OwnedBy: "anthropic"},
-	{ID: "claude-3-5-haiku-20241022", Object: "model", Created: 1715635200, OwnedBy: "anthropic"},
-	{ID: "claude-3-haiku-20240307", Object: "model", Created: 1715635200, OwnedBy: "anthropic"},
-}
-
-var ClaudeModels = appendNoThinkingVariants(claudeBaseModels)
-
 func GetModelConfig(model string) (thinking bool, search bool, ok bool) {
 	baseModel, noThinking, _ := splitDeepSeekVariant(model)
 	if baseModel == "" {
@@ -175,55 +143,6 @@ func DefaultModelAliases() map[string]string {
 		"o4-mini":               "deepseek-v4-pro",
 		"o4-mini-deep-research": "deepseek-v4-pro-search",
 
-		// Claude current and historical aliases
-		"claude-opus-4-6":            "deepseek-v4-pro",
-		"claude-opus-4-1":            "deepseek-v4-pro",
-		"claude-opus-4-1-20250805":   "deepseek-v4-pro",
-		"claude-opus-4-0":            "deepseek-v4-pro",
-		"claude-opus-4-20250514":     "deepseek-v4-pro",
-		"claude-sonnet-4-6":          "deepseek-v4-flash",
-		"claude-sonnet-4-5":          "deepseek-v4-flash",
-		"claude-sonnet-4-5-20250929": "deepseek-v4-flash",
-		"claude-sonnet-4-0":          "deepseek-v4-flash",
-		"claude-sonnet-4-20250514":   "deepseek-v4-flash",
-		"claude-haiku-4-5":           "deepseek-v4-flash",
-		"claude-haiku-4-5-20251001":  "deepseek-v4-flash",
-		"claude-3-7-sonnet":          "deepseek-v4-flash",
-		"claude-3-7-sonnet-latest":   "deepseek-v4-flash",
-		"claude-3-7-sonnet-20250219": "deepseek-v4-flash",
-		"claude-3-5-sonnet":          "deepseek-v4-flash",
-		"claude-3-5-sonnet-latest":   "deepseek-v4-flash",
-		"claude-3-5-sonnet-20240620": "deepseek-v4-flash",
-		"claude-3-5-sonnet-20241022": "deepseek-v4-flash",
-		"claude-3-5-haiku":           "deepseek-v4-flash",
-		"claude-3-5-haiku-latest":    "deepseek-v4-flash",
-		"claude-3-5-haiku-20241022":  "deepseek-v4-flash",
-		"claude-3-opus":              "deepseek-v4-pro",
-		"claude-3-opus-20240229":     "deepseek-v4-pro",
-		"claude-3-sonnet":            "deepseek-v4-flash",
-		"claude-3-sonnet-20240229":   "deepseek-v4-flash",
-		"claude-3-haiku":             "deepseek-v4-flash",
-		"claude-3-haiku-20240307":    "deepseek-v4-flash",
-
-		// Gemini current and historical text / multimodal models
-		"gemini-pro":            "deepseek-v4-pro",
-		"gemini-pro-vision":     "deepseek-v4-vision",
-		"gemini-pro-latest":     "deepseek-v4-pro",
-		"gemini-flash-latest":   "deepseek-v4-flash",
-		"gemini-1.5-pro":        "deepseek-v4-pro",
-		"gemini-1.5-flash":      "deepseek-v4-flash",
-		"gemini-1.5-flash-8b":   "deepseek-v4-flash",
-		"gemini-2.0-flash":      "deepseek-v4-flash",
-		"gemini-2.0-flash-lite": "deepseek-v4-flash",
-		"gemini-2.5-pro":        "deepseek-v4-pro",
-		"gemini-2.5-flash":      "deepseek-v4-flash",
-		"gemini-2.5-flash-lite": "deepseek-v4-flash",
-		"gemini-3.1-pro":        "deepseek-v4-pro",
-		"gemini-3-pro":          "deepseek-v4-pro",
-		"gemini-3-flash":        "deepseek-v4-flash",
-		"gemini-3.1-flash":      "deepseek-v4-flash",
-		"gemini-3.1-flash-lite": "deepseek-v4-flash",
-
 		"llama-3.1-70b-instruct": "deepseek-v4-flash",
 		"qwen-max":               "deepseek-v4-flash",
 	}
@@ -278,19 +197,6 @@ func OpenAIModelByID(store ModelAliasReader, id string) (ModelInfo, bool) {
 	return ModelInfo{}, false
 }
 
-func ClaudeModelsResponse() map[string]any {
-	resp := map[string]any{"object": "list", "data": ClaudeModels}
-	if len(ClaudeModels) > 0 {
-		resp["first_id"] = ClaudeModels[0].ID
-		resp["last_id"] = ClaudeModels[len(ClaudeModels)-1].ID
-	} else {
-		resp["first_id"] = nil
-		resp["last_id"] = nil
-	}
-	resp["has_more"] = false
-	return resp
-}
-
 func appendDeepSeekVariants(models []ModelInfo) []ModelInfo {
 	out := make([]ModelInfo, 0, len(models)*2+4)
 	for _, model := range models {
@@ -306,17 +212,6 @@ func appendDeepSeekVariants(models []ModelInfo) []ModelInfo {
 			noThinkingReducedPrompt.ID = withDeepSeekVariant(model.ID, true, true)
 			out = append(out, noThinkingReducedPrompt)
 		}
-	}
-	return out
-}
-
-func appendNoThinkingVariants(models []ModelInfo) []ModelInfo {
-	out := make([]ModelInfo, 0, len(models)*2)
-	for _, model := range models {
-		out = append(out, model)
-		variant := model
-		variant.ID = withDeepSeekVariant(model.ID, true, false)
-		out = append(out, variant)
 	}
 	return out
 }

@@ -201,17 +201,3 @@ func (cc *caseContext) flushArtifacts(cs caseResult) error {
 	}
 	return writeJSONFile(metaPath, meta)
 }
-func (r *Runner) doSimpleJSON(ctx context.Context, method, path string, headers map[string]string, body any) (*responseResult, error) {
-	cc := &caseContext{
-		runner:      r,
-		id:          "auth_prepare",
-		traceIDsSet: map[string]struct{}{},
-	}
-	return cc.request(ctx, requestSpec{
-		Method:    method,
-		Path:      path,
-		Headers:   headers,
-		Body:      body,
-		Retryable: true,
-	})
-}

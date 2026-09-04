@@ -14,7 +14,7 @@ const maxDecompressedBytes = 200 << 20 // 200 MiB decompressed (defense against 
 
 func readResponseBody(resp *http.Response) ([]byte, error) {
 	encoding := strings.ToLower(strings.TrimSpace(resp.Header.Get("Content-Encoding")))
-	var reader io.Reader = io.LimitReader(resp.Body, maxCompressedBytes)
+	reader := io.LimitReader(resp.Body, maxCompressedBytes)
 	switch encoding {
 	case "gzip":
 		gz, err := gzip.NewReader(reader)

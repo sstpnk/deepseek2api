@@ -30,6 +30,10 @@ func TestAPIRoutesRemainRegistered(t *testing.T) {
 	}
 
 	for _, want := range []string{
+		"GET /healthz",
+		"HEAD /healthz",
+		"GET /readyz",
+		"HEAD /readyz",
 		"GET /v1/models",
 		"GET /v1/models/{model_id}",
 		"POST /v1/chat/completions",
@@ -46,6 +50,13 @@ func TestAPIRoutesRemainRegistered(t *testing.T) {
 		"POST /files",
 		"GET /files/{file_id}",
 		"POST /embeddings",
+	} {
+		if !got[want] {
+			t.Fatalf("expected route %s to be registered", want)
+		}
+	}
+
+	for _, unwanted := range []string{
 		"GET /anthropic/v1/models",
 		"POST /anthropic/v1/messages",
 		"POST /anthropic/v1/messages/count_tokens",
@@ -101,8 +112,8 @@ func TestAPIRoutesRemainRegistered(t *testing.T) {
 		"PUT /admin/chat-history/settings",
 		"GET /admin/version",
 	} {
-		if !got[want] {
-			t.Fatalf("expected route %s to be registered", want)
+		if got[unwanted] {
+			t.Fatalf("unexpected non-OpenAI route %s registered", unwanted)
 		}
 	}
 }

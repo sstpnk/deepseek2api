@@ -4,10 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
-	"os"
-	"runtime"
 	"strings"
 	"time"
 
@@ -19,17 +16,12 @@ import (
 	"ds2api/internal/chathistory"
 	"ds2api/internal/config"
 	dsclient "ds2api/internal/deepseek/client"
-	"ds2api/internal/httpapi/admin"
-	adminaccounts "ds2api/internal/httpapi/admin/accounts"
-	"ds2api/internal/httpapi/claude"
-	"ds2api/internal/httpapi/gemini"
 	"ds2api/internal/httpapi/openai/chat"
 	"ds2api/internal/httpapi/openai/embeddings"
 	"ds2api/internal/httpapi/openai/files"
 	"ds2api/internal/httpapi/openai/responses"
 	"ds2api/internal/httpapi/openai/shared"
 	"ds2api/internal/httpapi/requestbody"
-	"ds2api/internal/webui"
 	"ds2api/pow"
 )
 
@@ -39,10 +31,6 @@ type App struct {
 	Resolver *auth.Resolver
 	DS       *dsclient.Client
 	Router   http.Handler
-	// Sweeper drives the quarantine re-verification loop. It is started by
-	// the caller (cmd/ds2api/main.go) so the lifecycle ties cleanly to
-	// signal handling: cancel the context to stop the goroutine on shutdown.
-	Sweeper *adminaccounts.Sweeper
 }
 
 func NewApp() (*App, error) {
@@ -78,17 +66,11 @@ func NewApp() (*App, error) {
 	responsesHandler := &responses.Handler{Store: store, Auth: resolver, DS: dsClient, ChatHistory: chatHistoryStore}
 	filesHandler := &files.Handler{Store: store, Auth: resolver, DS: dsClient, ChatHistory: chatHistoryStore}
 	embeddingsHandler := &embeddings.Handler{Store: store, Auth: resolver, DS: dsClient, ChatHistory: chatHistoryStore}
-	claudeHandler := &claude.Handler{Store: store, Auth: resolver, DS: dsClient, OpenAI: chatHandler, ChatHistory: chatHistoryStore}
-	geminiHandler := &gemini.Handler{Store: store, Auth: resolver, DS: dsClient, OpenAI: chatHandler, ChatHistory: chatHistoryStore}
-	adminHandler := &admin.Handler{Store: store, Pool: pool, DS: dsClient, OpenAI: chatHandler, ChatHistory: chatHistoryStore}
-	sweeper := adminaccounts.NewSweeper(store, pool, dsClient)
-	adminHandler.QuarantineSweeper = sweeper
-	webuiHandler := webui.NewHandler()
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
-	r.Use(filteredLogger())
+	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(cors)
 	r.Use(requestbody.ValidateJSONUTF8)
@@ -101,10 +83,11 @@ func NewApp() (*App, error) {
 		out := map[string]any{
 			"status":      "ok",
 			"accounts":    len(cfg.Accounts),
-			"proxies":     len(cfg.Proxies),
 			"pow_backend": pow.BackendName(),
 		}
-		json.NewEncoder(w).Encode(out)
+		if err := json.NewEncoder(w).Encode(out); err != nil {
+			config.Logger.Warn("[server] write healthz response failed", "error", err)
+		}
 	}
 	readyzHandler := func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -132,20 +115,9 @@ func NewApp() (*App, error) {
 	r.Post("/files", filesHandler.UploadFile)
 	r.Get("/files/{file_id}", filesHandler.RetrieveFile)
 	r.Post("/embeddings", embeddingsHandler.Embeddings)
-	claude.RegisterRoutes(r, claudeHandler)
-	gemini.RegisterRoutes(r, geminiHandler)
-	r.Route("/admin", func(ar chi.Router) {
-		admin.RegisterRoutes(ar, adminHandler)
-	})
-	webui.RegisterRoutes(r, webuiHandler)
-	r.NotFound(func(w http.ResponseWriter, req *http.Request) {
-		if strings.HasPrefix(req.URL.Path, "/admin/") && webuiHandler.HandleAdminFallback(w, req) {
-			return
-		}
-		http.NotFound(w, req)
-	})
+	r.NotFound(http.NotFound)
 
-	return &App{Store: store, Pool: pool, Resolver: resolver, DS: dsClient, Router: r, Sweeper: sweeper}, nil
+	return &App{Store: store, Pool: pool, Resolver: resolver, DS: dsClient, Router: r}, nil
 }
 
 func timeout(d time.Duration) func(http.Handler) http.Handler {
@@ -155,49 +127,10 @@ func timeout(d time.Duration) func(http.Handler) http.Handler {
 	return middleware.Timeout(d)
 }
 
-func filteredLogger() func(http.Handler) http.Handler {
-	color := !isWindowsRuntime()
-	base := &middleware.DefaultLogFormatter{
-		Logger:  log.New(os.Stdout, "", log.LstdFlags),
-		NoColor: !color,
-	}
-	return middleware.RequestLogger(&filteredLogFormatter{base: base})
-}
-
-func isWindowsRuntime() bool {
-	return runtime.GOOS == "windows"
-}
-
-type filteredLogFormatter struct {
-	base *middleware.DefaultLogFormatter
-}
-
-func (f *filteredLogFormatter) NewLogEntry(r *http.Request) middleware.LogEntry {
-	if r != nil && r.Method == http.MethodGet {
-		path := strings.TrimSpace(r.URL.Path)
-		if path == "/admin/chat-history" || strings.HasPrefix(path, "/admin/chat-history/") {
-			return noopLogEntry{}
-		}
-	}
-	return f.base.NewLogEntry(r)
-}
-
-type noopLogEntry struct{}
-
-func (noopLogEntry) Write(_ int, _ int, _ http.Header, _ time.Duration, _ interface{}) {}
-
-func (noopLogEntry) Panic(_ interface{}, _ []byte) {}
-
 var defaultCORSAllowHeaders = []string{
 	"Content-Type",
 	"Authorization",
 	"X-API-Key",
-	"X-Ds2-Target-Account",
-	"X-Ds2-Source",
-	"X-Vercel-Protection-Bypass",
-	"X-Goog-Api-Key",
-	"Anthropic-Version",
-	"Anthropic-Beta",
 }
 
 var blockedCORSRequestHeaders = map[string]struct{}{

@@ -190,26 +190,9 @@ func (c *Client) requestClientsFromContext(ctx context.Context) requestClients {
 
 func (c *Client) requestClientsForAuth(ctx context.Context, a *auth.RequestAuth) requestClients {
 	if a != nil {
-		clients := c.requestClientsForAccountWithAvoid(a.Account, avoidedProxyIDsFromContext(ctx))
-		if clients.workerHost != "" {
-			ctx = withWorkerHost(ctx, clients.workerHost)
-		}
-		return clients
+		return c.requestClientsForAccountWithAvoid(a.Account, avoidedProxyIDsFromContext(ctx))
 	}
 	return c.requestClientsFromContext(ctx)
-}
-
-// requestClientsForAuthWithContext is like requestClientsForAuth but returns
-// the context enriched with worker host for URL rewriting.
-func (c *Client) requestClientsForAuthWithContext(ctx context.Context, a *auth.RequestAuth) (requestClients, context.Context) {
-	if a != nil {
-		clients := c.requestClientsForAccountWithAvoid(a.Account, avoidedProxyIDsFromContext(ctx))
-		if clients.workerHost != "" {
-			ctx = withWorkerHost(ctx, clients.workerHost)
-		}
-		return clients, ctx
-	}
-	return c.requestClientsFromContext(ctx), ctx
 }
 
 func (c *Client) requestClientsForAccount(acc config.Account) requestClients {

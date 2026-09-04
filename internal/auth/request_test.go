@@ -29,7 +29,7 @@ func newTestResolver(t *testing.T) *Resolver {
 
 func TestDetermineWithXAPIKeyUsesDirectToken(t *testing.T) {
 	r := newTestResolver(t)
-	req, _ := http.NewRequest(http.MethodPost, "/anthropic/v1/messages", nil)
+	req, _ := http.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
 	req.Header.Set("x-api-key", "direct-token")
 
 	auth, err := r.Determine(req)
@@ -49,7 +49,7 @@ func TestDetermineWithXAPIKeyUsesDirectToken(t *testing.T) {
 
 func TestDetermineWithXAPIKeyManagedKeyAcquiresAccount(t *testing.T) {
 	r := newTestResolver(t)
-	req, _ := http.NewRequest(http.MethodPost, "/anthropic/v1/messages", nil)
+	req, _ := http.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
 	req.Header.Set("x-api-key", "managed-key")
 
 	auth, err := r.Determine(req)
@@ -137,58 +137,9 @@ func TestDetermineMissingToken(t *testing.T) {
 	}
 }
 
-func TestDetermineWithQueryKeyUsesDirectToken(t *testing.T) {
-	r := newTestResolver(t)
-	req, _ := http.NewRequest(http.MethodPost, "/v1beta/models/gemini-2.5-pro:generateContent?key=direct-query-key", nil)
-
-	a, err := r.Determine(req)
-	if err != nil {
-		t.Fatalf("determine failed: %v", err)
-	}
-	if a.UseConfigToken {
-		t.Fatalf("expected direct token mode")
-	}
-	if a.DeepSeekToken != "direct-query-key" {
-		t.Fatalf("unexpected token: %q", a.DeepSeekToken)
-	}
-}
-
-func TestDetermineWithXGoogAPIKeyUsesDirectToken(t *testing.T) {
-	r := newTestResolver(t)
-	req, _ := http.NewRequest(http.MethodPost, "/v1beta/models/gemini-2.5-pro:streamGenerateContent?alt=sse", nil)
-	req.Header.Set("x-goog-api-key", "goog-header-key")
-
-	a, err := r.Determine(req)
-	if err != nil {
-		t.Fatalf("determine failed: %v", err)
-	}
-	if a.UseConfigToken {
-		t.Fatalf("expected direct token mode")
-	}
-	if a.DeepSeekToken != "goog-header-key" {
-		t.Fatalf("unexpected token: %q", a.DeepSeekToken)
-	}
-}
-
-func TestDetermineWithAPIKeyQueryParamUsesDirectToken(t *testing.T) {
-	r := newTestResolver(t)
-	req, _ := http.NewRequest(http.MethodPost, "/v1beta/models/gemini-2.5-pro:generateContent?api_key=direct-api-key", nil)
-
-	a, err := r.Determine(req)
-	if err != nil {
-		t.Fatalf("determine failed: %v", err)
-	}
-	if a.UseConfigToken {
-		t.Fatalf("expected direct token mode")
-	}
-	if a.DeepSeekToken != "direct-api-key" {
-		t.Fatalf("unexpected token: %q", a.DeepSeekToken)
-	}
-}
-
 func TestDetermineHeaderTokenPrecedenceOverQueryKey(t *testing.T) {
 	r := newTestResolver(t)
-	req, _ := http.NewRequest(http.MethodPost, "/v1beta/models/gemini-2.5-pro:generateContent?key=query-key", nil)
+	req, _ := http.NewRequest(http.MethodPost, "/v1/chat/completions?key=query-key", nil)
 	req.Header.Set("x-api-key", "managed-key")
 
 	a, err := r.Determine(req)

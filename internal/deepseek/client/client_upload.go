@@ -60,16 +60,6 @@ func (c *Client) UploadFile(ctx context.Context, a *auth.RequestAuth, req Upload
 	if err != nil {
 		return nil, err
 	}
-	capturePayload := map[string]any{
-		"filename":     filename,
-		"content_type": contentType,
-		"purpose":      purpose,
-		"bytes":        len(req.Data),
-	}
-	if modelType != "" {
-		capturePayload["model_type"] = modelType
-	}
-	captureSession := c.capture.Start("deepseek_upload_file", dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekUploadFileURL), a.AccountID, capturePayload)
 	attempts := 0
 	refreshed := false
 	powHeader := ""
@@ -96,8 +86,8 @@ func (c *Client) UploadFile(ctx context.Context, a *auth.RequestAuth, req Upload
 			headers["x-model-type"] = modelType
 		}
 		if powHeader != "" {
-				headers["x-ds-pow-response"] = powHeader
-			}
+			headers["x-ds-pow-response"] = powHeader
+		}
 		headers["x-file-size"] = strconv.Itoa(len(req.Data))
 		headers["x-thinking-enabled"] = "1"
 		resp, err := c.doUpload(uploadCtx, clients.regular, clients.fallback, dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekUploadFileURL), headers, body)
@@ -114,9 +104,6 @@ func (c *Client) UploadFile(ctx context.Context, a *auth.RequestAuth, req Upload
 				}
 			}
 			continue
-		}
-		if captureSession != nil {
-			resp.Body = captureSession.WrapBody(resp.Body, resp.StatusCode)
 		}
 		payloadBytes, readErr := readResponseBody(resp)
 		if closeErr := resp.Body.Close(); closeErr != nil {

@@ -12,8 +12,6 @@ const (
 	backoffCap           = 3 * time.Second
 )
 
-var ()
-
 // sleepWithCtx sleeps for d, but returns early with ctx.Err() if the context
 // is cancelled. d <= 0 means no sleep, just check context state.
 func sleepWithCtx(ctx context.Context, d time.Duration) error {

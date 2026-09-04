@@ -32,9 +32,9 @@ func BuildOpenAIPromptWithOptions(messagesRaw []any, toolsRaw any, traceID strin
 	}), toolNames
 }
 
-// BuildOpenAIPromptForAdapter exposes the OpenAI-compatible prompt building flow so
-// other protocol adapters (for example Gemini) can reuse the same tool/history
-// normalization logic and remain behavior-compatible with chat/completions.
+// BuildOpenAIPromptForAdapter exposes the OpenAI-compatible prompt building flow
+// for internal callers that need the same tool/history normalization logic as
+// chat/completions.
 func BuildOpenAIPromptForAdapter(messagesRaw []any, toolsRaw any, traceID string, thinkingEnabled bool) (string, []string) {
 	return buildOpenAIFinalPrompt(messagesRaw, toolsRaw, traceID, thinkingEnabled)
 }

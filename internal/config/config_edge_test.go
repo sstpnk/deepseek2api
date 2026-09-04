@@ -208,20 +208,13 @@ func TestConfigJSONRoundtrip(t *testing.T) {
 	cfg := Config{
 		Keys:         []string{"key1", "key2"},
 		Accounts:     []Account{{Email: "user@example.com", Password: "pass", Token: "tok"}},
-		ModelAliases: map[string]string{"Claude-Sonnet-4-6": "DeepSeek-V4-Flash"},
+		ModelAliases: map[string]string{"GPT-5": "DeepSeek-V4-Pro"},
 		AutoDelete: AutoDeleteConfig{
 			Mode: "single",
 		},
 		Runtime: RuntimeConfig{
 			TokenRefreshIntervalHours: 12,
 		},
-		Vercel: VercelConfig{
-			Token:     " vercel-token ",
-			ProjectID: " prj_123 ",
-			TeamID:    " team_123 ",
-		},
-		VercelSyncHash: "hash123",
-		VercelSyncTime: 1234567890,
 		AdditionalFields: map[string]any{
 			"custom_field": "custom_value",
 		},
@@ -243,7 +236,7 @@ func TestConfigJSONRoundtrip(t *testing.T) {
 	if len(decoded.Accounts) != 1 || decoded.Accounts[0].Email != "user@example.com" {
 		t.Fatalf("unexpected accounts: %#v", decoded.Accounts)
 	}
-	if decoded.ModelAliases["claude-sonnet-4-6"] != "deepseek-v4-flash" {
+	if decoded.ModelAliases["gpt-5"] != "deepseek-v4-pro" {
 		t.Fatalf("unexpected normalized model aliases: %#v", decoded.ModelAliases)
 	}
 	if decoded.Runtime.TokenRefreshIntervalHours != 12 {
@@ -251,12 +244,6 @@ func TestConfigJSONRoundtrip(t *testing.T) {
 	}
 	if decoded.AutoDelete.Mode != "single" {
 		t.Fatalf("unexpected auto delete mode: %#v", decoded.AutoDelete.Mode)
-	}
-	if decoded.Vercel.Token != "vercel-token" || decoded.Vercel.ProjectID != "prj_123" || decoded.Vercel.TeamID != "team_123" {
-		t.Fatalf("unexpected vercel config: %#v", decoded.Vercel)
-	}
-	if decoded.VercelSyncHash != "hash123" {
-		t.Fatalf("unexpected vercel sync hash: %q", decoded.VercelSyncHash)
 	}
 	if decoded.AdditionalFields["custom_field"] != "custom_value" {
 		t.Fatalf("unexpected additional fields: %#v", decoded.AdditionalFields)
@@ -336,13 +323,35 @@ func TestConfigUnmarshalJSONIgnoresRemovedHistorySplit(t *testing.T) {
 	}
 }
 
+func TestConfigUnmarshalJSONIgnoresRemovedAdminAndVercelFields(t *testing.T) {
+	raw := `{"keys":["k1"],"admin":{"jwt_expire_hours":24},"vercel":{"token":"tok"},"_vercel_sync_hash":"hash","_vercel_sync_time":123}`
+	var cfg Config
+	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+	for _, field := range []string{"admin", "vercel", "_vercel_sync_hash", "_vercel_sync_time"} {
+		if _, ok := cfg.AdditionalFields[field]; ok {
+			t.Fatalf("expected removed field %q not to persist in additional fields: %#v", field, cfg.AdditionalFields)
+		}
+	}
+	out, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+	for _, field := range []string{"admin", "vercel", "_vercel_sync_hash", "_vercel_sync_time"} {
+		if strings.Contains(string(out), field) {
+			t.Fatalf("expected removed field %q not to marshal, got %s", field, out)
+		}
+	}
+}
+
 // ─── Config.Clone ────────────────────────────────────────────────────
 
 func TestConfigCloneIsDeepCopy(t *testing.T) {
 	cfg := Config{
 		Keys:             []string{"key1"},
 		Accounts:         []Account{{Email: "user@test.com", Token: "token"}},
-		ModelAliases:     map[string]string{"claude-sonnet-4-6": "deepseek-v4-flash"},
+		ModelAliases:     map[string]string{"gpt-5": "deepseek-v4-pro"},
 		AdditionalFields: map[string]any{"custom": "value"},
 	}
 
@@ -351,7 +360,7 @@ func TestConfigCloneIsDeepCopy(t *testing.T) {
 	// Modify original
 	cfg.Keys[0] = "modified"
 	cfg.Accounts[0].Email = "modified@test.com"
-	cfg.ModelAliases["claude-sonnet-4-6"] = "modified-model"
+	cfg.ModelAliases["gpt-5"] = "modified-model"
 
 	// Cloned should not be affected
 	if cloned.Keys[0] != "key1" {
@@ -360,7 +369,7 @@ func TestConfigCloneIsDeepCopy(t *testing.T) {
 	if cloned.Accounts[0].Email != "user@test.com" {
 		t.Fatalf("clone accounts was affected: %#v", cloned.Accounts)
 	}
-	if cloned.ModelAliases["claude-sonnet-4-6"] != "deepseek-v4-flash" {
+	if cloned.ModelAliases["gpt-5"] != "deepseek-v4-pro" {
 		t.Fatalf("clone model aliases was affected: %#v", cloned.ModelAliases)
 	}
 }
@@ -656,14 +665,14 @@ func TestNormalizeCredentialsPrefersStructuredAPIKeys(t *testing.T) {
 }
 
 func TestStoreModelAliasesIncludesDefaultsAndOverrides(t *testing.T) {
-	t.Setenv("DS2API_CONFIG_JSON", `{"keys":[],"accounts":[],"model_aliases":{"claude-opus-4-6":"deepseek-v4-pro-search"}}`)
+	t.Setenv("DS2API_CONFIG_JSON", `{"keys":[],"accounts":[],"model_aliases":{"gpt-5":"deepseek-v4-pro-search"}}`)
 	store := LoadStore()
 	aliases := store.ModelAliases()
-	if aliases["claude-sonnet-4-6"] != "deepseek-v4-flash" {
-		t.Fatalf("expected default alias to remain available, got %q", aliases["claude-sonnet-4-6"])
+	if aliases["gpt-4o"] != "deepseek-v4-flash" {
+		t.Fatalf("expected default alias to remain available, got %q", aliases["gpt-4o"])
 	}
-	if aliases["claude-opus-4-6"] != "deepseek-v4-pro-search" {
-		t.Fatalf("expected custom alias override, got %q", aliases["claude-opus-4-6"])
+	if aliases["gpt-5"] != "deepseek-v4-pro-search" {
+		t.Fatalf("expected custom alias override, got %q", aliases["gpt-5"])
 	}
 }
 
@@ -674,20 +683,8 @@ func TestStoreModelAliasesDefault(t *testing.T) {
 	if aliases == nil {
 		t.Fatal("expected non-nil aliases")
 	}
-	if aliases["claude-sonnet-4-6"] != "deepseek-v4-flash" {
-		t.Fatalf("expected built-in alias, got %q", aliases["claude-sonnet-4-6"])
-	}
-}
-
-func TestStoreSetVercelSync(t *testing.T) {
-	t.Setenv("DS2API_CONFIG_JSON", `{"keys":[],"accounts":[]}`)
-	store := LoadStore()
-	if err := store.SetVercelSync("hash123", 1234567890); err != nil {
-		t.Fatalf("setVercelSync error: %v", err)
-	}
-	snap := store.Snapshot()
-	if snap.VercelSyncHash != "hash123" || snap.VercelSyncTime != 1234567890 {
-		t.Fatalf("unexpected vercel sync: hash=%q time=%d", snap.VercelSyncHash, snap.VercelSyncTime)
+	if aliases["gpt-4o"] != "deepseek-v4-flash" {
+		t.Fatalf("expected built-in alias, got %q", aliases["gpt-4o"])
 	}
 }
 
@@ -710,7 +707,7 @@ func TestStoreExportJSONAndBase64(t *testing.T) {
 	}
 }
 
-// ─── OpenAIModelsResponse / ClaudeModelsResponse ─────────────────────
+// ─── OpenAIModelsResponse ────────────────────────────────────────────
 
 func TestOpenAIModelsResponse(t *testing.T) {
 	resp := OpenAIModelsResponse()
@@ -749,19 +746,5 @@ func TestOpenAIModelsResponse(t *testing.T) {
 		if !seen {
 			t.Fatalf("expected OpenAI model list to include %s", id)
 		}
-	}
-}
-
-func TestClaudeModelsResponse(t *testing.T) {
-	resp := ClaudeModelsResponse()
-	if resp["object"] != "list" {
-		t.Fatalf("unexpected object: %v", resp["object"])
-	}
-	data, ok := resp["data"].([]ModelInfo)
-	if !ok {
-		t.Fatalf("unexpected data type: %T", resp["data"])
-	}
-	if len(data) == 0 {
-		t.Fatal("expected non-empty models list")
 	}
 }

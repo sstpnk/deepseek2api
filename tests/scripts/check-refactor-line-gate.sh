@@ -10,17 +10,14 @@ ENTRY_MAX=120
 
 is_entry_file() {
   case "$1" in
-    api/chat-stream.js|\
-    internal/js/helpers/stream-tool-sieve.js|\
-    webui/src/App.jsx)
-      return 0
+    "")
       ;;
   esac
   return 1
 }
 
 is_frontend_file() {
-  [[ "$1" == webui/* ]]
+  return 1
 }
 
 is_test_file() {

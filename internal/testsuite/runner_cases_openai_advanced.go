@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"sync"
 )
 
 func (r *Runner) caseReasonerStream(ctx context.Context, cc *caseContext) error {
@@ -111,68 +110,6 @@ func (r *Runner) caseToolcallStream(ctx context.Context, cc *caseContext) error 
 	cc.assert("tool_calls_delta_present", hasTool, "tool_calls delta missing")
 	cc.assert("no_raw_tool_json_leak", !rawLeak, "raw tool_calls JSON leaked in content")
 	cc.assert("done_terminated", done, "expected [DONE]")
-	return nil
-}
-
-func (r *Runner) caseConcurrencyBurst(ctx context.Context, cc *caseContext) error {
-	accountCount := len(r.configRaw.Accounts)
-	n := accountCount*2 + 2
-	if n < 2 {
-		n = 2
-	}
-	type one struct {
-		Status int
-		Err    string
-	}
-	results := make([]one, n)
-	var wg sync.WaitGroup
-	for i := 0; i < n; i++ {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			resp, err := cc.request(ctx, requestSpec{
-				Method: http.MethodPost,
-				Path:   "/v1/chat/completions",
-				Headers: map[string]string{
-					"Authorization": "Bearer " + r.apiKey,
-				},
-				Body: map[string]any{
-					"model": "deepseek-v4-flash",
-					"messages": []map[string]any{
-						{"role": "user", "content": fmt.Sprintf("并发请求 #%d，请回复ok", idx)},
-					},
-					"stream": true,
-				},
-				Stream:    true,
-				Retryable: true,
-			})
-			if err != nil {
-				results[idx] = one{Err: err.Error()}
-				return
-			}
-			results[idx] = one{Status: resp.StatusCode}
-		}(i)
-	}
-	wg.Wait()
-
-	dist := map[int]int{}
-	success := 0
-	for _, it := range results {
-		if it.Status > 0 {
-			dist[it.Status]++
-			if it.Status == http.StatusOK {
-				success++
-			}
-		}
-	}
-	cc.assert("success_gt_zero", success > 0, fmt.Sprintf("distribution=%v", dist))
-	_, has5xx := has5xx(dist)
-	cc.assert("no_5xx", !has5xx, fmt.Sprintf("distribution=%v", dist))
-	if err := r.ping("/healthz"); err != nil {
-		cc.assert("server_alive", false, err.Error())
-	} else {
-		cc.assert("server_alive", true, "")
-	}
 	return nil
 }
 

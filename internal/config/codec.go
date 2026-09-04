@@ -32,9 +32,6 @@ func (c Config) MarshalJSON() ([]byte, error) {
 	if len(c.ModelAliases) > 0 {
 		m["model_aliases"] = c.ModelAliases
 	}
-	if strings.TrimSpace(c.Admin.PasswordHash) != "" || c.Admin.JWTExpireHours > 0 || c.Admin.JWTValidAfterUnix > 0 {
-		m["admin"] = c.Admin
-	}
 	if c.Runtime.AccountMaxInflight > 0 || c.Runtime.AccountMaxQueue > 0 || c.Runtime.GlobalMaxInflight > 0 || c.Runtime.PowMaxConcurrency > 0 || c.Runtime.TokenRefreshIntervalHours > 0 {
 		m["runtime"] = c.Runtime
 	}
@@ -53,15 +50,6 @@ func (c Config) MarshalJSON() ([]byte, error) {
 	}
 	if c.ThinkingInjection.Enabled != nil || strings.TrimSpace(c.ThinkingInjection.Prompt) != "" {
 		m["thinking_injection"] = c.ThinkingInjection
-	}
-	if strings.TrimSpace(c.Vercel.Token) != "" || strings.TrimSpace(c.Vercel.ProjectID) != "" || strings.TrimSpace(c.Vercel.TeamID) != "" {
-		m["vercel"] = NormalizeVercelConfig(c.Vercel)
-	}
-	if c.VercelSyncHash != "" {
-		m["_vercel_sync_hash"] = c.VercelSyncHash
-	}
-	if c.VercelSyncTime != 0 {
-		m["_vercel_sync_time"] = c.VercelSyncTime
 	}
 	return json.Marshal(m)
 }
@@ -102,9 +90,7 @@ func (c *Config) UnmarshalJSON(b []byte) error {
 				return fmt.Errorf("invalid field %q: %w", k, err)
 			}
 		case "admin":
-			if err := json.Unmarshal(v, &c.Admin); err != nil {
-				return fmt.Errorf("invalid field %q: %w", k, err)
-			}
+			// Removed Admin UI/JWT config is ignored instead of persisted.
 		case "runtime":
 			if err := json.Unmarshal(v, &c.Runtime); err != nil {
 				return fmt.Errorf("invalid field %q: %w", k, err)
@@ -147,17 +133,10 @@ func (c *Config) UnmarshalJSON(b []byte) error {
 				return fmt.Errorf("invalid field %q: %w", k, err)
 			}
 		case "vercel":
-			if err := json.Unmarshal(v, &c.Vercel); err != nil {
-				return fmt.Errorf("invalid field %q: %w", k, err)
-			}
+			// Removed Vercel deployment config is ignored instead of persisted.
 		case "_vercel_sync_hash":
-			if err := json.Unmarshal(v, &c.VercelSyncHash); err != nil {
-				return fmt.Errorf("invalid field %q: %w", k, err)
-			}
 		case "_vercel_sync_time":
-			if err := json.Unmarshal(v, &c.VercelSyncTime); err != nil {
-				return fmt.Errorf("invalid field %q: %w", k, err)
-			}
+			// Removed Vercel sync metadata is ignored instead of persisted.
 		default:
 			var anyVal any
 			if err := json.Unmarshal(v, &anyVal); err == nil {
@@ -209,7 +188,6 @@ func (c Config) Clone() Config {
 		Quarantine:   slices.Clone(c.Quarantine),
 		Proxies:      slices.Clone(c.Proxies),
 		ModelAliases: cloneStringMap(c.ModelAliases),
-		Admin:        c.Admin,
 		Runtime:      c.Runtime,
 		Responses:    c.Responses,
 		Embeddings:   c.Embeddings,
@@ -229,9 +207,6 @@ func (c Config) Clone() Config {
 			Enabled: cloneBoolPtr(c.ThinkingInjection.Enabled),
 			Prompt:  c.ThinkingInjection.Prompt,
 		},
-		Vercel:           c.Vercel,
-		VercelSyncHash:   c.VercelSyncHash,
-		VercelSyncTime:   c.VercelSyncTime,
 		AdditionalFields: map[string]any{},
 	}
 	for k, v := range c.AdditionalFields {

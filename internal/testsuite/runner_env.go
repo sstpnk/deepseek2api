@@ -100,9 +100,6 @@ func (r *Runner) runPreflight(ctx context.Context) error {
 func preflightSteps() [][]string {
 	return [][]string{
 		{"go", "test", "./...", "-count=1"},
-		{"./tests/scripts/check-node-split-syntax.sh"},
-		{"node", "--test", "tests/node/stream-tool-sieve.test.js", "tests/node/chat-stream.test.js", "tests/node/js_compat_test.js"},
-		{"npm", "run", "build", "--prefix", "webui"},
 	}
 }
 
@@ -168,10 +165,9 @@ func (r *Runner) startServer(ctx context.Context) error {
 	cmd.Stdout = logFd
 	cmd.Stderr = logFd
 	cmd.Env = prepareServerEnv(os.Environ(), map[string]string{
-		"PORT":                    strconv.Itoa(port),
-		"DS2API_CONFIG_PATH":      r.configCopyPath,
-		"DS2API_AUTO_BUILD_WEBUI": "false",
-		"DS2API_CONFIG_JSON":      "",
+		"PORT":               strconv.Itoa(port),
+		"DS2API_CONFIG_PATH": r.configCopyPath,
+		"DS2API_CONFIG_JSON": "",
 	})
 	if err := cmd.Start(); err != nil {
 		_ = logFd.Close()
@@ -222,30 +218,6 @@ func (r *Runner) ping(path string) error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("status=%d", resp.StatusCode)
 	}
-	return nil
-}
-
-func (r *Runner) prepareAuth(ctx context.Context) error {
-	reqBody := map[string]any{
-		"admin_key":    r.adminKey,
-		"expire_hours": 24,
-	}
-	resp, err := r.doSimpleJSON(ctx, http.MethodPost, "/admin/login", nil, reqBody)
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("admin login status=%d body=%s", resp.StatusCode, string(resp.Body))
-	}
-	var m map[string]any
-	if err := json.Unmarshal(resp.Body, &m); err != nil {
-		return err
-	}
-	token, _ := m["token"].(string)
-	if strings.TrimSpace(token) == "" {
-		return errors.New("empty admin jwt token")
-	}
-	r.adminJWT = token
 	return nil
 }
 

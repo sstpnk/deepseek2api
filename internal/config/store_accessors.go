@@ -34,15 +34,6 @@ func (s *Store) ConfiguredModelAliases() map[string]string {
 	return cloneStringMap(s.cfg.ModelAliases)
 }
 
-func (s *Store) VercelConfig() VercelConfig {
-	if s == nil {
-		return VercelConfig{}
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return NormalizeVercelConfig(s.cfg.Vercel)
-}
-
 func (s *Store) ToolcallMode() string {
 	return "feature_match"
 }
@@ -114,41 +105,6 @@ func (s *Store) AutoDeleteMode() string {
 		return "all"
 	}
 	return "none"
-}
-
-func (s *Store) AdminPasswordHash() string {
-	if s == nil {
-		return ""
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return strings.TrimSpace(s.cfg.Admin.PasswordHash)
-}
-
-func (s *Store) AdminJWTExpireHours() int {
-	if s == nil {
-		return 24
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if s.cfg.Admin.JWTExpireHours > 0 {
-		return s.cfg.Admin.JWTExpireHours
-	}
-	if raw := strings.TrimSpace(os.Getenv("DS2API_JWT_EXPIRE_HOURS")); raw != "" {
-		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
-			return n
-		}
-	}
-	return 24
-}
-
-func (s *Store) AdminJWTValidAfterUnix() int64 {
-	if s == nil {
-		return 0
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.cfg.Admin.JWTValidAfterUnix
 }
 
 func (s *Store) RuntimeAccountMaxInflight() int {

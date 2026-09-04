@@ -841,7 +841,7 @@ func TestChatCompletionsCurrentInputFileMapsManagedAuthFailureTo401(t *testing.T
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d body=%s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "Please re-login the account in admin") {
+	if !strings.Contains(rec.Body.String(), "Refresh the configured DeepSeek account credentials") {
 		t.Fatalf("expected managed auth error message, got %s", rec.Body.String())
 	}
 }

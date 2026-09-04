@@ -19,7 +19,7 @@ build_one() {
 
   echo "[release-archives] building ${label}"
   rm -rf "$stage"
-  mkdir -p "${stage}/static"
+  mkdir -p "${stage}"
 
   if [[ "$goarm" == "-" ]]; then
     CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
@@ -30,7 +30,6 @@ build_one() {
   fi
 
   cp config.example.json .env.example LICENSE README.MD README.en.md "${stage}/"
-  cp -R static/admin "${stage}/static/admin"
 
   if [[ "$goos" == "windows" ]]; then
     (cd dist && zip -rq "${pkg}.zip" "${pkg}")

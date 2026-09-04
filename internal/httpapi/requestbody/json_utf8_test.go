@@ -151,8 +151,14 @@ func TestIsJSONContentType(t *testing.T) {
 	}
 }
 
-func TestIsKnownJSONRequestPathIncludesGeminiStream(t *testing.T) {
-	if !isKnownJSONRequestPath(http.MethodPost, "/v1beta/models/gemini-pro:streamGenerateContent") {
-		t.Fatal("expected Gemini stream generate path to be recognized as json")
+func TestIsKnownJSONRequestPathExcludesRemovedCompatRoutes(t *testing.T) {
+	for _, path := range []string{
+		"/v1beta/models/gemini-pro:streamGenerateContent",
+		"/anthropic/v1/messages",
+		"/admin/config",
+	} {
+		if isKnownJSONRequestPath(http.MethodPost, path) {
+			t.Fatalf("expected removed route %q not to be recognized as json", path)
+		}
 	}
 }

@@ -1,7 +1,6 @@
 package client
 
 import (
-	"sync"
 	"bufio"
 	"bytes"
 	"context"
@@ -12,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 
 	"ds2api/internal/auth"
 	"ds2api/internal/config"
@@ -69,13 +69,9 @@ func (c *Client) callContinue(ctx context.Context, a *auth.RequestAuth, sessionI
 		"fallback_to_resume": true,
 	}
 	config.Logger.Info("[auto_continue] calling continue", "session_id", sessionID, "message_id", responseMessageID)
-	captureSession := c.capture.Start("deepseek_continue", dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekContinueURL), a.AccountID, payload)
 	resp, err := c.streamPost(ctx, clients.stream, clients.fallback, dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekContinueURL), headers, payload)
 	if err != nil {
 		return nil, err
-	}
-	if captureSession != nil {
-		resp.Body = captureSession.WrapBody(resp.Body, resp.StatusCode)
 	}
 	if resp.StatusCode != http.StatusOK {
 		_ = resp.Body.Close()

@@ -36,33 +36,6 @@ func parseSSEFrames(body []byte) ([]map[string]any, bool) {
 	return frames, done
 }
 
-func parseClaudeStreamEvents(body []byte) []string {
-	events := []string{}
-	seen := map[string]bool{}
-	lines := strings.Split(string(body), "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "data:") {
-			continue
-		}
-		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-		if payload == "" {
-			continue
-		}
-		var m map[string]any
-		if err := json.Unmarshal([]byte(payload), &m); err != nil {
-			continue
-		}
-		t := asString(m["type"])
-		if t == "" || seen[t] {
-			continue
-		}
-		seen[t] = true
-		events = append(events, t)
-	}
-	return events
-}
-
 func extractModelIDs(body []byte) []string {
 	var m map[string]any
 	if err := json.Unmarshal(body, &m); err != nil {
@@ -149,15 +122,6 @@ func uniqueStatusCodes(in []responseLog) []int {
 	return out
 }
 
-func has5xx(dist map[int]int) (int, bool) {
-	for k := range dist {
-		if k >= 500 {
-			return k, true
-		}
-	}
-	return 0, false
-}
-
 func sanitizeID(s string) string {
 	s = strings.ReplaceAll(s, ":", "_")
 	s = strings.ReplaceAll(s, "/", "_")
@@ -174,21 +138,6 @@ func asString(v any) string {
 		return strings.TrimSpace(x)
 	default:
 		return strings.TrimSpace(fmt.Sprintf("%v", v))
-	}
-}
-
-func toInt(v any) int {
-	switch x := v.(type) {
-	case float64:
-		return int(x)
-	case float32:
-		return int(x)
-	case int:
-		return x
-	case int64:
-		return int(x)
-	default:
-		return 0
 	}
 }
 

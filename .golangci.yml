@@ -50,7 +50,6 @@ linters:
       - builtin$
       - examples$
       - vendor$
-      - webui/node_modules$
 
 issues:
   max-issues-per-linter: 0
@@ -70,4 +69,3 @@ formatters:
       - builtin$
       - examples$
       - vendor$
-      - webui/node_modules$

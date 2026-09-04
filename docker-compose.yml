@@ -18,6 +18,4 @@ services:
     environment:
       - TZ=Asia/Shanghai
       - LOG_LEVEL=INFO
-      - DS2API_ADMIN_KEY=${DS2API_ADMIN_KEY:-ds2api}
       - DS2API_CONFIG_PATH=/data/config.json
-      - DS2API_RUNTIME_STATS_PATH=/app/data/runtime_stats.json

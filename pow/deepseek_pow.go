@@ -32,9 +32,9 @@ func BuildPrefix(salt string, expireAt int64) string {
 
 // powPlan holds precomputed values shared across all workers for a single challenge.
 type powPlan struct {
-	t0, t1, t2, t3 uint64       // target hash as 4 uint64
-	tailLen         int
-	paddedStates    [][25]uint64 // index by numLen (1..maxNumLen)
+	t0, t1, t2, t3 uint64 // target hash as 4 uint64
+	tailLen        int
+	paddedStates   [][25]uint64 // index by numLen (1..maxNumLen)
 }
 
 // buildPowPlan parses the challenge and precomputes the padded states.

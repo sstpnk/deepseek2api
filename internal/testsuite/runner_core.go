@@ -15,7 +15,6 @@ import (
 
 type Options struct {
 	ConfigPath  string
-	AdminKey    string
 	OutputDir   string
 	Port        int
 	Timeout     time.Duration
@@ -125,8 +124,6 @@ type Runner struct {
 
 	configRaw runConfig
 	apiKey    string
-	adminKey  string
-	adminJWT  string
 	accountID string
 
 	warnings []string
@@ -174,10 +171,6 @@ func Run(ctx context.Context, opts Options) error {
 		return err
 	}
 
-	if err := r.prepareAuth(ctx); err != nil {
-		r.warnings = append(r.warnings, "auth prepare failed: "+err.Error())
-	}
-
 	for _, c := range r.cases() {
 		r.runCase(ctx, c)
 	}
@@ -221,22 +214,12 @@ func newRunner(opts Options) (*Runner, error) {
 	if opts.Retries < 0 {
 		opts.Retries = 0
 	}
-	adminKey := strings.TrimSpace(opts.AdminKey)
-	if adminKey == "" {
-		adminKey = strings.TrimSpace(os.Getenv("DS2API_ADMIN_KEY"))
-	}
-	if adminKey == "" {
-		adminKey = "admin"
-	}
-	opts.AdminKey = adminKey
-
 	return &Runner{
 		opts: opts,
 		httpClient: &http.Client{
 			Timeout: 0,
 		},
-		runID:    time.Now().UTC().Format("20060102T150405Z"),
-		adminKey: adminKey,
+		runID: time.Now().UTC().Format("20060102T150405Z"),
 	}, nil
 }
 func (r *Runner) runCase(ctx context.Context, c caseDef) {

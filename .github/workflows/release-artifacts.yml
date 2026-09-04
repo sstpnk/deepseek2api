@@ -21,7 +21,6 @@ concurrency:
 
 env:
   GO_VERSION: "1.26.x"
-  NODE_VERSION: "24"
 
 jobs:
   build-and-upload:
@@ -38,22 +37,10 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: go.sum
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
-          cache-dependency-path: webui/package-lock.json
-
       - name: Release Blocking Gates
         run: |
           ./tests/scripts/check-refactor-line-gate.sh
           ./tests/scripts/run-unit-all.sh
-
-      - name: Build WebUI
-        run: |
-          npm ci --prefix webui --prefer-offline --no-audit
-          npm run build --prefix webui
 
       - name: Build Multi-Platform Archives
         env:

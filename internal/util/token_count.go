@@ -2,7 +2,6 @@ package util
 
 const (
 	defaultTokenizerModel = "gpt-4o"
-	claudeTokenizerModel  = "claude"
 )
 
 func CountPromptTokens(text, model string) int {

@@ -50,14 +50,19 @@ func TestCORSPreflightAllowsThirdPartyRequestedHeaders(t *testing.T) {
 
 func TestBuildCORSAllowHeadersKeepsDefaultsWithoutRequest(t *testing.T) {
 	got := strings.ToLower(buildCORSAllowHeaders(nil))
-	for _, want := range []string{"content-type", "x-goog-api-key", "anthropic-version", "x-ds2-source"} {
+	for _, want := range []string{"content-type", "authorization", "x-api-key"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("expected default allow headers to include %q, got %q", want, got)
 		}
 	}
+	for _, unwanted := range []string{"x-goog-api-key", "anthropic-version", "x-vercel-protection-bypass"} {
+		if strings.Contains(got, unwanted) {
+			t.Fatalf("expected default allow headers to omit %q, got %q", unwanted, got)
+		}
+	}
 }
 
-func TestAppCORSPreflightIsUnifiedAcrossInterfaces(t *testing.T) {
+func TestAppCORSPreflightAllowsOpenAICompatibleClients(t *testing.T) {
 	t.Setenv("DS2API_CONFIG_JSON", `{"keys":["k1"],"accounts":[{"email":"u@example.com","password":"p"}]}`)
 	t.Setenv("DS2API_ENV_WRITEBACK", "0")
 
@@ -77,19 +82,9 @@ func TestAppCORSPreflightIsUnifiedAcrossInterfaces(t *testing.T) {
 			headers: "authorization, x-stainless-os",
 		},
 		{
-			name:    "claude",
-			path:    "/anthropic/v1/messages",
-			headers: "x-api-key, anthropic-version, x-stainless-os",
-		},
-		{
-			name:    "gemini",
-			path:    "/v1beta/models/gemini-2.5-pro:generateContent",
-			headers: "x-goog-api-key, x-client-version",
-		},
-		{
-			name:    "admin",
-			path:    "/admin/login",
-			headers: "content-type, x-requested-with",
+			name:    "root alias",
+			path:    "/chat/completions",
+			headers: "authorization, x-openai-client-user-agent",
 		},
 	}
 

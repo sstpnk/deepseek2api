@@ -18,7 +18,7 @@ A **security vulnerability** is a bug that can be exploited to compromise:
 - Data confidentiality (e.g., leaking secrets, user data)
 - Data integrity (e.g., unauthorized modification)
 - System availability (e.g., remote crash, denial of service)
-- Privilege escalation (e.g., normal user gains admin rights)
+- Privilege escalation (e.g., normal user gains privileged access)
 
 **Examples**: SQL injection, command injection, path traversal, authentication bypass, insecure deserialization, sensitive data exposure.
 

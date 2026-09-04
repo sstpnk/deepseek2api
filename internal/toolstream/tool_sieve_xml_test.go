@@ -650,7 +650,7 @@ func TestFindToolSegmentStartDetectsXMLToolCalls(t *testing.T) {
 		{"bare_tool_call_text", "prefix <tool_call>\n", -1},
 		{"xml_inside_code_fence", "```xml\n<tool_calls><invoke name=\"read_file\"></invoke></tool_calls>\n```", -1},
 		{"no_xml", "just plain text", -1},
-		{"gemini_json_no_detect", `some text {"functionCall":{"name":"search"}}`, -1},
+		{"foreign_json_no_detect", `some text {"functionCall":{"name":"search"}}`, -1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -15,7 +15,6 @@ func main() {
 	var timeoutSeconds int
 
 	flag.StringVar(&opts.ConfigPath, "config", opts.ConfigPath, "Path to config file (default: config.json)")
-	flag.StringVar(&opts.AdminKey, "admin-key", opts.AdminKey, "Admin key (default: DS2API_ADMIN_KEY or admin)")
 	flag.StringVar(&opts.OutputDir, "out", opts.OutputDir, "Output artifact directory")
 	flag.IntVar(&opts.Port, "port", opts.Port, "Server port (0 means auto-select free port)")
 	flag.IntVar(&timeoutSeconds, "timeout", int(opts.Timeout.Seconds()), "Per-request timeout in seconds")

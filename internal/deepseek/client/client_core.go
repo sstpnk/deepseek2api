@@ -9,7 +9,6 @@ import (
 	"ds2api/internal/auth"
 	"ds2api/internal/config"
 	trans "ds2api/internal/deepseek/transport"
-	"ds2api/internal/devcapture"
 	"ds2api/internal/util"
 )
 
@@ -19,7 +18,6 @@ var intFrom = util.IntFrom
 type Client struct {
 	Store      *config.Store
 	Auth       *auth.Resolver
-	capture    *devcapture.Store
 	regular    trans.Doer
 	stream     trans.Doer
 	fallback   *http.Client
@@ -42,7 +40,6 @@ func NewClient(store *config.Store, resolver *auth.Resolver) *Client {
 	cli := &Client{
 		Store:            store,
 		Auth:             resolver,
-		capture:          devcapture.Global(),
 		regular:          trans.New(60 * time.Second),
 		stream:           trans.New(0),
 		fallback:         &http.Client{Timeout: 60 * time.Second},
@@ -75,11 +72,11 @@ func (c *Client) backgroundCleanup(interval time.Duration) {
 		c.proxyClientsMu.Unlock()
 
 		c.proxyHealthMu.Lock()
-	for k, h := range c.proxyHealthMap {
-		if time.Since(h.lastFailure) > 24*time.Hour && time.Since(h.lastSuccess) > 24*time.Hour && h.failures == 0 {
-			delete(c.proxyHealthMap, k)
+		for k, h := range c.proxyHealthMap {
+			if time.Since(h.lastFailure) > 24*time.Hour && time.Since(h.lastSuccess) > 24*time.Hour && h.failures == 0 {
+				delete(c.proxyHealthMap, k)
+			}
 		}
-	}
-	c.proxyHealthMu.Unlock()
+		c.proxyHealthMu.Unlock()
 	}
 }

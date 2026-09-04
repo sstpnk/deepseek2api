@@ -9,7 +9,6 @@ These rules apply to all agent-made changes in this repository.
   - `./scripts/lint.sh`
   - `./tests/scripts/check-refactor-line-gate.sh`
   - `./tests/scripts/run-unit-all.sh`
-  - `npm run build --prefix webui`
 
 ## Go Lint Rules
 

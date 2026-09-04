@@ -22,7 +22,6 @@ func (c *Client) CallCompletion(ctx context.Context, a *auth.RequestAuth, payloa
 	if powResp != "" {
 		headers["x-ds-pow-response"] = powResp
 	}
-	captureSession := c.capture.Start("deepseek_completion", dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekCompletionURL), a.AccountID, payload)
 	attempts := 0
 	for attempts < maxAttempts {
 		clients := c.requestClientsForAuth(baseCtx, a)
@@ -43,15 +42,9 @@ func (c *Client) CallCompletion(ctx context.Context, a *auth.RequestAuth, payloa
 			continue
 		}
 		if resp.StatusCode == http.StatusOK {
-			if captureSession != nil {
-				resp.Body = captureSession.WrapBody(resp.Body, resp.StatusCode)
-			}
 			attachCompletionProxyID(resp, activeProxyIDFromContext(ctx))
 			resp = c.wrapCompletionWithAutoContinue(ctx, a, payload, powResp, resp)
 			return resp, nil
-		}
-		if captureSession != nil {
-			resp.Body = captureSession.WrapBody(resp.Body, resp.StatusCode)
 		}
 		statusCode := resp.StatusCode
 		body, readErr := readResponseBody(resp)

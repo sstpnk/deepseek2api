@@ -14,7 +14,6 @@ type Config struct {
 	Quarantine        []QuarantinedAccount    `json:"quarantine,omitempty"`
 	Proxies           []Proxy                 `json:"proxies,omitempty"`
 	ModelAliases      map[string]string       `json:"model_aliases,omitempty"`
-	Admin             AdminConfig             `json:"admin,omitempty"`
 	Runtime           RuntimeConfig           `json:"runtime,omitempty"`
 	Responses         ResponsesConfig         `json:"responses,omitempty"`
 	Embeddings        EmbeddingsConfig        `json:"embeddings,omitempty"`
@@ -22,9 +21,6 @@ type Config struct {
 	ProxySwitch       ProxySwitchConfig       `json:"proxy_switch,omitempty"`
 	CurrentInputFile  CurrentInputFileConfig  `json:"current_input_file,omitempty"`
 	ThinkingInjection ThinkingInjectionConfig `json:"thinking_injection,omitempty"`
-	Vercel            VercelConfig            `json:"vercel,omitempty"`
-	VercelSyncHash    string                  `json:"_vercel_sync_hash,omitempty"`
-	VercelSyncTime    int64                   `json:"_vercel_sync_time,omitempty"`
 	AdditionalFields  map[string]any          `json:"-"`
 }
 
@@ -131,11 +127,10 @@ func (c *Config) NormalizeCredentials() {
 		c.Accounts[i].Remark = strings.TrimSpace(c.Accounts[i].Remark)
 	}
 
-	c.Vercel = NormalizeVercelConfig(c.Vercel)
 	c.normalizeModelAliases()
 }
 
-// DropInvalidAccounts removes accounts that cannot be addressed by admin APIs
+// DropInvalidAccounts removes accounts that cannot be addressed by account selectors
 // (no email and no normalizable mobile). This prevents legacy token-only
 // records from becoming orphaned empty entries after token stripping. Also
 // prunes the quarantine list under the same rule so a malformed entry can't
@@ -159,7 +154,7 @@ func (c *Config) DropInvalidAccounts() {
 
 // DropInvalidQuarantine drops quarantine entries that lack a usable identifier
 // (an account record needs at least an email or normalizable mobile to be
-// findable through the admin API). Mirrors DropInvalidAccounts.
+// findable through account selectors). Mirrors DropInvalidAccounts.
 func (c *Config) DropInvalidQuarantine() {
 	if c == nil || len(c.Quarantine) == 0 {
 		return
@@ -195,12 +190,6 @@ func (c *Config) normalizeModelAliases() {
 	}
 }
 
-type AdminConfig struct {
-	PasswordHash      string `json:"password_hash,omitempty"`
-	JWTExpireHours    int    `json:"jwt_expire_hours,omitempty"`
-	JWTValidAfterUnix int64  `json:"jwt_valid_after_unix,omitempty"`
-}
-
 type RuntimeConfig struct {
 	AccountMaxInflight        int `json:"account_max_inflight,omitempty"`
 	AccountMaxQueue           int `json:"account_max_queue,omitempty"`
@@ -231,25 +220,4 @@ type CurrentInputFileConfig struct {
 type ThinkingInjectionConfig struct {
 	Enabled *bool  `json:"enabled,omitempty"`
 	Prompt  string `json:"prompt,omitempty"`
-}
-
-type VercelConfig struct {
-	Token     string `json:"token,omitempty"`
-	ProjectID string `json:"project_id,omitempty"`
-	TeamID    string `json:"team_id,omitempty"`
-}
-
-func NormalizeVercelConfig(v VercelConfig) VercelConfig {
-	return VercelConfig{
-		Token:     strings.TrimSpace(v.Token),
-		ProjectID: strings.TrimSpace(v.ProjectID),
-		TeamID:    strings.TrimSpace(v.TeamID),
-	}
-}
-
-func (c *Config) ClearVercelCredentials() {
-	if c == nil {
-		return
-	}
-	c.Vercel = VercelConfig{}
 }

@@ -1,8 +1,8 @@
 package chat
 
 import (
-	"fmt"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"

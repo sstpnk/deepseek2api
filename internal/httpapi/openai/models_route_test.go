@@ -59,7 +59,7 @@ func TestGetModelRouteDirectAndAlias(t *testing.T) {
 	})
 
 	t.Run("alias_nothinking", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/v1/models/claude-sonnet-4-6-nothinking", nil)
+		req := httptest.NewRequest(http.MethodGet, "/v1/models/gpt-5-nothinking", nil)
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {

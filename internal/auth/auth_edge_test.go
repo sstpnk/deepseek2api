@@ -263,91 +263,6 @@ func TestReleaseEmptyAccountID(t *testing.T) {
 	r.Release(a) // should not panic
 }
 
-// ─── JWT edge cases ──────────────────────────────────────────────────
-
-func TestVerifyJWTInvalidFormat(t *testing.T) {
-	_, err := VerifyJWT("not-a-jwt")
-	if err == nil {
-		t.Fatal("expected error for invalid JWT format")
-	}
-}
-
-func TestVerifyJWTInvalidSignature(t *testing.T) {
-	token, _ := CreateJWT(1)
-	// Tamper with the signature
-	parts := splitJWT(token)
-	if len(parts) == 3 {
-		tampered := parts[0] + "." + parts[1] + ".invalid_signature"
-		_, err := VerifyJWT(tampered)
-		if err == nil {
-			t.Fatal("expected error for tampered signature")
-		}
-	}
-}
-
-func TestVerifyJWTExpired(t *testing.T) {
-	// Create a token with 0 hours expiry - will use default, so we can't easily test
-	// Instead test with bad payload
-	_, err := VerifyJWT("eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjF9.invalid")
-	if err == nil {
-		t.Fatal("expected error for expired/invalid JWT")
-	}
-}
-
-func TestCreateJWTDefaultExpiry(t *testing.T) {
-	token, err := CreateJWT(0) // should use default
-	if err != nil {
-		t.Fatalf("create jwt failed: %v", err)
-	}
-	_, err = VerifyJWT(token)
-	if err != nil {
-		t.Fatalf("verify jwt failed: %v", err)
-	}
-}
-
-// ─── VerifyAdminRequest edge cases ───────────────────────────────────
-
-func TestVerifyAdminRequestNoHeader(t *testing.T) {
-	req, _ := http.NewRequest("GET", "/admin/config", nil)
-	if err := VerifyAdminRequest(req); err == nil {
-		t.Fatal("expected error for missing auth")
-	}
-}
-
-func TestVerifyAdminRequestEmptyBearer(t *testing.T) {
-	req, _ := http.NewRequest("GET", "/admin/config", nil)
-	req.Header.Set("Authorization", "Bearer ")
-	if err := VerifyAdminRequest(req); err == nil {
-		t.Fatal("expected error for empty bearer")
-	}
-}
-
-func TestVerifyAdminRequestWithAdminKey(t *testing.T) {
-	t.Setenv("DS2API_ADMIN_KEY", "test-admin-key")
-	req, _ := http.NewRequest("GET", "/admin/config", nil)
-	req.Header.Set("Authorization", "Bearer test-admin-key")
-	if err := VerifyAdminRequest(req); err != nil {
-		t.Fatalf("expected admin key accepted: %v", err)
-	}
-}
-
-func TestVerifyAdminRequestInvalidCredentials(t *testing.T) {
-	t.Setenv("DS2API_ADMIN_KEY", "correct-key")
-	req, _ := http.NewRequest("GET", "/admin/config", nil)
-	req.Header.Set("Authorization", "Bearer wrong-key")
-	if err := VerifyAdminRequest(req); err == nil {
-		t.Fatal("expected error for wrong key")
-	}
-}
-
-func TestVerifyAdminRequestBasicAuth(t *testing.T) {
-	req, _ := http.NewRequest("GET", "/admin/config", nil)
-	req.Header.Set("Authorization", "Basic abc123")
-	if err := VerifyAdminRequest(req); err == nil {
-		t.Fatal("expected error for Basic auth")
-	}
-}
-
 // ─── Determine with login failure ────────────────────────────────────
 
 func TestDetermineWithLoginFailure(t *testing.T) {
@@ -398,20 +313,4 @@ func TestDetermineWithTargetAccount(t *testing.T) {
 	if a.AccountID != "acc2@test.com" {
 		t.Fatalf("expected target account acc2, got %q", a.AccountID)
 	}
-}
-
-// helper
-func splitJWT(token string) []string {
-	result := make([]string, 0, 3)
-	start := 0
-	count := 0
-	for i := 0; i < len(token); i++ {
-		if token[i] == '.' {
-			result = append(result, token[start:i])
-			start = i + 1
-			count++
-		}
-	}
-	result = append(result, token[start:])
-	return result
 }

@@ -201,7 +201,7 @@ func buildOptions(stdReq promptcompat.StandardRequest, prompt string, opts Optio
 
 func authOutputError(a *auth.RequestAuth) *assistantturn.OutputError {
 	if a != nil && a.UseConfigToken {
-		return &assistantturn.OutputError{Status: http.StatusUnauthorized, Message: "Account token is invalid. Please re-login the account in admin.", Code: "error"}
+		return &assistantturn.OutputError{Status: http.StatusUnauthorized, Message: "Account token is invalid. Refresh the configured DeepSeek account credentials.", Code: "error"}
 	}
 	return &assistantturn.OutputError{Status: http.StatusUnauthorized, Message: "Invalid token. If this should be a DS2API key, add it to config.keys first.", Code: "error"}
 }

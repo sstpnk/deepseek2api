@@ -51,9 +51,8 @@ tests/
 .coverage
 htmlcov/
 
-# Node.js / WebUI 开发依赖
+# Node.js
 node_modules/
-webui/node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

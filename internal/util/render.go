@@ -2,7 +2,6 @@ package util
 
 import (
 	"ds2api/internal/toolcall"
-	"fmt"
 	"strings"
 	"time"
 
@@ -102,46 +101,6 @@ func BuildOpenAIResponseObject(responseID, model, finalPrompt, finalThinking, fi
 			"input_tokens":  promptTokens,
 			"output_tokens": reasoningTokens + completionTokens,
 			"total_tokens":  promptTokens + reasoningTokens + completionTokens,
-		},
-	}
-}
-
-// BuildClaudeMessageResponse is kept for backward compatibility.
-// Prefer internal/format/claude.BuildMessageResponse for new code.
-func BuildClaudeMessageResponse(messageID, model string, normalizedMessages []any, finalThinking, finalText string, toolNames []string) map[string]any {
-	detected := toolcall.ParseToolCalls(finalText, toolNames)
-	content := make([]map[string]any, 0, 4)
-	if finalThinking != "" {
-		content = append(content, map[string]any{"type": "thinking", "thinking": finalThinking})
-	}
-	stopReason := "end_turn"
-	if len(detected) > 0 {
-		stopReason = "tool_use"
-		for i, tc := range detected {
-			content = append(content, map[string]any{
-				"type":  "tool_use",
-				"id":    fmt.Sprintf("toolu_%d_%d", time.Now().Unix(), i),
-				"name":  tc.Name,
-				"input": tc.Input,
-			})
-		}
-	} else {
-		if finalText == "" {
-			finalText = "抱歉，没有生成有效的响应内容。"
-		}
-		content = append(content, map[string]any{"type": "text", "text": finalText})
-	}
-	return map[string]any{
-		"id":            messageID,
-		"type":          "message",
-		"role":          "assistant",
-		"model":         model,
-		"content":       content,
-		"stop_reason":   stopReason,
-		"stop_sequence": nil,
-		"usage": map[string]any{
-			"input_tokens":  CountPromptTokens(fmt.Sprintf("%v", normalizedMessages), model),
-			"output_tokens": CountOutputTokens(finalThinking, model) + CountOutputTokens(finalText, model),
 		},
 	}
 }

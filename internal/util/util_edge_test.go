@@ -5,8 +5,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"ds2api/internal/config"
 )
 
 // ─── EstimateTokens edge cases ───────────────────────────────────────
@@ -286,99 +284,5 @@ func TestNormalizeContentJSON(t *testing.T) {
 	got := normalizeContent(map[string]any{"key": "value"})
 	if !strings.Contains(got, `"key":"value"`) {
 		t.Fatalf("expected JSON serialized, got %q", got)
-	}
-}
-
-// ─── ConvertClaudeToDeepSeek edge cases ──────────────────────────────
-
-func TestConvertClaudeToDeepSeekDefaultModel(t *testing.T) {
-	store := config.LoadStore()
-	req := map[string]any{
-		"messages": []any{map[string]any{"role": "user", "content": "Hi"}},
-	}
-	out := ConvertClaudeToDeepSeek(req, store)
-	if out["model"] == "" {
-		t.Fatal("expected default model")
-	}
-}
-
-func TestConvertClaudeToDeepSeekWithStopSequences(t *testing.T) {
-	store := config.LoadStore()
-	req := map[string]any{
-		"model":          "claude-sonnet-4-5",
-		"messages":       []any{map[string]any{"role": "user", "content": "Hi"}},
-		"stop_sequences": []any{"\n\n"},
-	}
-	out := ConvertClaudeToDeepSeek(req, store)
-	if out["stop"] == nil {
-		t.Fatal("expected stop field from stop_sequences")
-	}
-}
-
-func TestConvertClaudeToDeepSeekWithTemperature(t *testing.T) {
-	store := config.LoadStore()
-	req := map[string]any{
-		"model":       "claude-sonnet-4-5",
-		"messages":    []any{map[string]any{"role": "user", "content": "Hi"}},
-		"temperature": 0.7,
-		"top_p":       0.9,
-	}
-	out := ConvertClaudeToDeepSeek(req, store)
-	if out["temperature"] != 0.7 {
-		t.Fatalf("expected temperature 0.7, got %v", out["temperature"])
-	}
-	if out["top_p"] != 0.9 {
-		t.Fatalf("expected top_p 0.9, got %v", out["top_p"])
-	}
-}
-
-func TestConvertClaudeToDeepSeekNoSystem(t *testing.T) {
-	store := config.LoadStore()
-	req := map[string]any{
-		"model":    "claude-sonnet-4-5",
-		"messages": []any{map[string]any{"role": "user", "content": "Hi"}},
-	}
-	out := ConvertClaudeToDeepSeek(req, store)
-	msgs, _ := out["messages"].([]any)
-	if len(msgs) != 1 {
-		t.Fatalf("expected 1 message without system, got %d", len(msgs))
-	}
-}
-
-func TestConvertClaudeToDeepSeekOpusUsesGlobalAlias(t *testing.T) {
-	store := config.LoadStore()
-	req := map[string]any{
-		"model":    "claude-opus-4-6",
-		"messages": []any{map[string]any{"role": "user", "content": "Hi"}},
-	}
-	out := ConvertClaudeToDeepSeek(req, store)
-	if out["model"] != "deepseek-v4-pro" {
-		t.Fatalf("expected opus to use global alias, got %q", out["model"])
-	}
-}
-
-func TestConvertClaudeToDeepSeekUsesExplicitModelAlias(t *testing.T) {
-	t.Setenv("DS2API_CONFIG_JSON", `{"keys":[],"accounts":[],"model_aliases":{"claude-sonnet-4-6":"deepseek-v4-pro-search"}}`)
-	store := config.LoadStore()
-	req := map[string]any{
-		"model":    "claude-sonnet-4-6",
-		"messages": []any{map[string]any{"role": "user", "content": "Hi"}},
-	}
-	out := ConvertClaudeToDeepSeek(req, store)
-	if out["model"] != "deepseek-v4-pro-search" {
-		t.Fatalf("expected explicit alias override, got %q", out["model"])
-	}
-}
-
-func TestConvertClaudeToDeepSeekUsesExplicitNoThinkingModelAlias(t *testing.T) {
-	t.Setenv("DS2API_CONFIG_JSON", `{"keys":[],"accounts":[],"model_aliases":{"claude-sonnet-4-6":"deepseek-v4-pro-search"}}`)
-	store := config.LoadStore()
-	req := map[string]any{
-		"model":    "claude-sonnet-4-6-nothinking",
-		"messages": []any{map[string]any{"role": "user", "content": "Hi"}},
-	}
-	out := ConvertClaudeToDeepSeek(req, store)
-	if out["model"] != "deepseek-v4-pro-search-nothinking" {
-		t.Fatalf("expected explicit alias override with nothinking suffix, got %q", out["model"])
 	}
 }

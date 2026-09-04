@@ -6,8 +6,7 @@ import (
 )
 
 // WriteJSON writes a JSON response with the given status code.
-// This is a shared helper to avoid duplicate writeJSON functions
-// in openai, claude, and admin packages.
+// This is a shared helper for OpenAI-compatible HTTP handlers.
 func WriteJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
