@@ -49,7 +49,7 @@ func (c *Client) Login(ctx context.Context, acc config.Account) (string, error) 
 	user, _ := bizData["user"].(map[string]any)
 	token, _ := user["token"].(string)
 	if strings.TrimSpace(token) == "" {
-		return "", fmt.Errorf("missing login token: data_keys=%s biz_data_keys=%s user_keys=%s", mapKeys(data), mapKeys(bizData), mapKeys(user))
+		return "", fmt.Errorf("missing login token: top_keys=%s data_type=%T data_keys=%s biz_data_keys=%s user_keys=%s", mapKeys(resp), resp["data"], mapKeys(data), mapKeys(bizData), mapKeys(user))
 	}
 	return token, nil
 }
