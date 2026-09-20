@@ -37,6 +37,7 @@ ENV/
 .env.local
 .env.*.local
 config.json
+data/
 
 # 开发工具
 .vscode/
