@@ -24,8 +24,9 @@ docker compose up --build
 `${DS2API_HOST_PORT:-6011}`。
 
 DeepSeek 账号可选设置 `device_id`。未设置时，DS2API 会从账号 email/mobile
-生成稳定的账号级 device id；如果 DeepSeek risk control 拒绝登录，可在
-`config.json` 中为账号固定一个唯一值。
+生成稳定的账号级 device id。这个默认值避免所有实例共享同一个指纹；如果
+DeepSeek 返回 `RISK_DEVICE_DETECTED`，通常需要从真实 DeepSeek 客户端登录请求中
+捕获该账号对应的 device id，并在 `config.json` 中固定到该账号。
 
 ## 环境变量
 
