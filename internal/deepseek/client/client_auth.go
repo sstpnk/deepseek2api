@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"unicode"
 
@@ -48,7 +49,7 @@ func (c *Client) Login(ctx context.Context, acc config.Account) (string, error) 
 	user, _ := bizData["user"].(map[string]any)
 	token, _ := user["token"].(string)
 	if strings.TrimSpace(token) == "" {
-		return "", errors.New("missing login token")
+		return "", fmt.Errorf("missing login token: data_keys=%s biz_data_keys=%s user_keys=%s", mapKeys(data), mapKeys(bizData), mapKeys(user))
 	}
 	return token, nil
 }
@@ -294,6 +295,18 @@ func applyWebDeviceHeaders(headers map[string]string) {
 	headers["x-client-timezone-offset"] = "10800"
 	headers["x-client-version"] = "2.5.0"
 	delete(headers, "accept-charset")
+}
+
+func mapKeys(m map[string]any) string {
+	if len(m) == 0 {
+		return "-"
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, ",")
 }
 
 func (c *Client) authHeadersForAuth(a *auth.RequestAuth) map[string]string {
