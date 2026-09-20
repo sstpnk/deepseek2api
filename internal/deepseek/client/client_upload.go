@@ -80,7 +80,7 @@ func (c *Client) UploadFile(ctx context.Context, a *auth.RequestAuth, req Upload
 			clients = c.requestClientsForAuth(baseCtx, a)
 			uploadCtx = withActiveProxyID(baseCtx, clients.proxyID)
 		}
-		headers := c.authHeaders(a.DeepSeekToken)
+		headers := c.authHeadersForAuth(a)
 		headers["Content-Type"] = contentTypeHeader
 		if modelType != "" {
 			headers["x-model-type"] = modelType

@@ -52,7 +52,7 @@ func (c *Client) GetSessionCount(ctx context.Context, a *auth.RequestAuth, maxAt
 		if err := ctx.Err(); err != nil {
 			return stats, err
 		}
-		headers := c.authHeaders(a.DeepSeekToken)
+		headers := c.authHeadersForAuth(a)
 
 		// 构建请求 URL
 		reqURL := dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekFetchSessionURL) + "?lte_cursor.pinned=false"
@@ -136,7 +136,7 @@ func (c *Client) GetSessionCount(ctx context.Context, a *auth.RequestAuth, maxAt
 func (c *Client) GetSessionCountForToken(ctx context.Context, token string) (*SessionStats, error) {
 	clients := c.requestClientsFromContext(ctx)
 	ctx = withActiveProxyID(ctx, clients.proxyID)
-	headers := c.authHeaders(token)
+	headers := c.authHeadersForContext(ctx, token)
 	reqURL := dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekFetchSessionURL) + "?lte_cursor.pinned=false"
 
 	resp, status, err := c.getJSONWithStatus(ctx, clients.regular, clients.fallback, reqURL, headers)
@@ -223,7 +223,7 @@ func (c *Client) GetSessionCountAll(ctx context.Context) []*SessionStats {
 func (c *Client) FetchSessionPage(ctx context.Context, a *auth.RequestAuth, cursor string) ([]SessionInfo, bool, error) {
 	clients := c.requestClientsForAuth(ctx, a)
 	ctx = withActiveProxyID(ctx, clients.proxyID)
-	headers := c.authHeaders(a.DeepSeekToken)
+	headers := c.authHeadersForAuth(a)
 
 	// 构建请求 URL
 	params := url.Values{}

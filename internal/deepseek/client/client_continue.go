@@ -59,7 +59,7 @@ func (c *Client) callContinue(ctx context.Context, a *auth.RequestAuth, sessionI
 	if clients.workerHost != "" {
 		ctx = withWorkerHost(ctx, clients.workerHost)
 	}
-	headers := c.authHeaders(a.DeepSeekToken)
+	headers := c.authHeadersForAuth(a)
 	if powResp != "" {
 		headers["x-ds-pow-response"] = powResp
 	}

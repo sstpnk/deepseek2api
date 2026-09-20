@@ -18,7 +18,7 @@ func (c *Client) CallCompletion(ctx context.Context, a *auth.RequestAuth, payloa
 		maxAttempts = c.maxRetries
 	}
 	baseCtx := ctx
-	headers := c.authHeaders(a.DeepSeekToken)
+	headers := c.authHeadersForAuth(a)
 	if powResp != "" {
 		headers["x-ds-pow-response"] = powResp
 	}

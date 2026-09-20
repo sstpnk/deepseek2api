@@ -43,7 +43,7 @@ func (c *Client) DeleteSession(ctx context.Context, a *auth.RequestAuth, session
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
-		headers := c.authHeaders(a.DeepSeekToken)
+		headers := c.authHeadersForAuth(a)
 
 		payload := map[string]any{
 			"chat_session_id": sessionID,
@@ -120,7 +120,7 @@ func (c *Client) DeleteSessionForToken(ctx context.Context, token string, sessio
 		return result, errors.New(result.ErrorMessage)
 	}
 
-	headers := c.authHeaders(token)
+	headers := c.authHeadersForContext(ctx, token)
 	payload := map[string]any{
 		"chat_session_id": sessionID,
 	}
@@ -146,7 +146,7 @@ func (c *Client) DeleteSessionForToken(ctx context.Context, token string, sessio
 func (c *Client) DeleteAllSessions(ctx context.Context, a *auth.RequestAuth) error {
 	clients := c.requestClientsForAuth(ctx, a)
 	ctx = withActiveProxyID(ctx, clients.proxyID)
-	headers := c.authHeaders(a.DeepSeekToken)
+	headers := c.authHeadersForAuth(a)
 	payload := map[string]any{}
 
 	resp, status, err := c.postJSONWithStatus(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekDeleteAllSessionsURL), headers, payload)
@@ -169,7 +169,7 @@ func (c *Client) DeleteAllSessions(ctx context.Context, a *auth.RequestAuth) err
 func (c *Client) DeleteAllSessionsForToken(ctx context.Context, token string) error {
 	clients := c.requestClientsFromContext(ctx)
 	ctx = withActiveProxyID(ctx, clients.proxyID)
-	headers := c.authHeaders(token)
+	headers := c.authHeadersForContext(ctx, token)
 	payload := map[string]any{}
 
 	resp, status, err := c.postJSONWithStatus(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekDeleteAllSessionsURL), headers, payload)

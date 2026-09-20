@@ -32,7 +32,7 @@ func (c *Client) Login(ctx context.Context, acc config.Account) (string, error) 
 	} else {
 		return "", errors.New("missing email/mobile")
 	}
-	resp, err := c.postJSON(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekLoginURL), dsprotocol.BaseHeaders, payload)
+	resp, err := c.postJSON(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekLoginURL), c.accountHeaders("", acc), payload)
 	if err != nil {
 		return "", err
 	}
@@ -83,7 +83,7 @@ func (c *Client) CreateSession(ctx context.Context, a *auth.RequestAuth, maxAtte
 		if err := ctx.Err(); err != nil {
 			return "", err
 		}
-		headers := c.authHeaders(a.DeepSeekToken)
+		headers := c.authHeadersForAuth(a)
 		resp, status, err := c.postJSONWithStatus(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekCreateSessionURL), headers, map[string]any{"agent": "chat"})
 		if err != nil {
 			baseCtx = withAvoidedProxyID(baseCtx, activeProxyIDFromContext(ctx))
@@ -163,7 +163,7 @@ func (c *Client) GetPowForTarget(ctx context.Context, a *auth.RequestAuth, targe
 		if err := ctx.Err(); err != nil {
 			return "", err
 		}
-		headers := c.authHeaders(a.DeepSeekToken)
+		headers := c.authHeadersForAuth(a)
 		resp, status, err := c.postJSONWithStatus(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekCreatePowURL), headers, map[string]any{"target_path": targetPath})
 		if err != nil {
 			baseCtx = withAvoidedProxyID(baseCtx, activeProxyIDFromContext(ctx))
@@ -264,6 +264,35 @@ func (c *Client) authHeaders(token string) map[string]string {
 		headers["authorization"] = "Bearer " + token
 	}
 	return headers
+}
+
+func (c *Client) accountHeaders(token string, acc config.Account) map[string]string {
+	headers := c.authHeaders(token)
+	deviceID := strings.TrimSpace(deviceIDForAccount(acc))
+	if deviceID != "" {
+		headers["x-device-id"] = deviceID
+		headers["x-device-model"] = ""
+	}
+	return headers
+}
+
+func (c *Client) authHeadersForAuth(a *auth.RequestAuth) map[string]string {
+	if a == nil {
+		return c.authHeaders("")
+	}
+	if strings.TrimSpace(a.Account.Identifier()) != "" || strings.TrimSpace(a.Account.DeviceID) != "" {
+		return c.accountHeaders(a.DeepSeekToken, a.Account)
+	}
+	return c.authHeaders(a.DeepSeekToken)
+}
+
+func (c *Client) authHeadersForContext(ctx context.Context, token string) map[string]string {
+	if a, ok := auth.FromContext(ctx); ok && a != nil {
+		copied := *a
+		copied.DeepSeekToken = token
+		return c.authHeadersForAuth(&copied)
+	}
+	return c.authHeaders(token)
 }
 
 func isTokenInvalid(status int, code int, bizCode int, msg string, bizMsg string) bool {

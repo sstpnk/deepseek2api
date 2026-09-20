@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"ds2api/internal/auth"
 	"ds2api/internal/config"
 )
 
@@ -43,8 +44,10 @@ func TestDeviceIDForAccountDerivesStableValue(t *testing.T) {
 
 func TestLoginSendsConfiguredDeviceID(t *testing.T) {
 	var payload map[string]any
+	var xDeviceID string
 	client := &Client{
 		regular: doerFunc(func(req *http.Request) (*http.Response, error) {
+			xDeviceID = req.Header.Get("x-device-id")
 			body, err := io.ReadAll(req.Body)
 			if err != nil {
 				t.Fatalf("read request body: %v", err)
@@ -82,6 +85,43 @@ func TestLoginSendsConfiguredDeviceID(t *testing.T) {
 	}
 	if payload["device_id"] != "configured-device" {
 		t.Fatalf("device_id=%#v want configured-device; payload=%#v", payload["device_id"], payload)
+	}
+	if xDeviceID != "configured-device" {
+		t.Fatalf("x-device-id=%q want configured-device", xDeviceID)
+	}
+}
+
+func TestAuthHeadersForAuthAddsManagedAccountDeviceID(t *testing.T) {
+	client := &Client{}
+	headers := client.authHeadersForAuth(&auth.RequestAuth{
+		UseConfigToken: true,
+		DeepSeekToken:  "token",
+		Account: config.Account{
+			Email:    "user@example.com",
+			DeviceID: "configured-device",
+		},
+	})
+
+	if headers["authorization"] != "Bearer token" {
+		t.Fatalf("authorization=%q want bearer token", headers["authorization"])
+	}
+	if headers["x-device-id"] != "configured-device" {
+		t.Fatalf("x-device-id=%q want configured-device", headers["x-device-id"])
+	}
+}
+
+func TestAuthHeadersForAuthLeavesDirectTokenWithoutDeviceID(t *testing.T) {
+	client := &Client{}
+	headers := client.authHeadersForAuth(&auth.RequestAuth{
+		UseConfigToken: false,
+		DeepSeekToken:  "direct-token",
+	})
+
+	if headers["authorization"] != "Bearer direct-token" {
+		t.Fatalf("authorization=%q want bearer direct-token", headers["authorization"])
+	}
+	if got := headers["x-device-id"]; got != "" {
+		t.Fatalf("x-device-id=%q want empty for direct token", got)
 	}
 }
 
