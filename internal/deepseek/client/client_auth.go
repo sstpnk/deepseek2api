@@ -33,7 +33,7 @@ func (c *Client) Login(ctx context.Context, acc config.Account) (string, error) 
 	} else {
 		return "", errors.New("missing email/mobile")
 	}
-	resp, err := c.postJSON(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekLoginURL), c.accountHeaders("", acc), payload)
+	resp, status, respHeaders, bodyLen, bodyPreview, err := c.postJSONWithMeta(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekAPIURL(dsprotocol.DeepSeekLoginURL), c.accountHeaders("", acc), payload)
 	if err != nil {
 		return "", err
 	}
@@ -49,7 +49,7 @@ func (c *Client) Login(ctx context.Context, acc config.Account) (string, error) 
 	user, _ := bizData["user"].(map[string]any)
 	token, _ := user["token"].(string)
 	if strings.TrimSpace(token) == "" {
-		return "", fmt.Errorf("missing login token: top_keys=%s data_type=%T data_keys=%s biz_data_keys=%s user_keys=%s", mapKeys(resp), resp["data"], mapKeys(data), mapKeys(bizData), mapKeys(user))
+		return "", fmt.Errorf("missing login token: status=%d body_len=%d top_keys=%s data_type=%T data_keys=%s biz_data_keys=%s user_keys=%s headers=%s preview=%s", status, bodyLen, mapKeys(resp), resp["data"], mapKeys(data), mapKeys(bizData), mapKeys(user), headerSummary(respHeaders), safePreview(bodyPreview))
 	}
 	return token, nil
 }
@@ -307,6 +307,60 @@ func mapKeys(m map[string]any) string {
 	}
 	sort.Strings(keys)
 	return strings.Join(keys, ",")
+}
+
+func headerSummary(headers http.Header) string {
+	if len(headers) == 0 {
+		return "-"
+	}
+	keys := make([]string, 0, len(headers))
+	for k := range headers {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		if strings.EqualFold(k, "Set-Cookie") {
+			parts = append(parts, "Set-Cookie:"+cookieNames(headers.Values(k)))
+			continue
+		}
+		parts = append(parts, k)
+	}
+	return strings.Join(parts, ",")
+}
+
+func cookieNames(values []string) string {
+	if len(values) == 0 {
+		return "-"
+	}
+	names := make([]string, 0, len(values))
+	for _, v := range values {
+		name, _, ok := strings.Cut(v, "=")
+		if !ok {
+			continue
+		}
+		name = strings.TrimSpace(name)
+		if name != "" {
+			names = append(names, name)
+		}
+	}
+	if len(names) == 0 {
+		return "-"
+	}
+	sort.Strings(names)
+	return strings.Join(names, "|")
+}
+
+func safePreview(s string) string {
+	if s == "" {
+		return "-"
+	}
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "\r", " ")
+	if len(s) > 80 {
+		return s[:80]
+	}
+	return s
 }
 
 func (c *Client) authHeadersForAuth(a *auth.RequestAuth) map[string]string {

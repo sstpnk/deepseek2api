@@ -23,15 +23,20 @@ func (c *Client) postJSON(ctx context.Context, doer trans.Doer, fallback trans.D
 }
 
 func (c *Client) postJSONWithStatus(ctx context.Context, doer trans.Doer, fallback trans.Doer, url string, headers map[string]string, payload any) (map[string]any, int, error) {
+	out, status, _, _, _, err := c.postJSONWithMeta(ctx, doer, fallback, url, headers, payload)
+	return out, status, err
+}
+
+func (c *Client) postJSONWithMeta(ctx context.Context, doer trans.Doer, fallback trans.Doer, url string, headers map[string]string, payload any) (map[string]any, int, http.Header, int, string, error) {
 	b, err := json.Marshal(payload)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, nil, 0, "", err
 	}
 	headers = c.jsonHeaders(headers)
 	url = rewriteURLForWorker(ctx, url)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(b))
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, nil, 0, "", err
 	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
@@ -46,14 +51,14 @@ func (c *Client) postJSONWithStatus(ctx context.Context, doer trans.Doer, fallba
 		config.Logger.Warn("[deepseek] fingerprint request failed, fallback to std transport", "url", url, "error", err)
 		req2, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(b))
 		if reqErr != nil {
-			return nil, 0, reqErr
+			return nil, 0, nil, 0, "", reqErr
 		}
 		for k, v := range headers {
 			req2.Header.Set(k, v)
 		}
 		resp, err = fallback.Do(req2)
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, nil, 0, "", err
 		}
 	} else if resp != nil && resp.StatusCode < 500 {
 		c.markProxySuccess(activeProxyIDFromContext(ctx))
@@ -61,7 +66,7 @@ func (c *Client) postJSONWithStatus(ctx context.Context, doer trans.Doer, fallba
 	defer func() { _ = resp.Body.Close() }()
 	payloadBytes, err := readResponseBody(resp)
 	if err != nil {
-		return nil, resp.StatusCode, err
+		return nil, resp.StatusCode, resp.Header.Clone(), 0, "", err
 	}
 	out := map[string]any{}
 	if len(payloadBytes) > 0 {
@@ -69,7 +74,7 @@ func (c *Client) postJSONWithStatus(ctx context.Context, doer trans.Doer, fallba
 			config.Logger.Warn("[deepseek] json parse failed", "url", url, "status", resp.StatusCode, "content_encoding", resp.Header.Get("Content-Encoding"), "preview", preview(payloadBytes))
 		}
 	}
-	return out, resp.StatusCode, nil
+	return out, resp.StatusCode, resp.Header.Clone(), len(payloadBytes), preview(payloadBytes), nil
 }
 
 func (c *Client) getJSONWithStatus(ctx context.Context, doer trans.Doer, fallback trans.Doer, url string, headers map[string]string) (map[string]any, int, error) {
