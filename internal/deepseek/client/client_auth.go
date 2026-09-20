@@ -21,7 +21,7 @@ func (c *Client) Login(ctx context.Context, acc config.Account) (string, error) 
 	payload := map[string]any{
 		"password":  strings.TrimSpace(acc.Password),
 		"device_id": deviceIDForAccount(acc),
-		"os":        "android",
+		"os":        deviceProfileForAccount(acc),
 	}
 	if email := strings.TrimSpace(acc.Email); email != "" {
 		payload["email"] = email
@@ -68,6 +68,13 @@ func deviceIDForAccount(acc config.Account) string {
 	}
 	sum := sha256.Sum256([]byte(identifier))
 	return hex.EncodeToString(sum[:])[:16]
+}
+
+func deviceProfileForAccount(acc config.Account) string {
+	if strings.Contains(strings.TrimSpace(acc.DeviceID), "-") {
+		return "web"
+	}
+	return "android"
 }
 
 func (c *Client) CreateSession(ctx context.Context, a *auth.RequestAuth, maxAttempts int) (string, error) {
@@ -273,7 +280,20 @@ func (c *Client) accountHeaders(token string, acc config.Account) map[string]str
 		headers["x-device-id"] = deviceID
 		headers["x-device-model"] = ""
 	}
+	if deviceProfileForAccount(acc) == "web" {
+		applyWebDeviceHeaders(headers)
+	}
 	return headers
+}
+
+func applyWebDeviceHeaders(headers map[string]string) {
+	headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36"
+	headers["x-client-bundle-id"] = "com.deepseek.chat"
+	headers["x-client-locale"] = "en_US"
+	headers["x-client-platform"] = "web"
+	headers["x-client-timezone-offset"] = "10800"
+	headers["x-client-version"] = "2.5.0"
+	delete(headers, "accept-charset")
 }
 
 func (c *Client) authHeadersForAuth(a *auth.RequestAuth) map[string]string {

@@ -86,6 +86,9 @@ func TestLoginSendsConfiguredDeviceID(t *testing.T) {
 	if payload["device_id"] != "configured-device" {
 		t.Fatalf("device_id=%#v want configured-device; payload=%#v", payload["device_id"], payload)
 	}
+	if payload["os"] != "web" {
+		t.Fatalf("os=%#v want web for browser device id; payload=%#v", payload["os"], payload)
+	}
 	if xDeviceID != "configured-device" {
 		t.Fatalf("x-device-id=%q want configured-device", xDeviceID)
 	}
@@ -107,6 +110,9 @@ func TestAuthHeadersForAuthAddsManagedAccountDeviceID(t *testing.T) {
 	}
 	if headers["x-device-id"] != "configured-device" {
 		t.Fatalf("x-device-id=%q want configured-device", headers["x-device-id"])
+	}
+	if headers["x-client-platform"] != "web" {
+		t.Fatalf("x-client-platform=%q want web", headers["x-client-platform"])
 	}
 }
 
