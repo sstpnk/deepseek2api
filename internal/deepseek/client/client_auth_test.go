@@ -31,8 +31,13 @@ func TestDeviceIDForAccountDerivesStableValue(t *testing.T) {
 	if first == defaultLoginDeviceID {
 		t.Fatalf("derived device id should not use shared fallback %q", defaultLoginDeviceID)
 	}
-	if !strings.HasPrefix(first, "ds2api_") || len(first) != len("ds2api_")+32 {
+	if len(first) != 16 {
 		t.Fatalf("unexpected derived device id shape: %q", first)
+	}
+	for _, r := range first {
+		if !strings.ContainsRune("0123456789abcdef", r) {
+			t.Fatalf("derived device id should be lowercase hex, got %q", first)
+		}
 	}
 }
 

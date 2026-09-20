@@ -67,7 +67,7 @@ func deviceIDForAccount(acc config.Account) string {
 		return defaultLoginDeviceID
 	}
 	sum := sha256.Sum256([]byte(identifier))
-	return "ds2api_" + hex.EncodeToString(sum[:])[:32]
+	return hex.EncodeToString(sum[:])[:16]
 }
 
 func (c *Client) CreateSession(ctx context.Context, a *auth.RequestAuth, maxAttempts int) (string, error) {
