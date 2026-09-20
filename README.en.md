@@ -53,6 +53,8 @@ Auth behavior:
 - `Authorization: Bearer <token>` and `x-api-key: <token>` are accepted.
 - If `<token>` is listed in `keys`, DS2API uses managed account rotation.
 - If `<token>` is not listed in `keys`, DS2API treats it as a direct DeepSeek token.
+- Accounts may set an optional `device_id`; when omitted, DS2API derives a
+  stable account-level device id from email/mobile.
 
 ## Run Locally
 

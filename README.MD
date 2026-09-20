@@ -51,6 +51,8 @@ cp config.example.json config.json
 - 支持 `Authorization: Bearer <token>` 和 `x-api-key: <token>`。
 - `<token>` 在 `keys` 中时，服务使用托管账号轮换。
 - `<token>` 不在 `keys` 中时，服务把它当作 DeepSeek token 直连使用。
+- 账号可选配置 `device_id`；未配置时会按 email/mobile 生成稳定的账号级
+  device id。
 
 ## 本地运行
 

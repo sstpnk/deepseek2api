@@ -2,7 +2,9 @@ package client
 
 import (
 	"context"
+	"crypto/sha256"
 	dsprotocol "ds2api/internal/deepseek/protocol"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -18,7 +20,7 @@ func (c *Client) Login(ctx context.Context, acc config.Account) (string, error) 
 	ctx = withActiveProxyID(ctx, clients.proxyID)
 	payload := map[string]any{
 		"password":  strings.TrimSpace(acc.Password),
-		"device_id": "deepseek_to_api",
+		"device_id": deviceIDForAccount(acc),
 		"os":        "android",
 	}
 	if email := strings.TrimSpace(acc.Email); email != "" {
@@ -49,6 +51,23 @@ func (c *Client) Login(ctx context.Context, acc config.Account) (string, error) 
 		return "", errors.New("missing login token")
 	}
 	return token, nil
+}
+
+const defaultLoginDeviceID = "deepseek_to_api"
+
+func deviceIDForAccount(acc config.Account) string {
+	if deviceID := strings.TrimSpace(acc.DeviceID); deviceID != "" {
+		return deviceID
+	}
+	identifier := strings.ToLower(strings.TrimSpace(acc.Email))
+	if identifier == "" {
+		identifier = strings.ToLower(config.NormalizeMobileForStorage(acc.Mobile))
+	}
+	if identifier == "" {
+		return defaultLoginDeviceID
+	}
+	sum := sha256.Sum256([]byte(identifier))
+	return "ds2api_" + hex.EncodeToString(sum[:])[:32]
 }
 
 func (c *Client) CreateSession(ctx context.Context, a *auth.RequestAuth, maxAttempts int) (string, error) {

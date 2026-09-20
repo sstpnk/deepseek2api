@@ -23,6 +23,10 @@ docker compose up --build
 `docker-compose.yml` mounts `config.json` into the container and exposes
 `${DS2API_HOST_PORT:-6011}` on the host.
 
+DeepSeek accounts can set an optional `device_id`. If it is omitted, DS2API
+derives a stable account-level device id from email/mobile; if DeepSeek risk
+control rejects login, pin a unique value for the account in `config.json`.
+
 ## Environment Variables
 
 | Variable | Description | Default |

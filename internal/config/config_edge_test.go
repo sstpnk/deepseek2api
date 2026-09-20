@@ -664,6 +664,23 @@ func TestNormalizeCredentialsPrefersStructuredAPIKeys(t *testing.T) {
 	}
 }
 
+func TestNormalizeCredentialsTrimsAccountDeviceID(t *testing.T) {
+	cfg := Config{
+		Keys: []string{"key"},
+		Accounts: []Account{
+			{
+				Email:    "user@example.com",
+				DeviceID: " device-123 ",
+			},
+		},
+	}
+	cfg.NormalizeCredentials()
+
+	if got := cfg.Accounts[0].DeviceID; got != "device-123" {
+		t.Fatalf("DeviceID=%q want device-123", got)
+	}
+}
+
 func TestStoreModelAliasesIncludesDefaultsAndOverrides(t *testing.T) {
 	t.Setenv("DS2API_CONFIG_JSON", `{"keys":[],"accounts":[],"model_aliases":{"gpt-5":"deepseek-v4-pro-search"}}`)
 	store := LoadStore()

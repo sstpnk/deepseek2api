@@ -23,6 +23,10 @@ docker compose up --build
 `docker-compose.yml` 会把 `config.json` 挂载进容器，并在宿主机暴露
 `${DS2API_HOST_PORT:-6011}`。
 
+DeepSeek 账号可选设置 `device_id`。未设置时，DS2API 会从账号 email/mobile
+生成稳定的账号级 device id；如果 DeepSeek risk control 拒绝登录，可在
+`config.json` 中为账号固定一个唯一值。
+
 ## 环境变量
 
 | Variable | 说明 | 默认值 |
