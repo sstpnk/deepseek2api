@@ -29,6 +29,17 @@ DeepSeek 账号可选设置 `device_id` 和 `login_device_id`。`device_id` 会�
 避免所有实例共享同一个指纹；如果 DeepSeek 返回 `RISK_DEVICE_DETECTED`，通常需要
 从真实 DeepSeek 客户端登录请求中捕获这两个值，并在 `config.json` 中固定到该账号。
 
+如果 DeepSeek 登录被 AWS WAF 挑战拦截，可以用真实浏览器刷新托管账号 token：
+
+```bash
+./scripts/deepseek-web-login-docker.sh
+docker compose restart ds2api
+```
+
+该脚本会通过 Playwright Chromium 登录，捕获成功的 `/users/login` / `/users/current`
+结果，并把 `token`、`device_id`、`login_device_id` 写回 `config.json`。脚本只输出字段长度，
+不会打印 token 或密码。
+
 ## 环境变量
 
 | Variable | 说明 | 默认值 |

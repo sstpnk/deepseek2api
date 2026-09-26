@@ -30,6 +30,19 @@ account-level device id from email/mobile. This avoids sharing one fingerprint
 across deployments; if DeepSeek returns `RISK_DEVICE_DETECTED`, capture both
 values from a real DeepSeek client login request and pin them in `config.json`.
 
+If DeepSeek login is blocked by an AWS WAF browser challenge, refresh the
+managed account token with a real browser:
+
+```bash
+./scripts/deepseek-web-login-docker.sh
+docker compose restart ds2api
+```
+
+The script logs in through Playwright Chromium, captures the successful
+`/users/login` / `/users/current` result, and writes `token`, `device_id`, and
+`login_device_id` back to `config.json`. It prints field lengths only, not the
+token or password.
+
 ## Environment Variables
 
 | Variable | Description | Default |
