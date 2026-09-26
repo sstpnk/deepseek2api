@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 CONFIG_PATH="${DS2API_CONFIG_PATH:-${ROOT_DIR}/config.json}"
 ACCOUNT_INDEX="${DS2API_ACCOUNT_INDEX:-0}"
 PLAYWRIGHT_IMAGE="${PLAYWRIGHT_IMAGE:-mcr.microsoft.com/playwright/python:v1.55.0-noble}"
+PLAYWRIGHT_PYTHON_VERSION="${PLAYWRIGHT_PYTHON_VERSION:-1.55.0}"
 
 if [[ ! -f "${CONFIG_PATH}" ]]; then
   echo "config not found: ${CONFIG_PATH}" >&2
@@ -20,8 +21,11 @@ docker run --rm \
   -w /work \
   -e DEEPSEEK_EMAIL="${DEEPSEEK_EMAIL:-}" \
   -e DEEPSEEK_PASSWORD="${DEEPSEEK_PASSWORD:-}" \
+  -e PLAYWRIGHT_PYTHON_VERSION="${PLAYWRIGHT_PYTHON_VERSION}" \
   "${PLAYWRIGHT_IMAGE}" \
-  python3 /work/scripts/deepseek_web_login.py \
+  bash -lc 'python3 -c "import playwright" >/dev/null 2>&1 || python3 -m pip install --quiet "playwright==${PLAYWRIGHT_PYTHON_VERSION}"; exec python3 "$@"' \
+  bash \
+  /work/scripts/deepseek_web_login.py \
     --config "/config/${CONFIG_FILE}" \
     --account-index "${ACCOUNT_INDEX}" \
     "$@"
