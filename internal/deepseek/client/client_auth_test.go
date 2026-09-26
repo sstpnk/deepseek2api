@@ -73,9 +73,10 @@ func TestLoginSendsConfiguredDeviceID(t *testing.T) {
 	}
 
 	token, err := client.Login(context.Background(), config.Account{
-		Email:    "user@example.com",
-		Password: "password",
-		DeviceID: "configured-device",
+		Email:         "user@example.com",
+		Password:      "password",
+		DeviceID:      "configured-device",
+		LoginDeviceID: "login-device",
 	})
 	if err != nil {
 		t.Fatalf("Login error: %v", err)
@@ -83,8 +84,8 @@ func TestLoginSendsConfiguredDeviceID(t *testing.T) {
 	if token != "token" {
 		t.Fatalf("token=%q want token", token)
 	}
-	if payload["device_id"] != "configured-device" {
-		t.Fatalf("device_id=%#v want configured-device; payload=%#v", payload["device_id"], payload)
+	if payload["device_id"] != "login-device" {
+		t.Fatalf("device_id=%#v want login-device; payload=%#v", payload["device_id"], payload)
 	}
 	if payload["os"] != "web" {
 		t.Fatalf("os=%#v want web for browser device id; payload=%#v", payload["os"], payload)

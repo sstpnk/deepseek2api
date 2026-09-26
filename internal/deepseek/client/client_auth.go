@@ -21,7 +21,7 @@ func (c *Client) Login(ctx context.Context, acc config.Account) (string, error) 
 	ctx = withActiveProxyID(ctx, clients.proxyID)
 	payload := map[string]any{
 		"password":  strings.TrimSpace(acc.Password),
-		"device_id": deviceIDForAccount(acc),
+		"device_id": loginDeviceIDForAccount(acc),
 		"os":        deviceProfileForAccount(acc),
 	}
 	if email := strings.TrimSpace(acc.Email); email != "" {
@@ -72,10 +72,17 @@ func deviceIDForAccount(acc config.Account) string {
 }
 
 func deviceProfileForAccount(acc config.Account) string {
-	if strings.Contains(strings.TrimSpace(acc.DeviceID), "-") {
+	if strings.TrimSpace(acc.LoginDeviceID) != "" || strings.Contains(strings.TrimSpace(acc.DeviceID), "-") {
 		return "web"
 	}
 	return "android"
+}
+
+func loginDeviceIDForAccount(acc config.Account) string {
+	if deviceID := strings.TrimSpace(acc.LoginDeviceID); deviceID != "" {
+		return deviceID
+	}
+	return deviceIDForAccount(acc)
 }
 
 func (c *Client) CreateSession(ctx context.Context, a *auth.RequestAuth, maxAttempts int) (string, error) {

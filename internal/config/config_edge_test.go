@@ -669,8 +669,9 @@ func TestNormalizeCredentialsTrimsAccountDeviceID(t *testing.T) {
 		Keys: []string{"key"},
 		Accounts: []Account{
 			{
-				Email:    "user@example.com",
-				DeviceID: " device-123 ",
+				Email:         "user@example.com",
+				DeviceID:      " device-123 ",
+				LoginDeviceID: " login-device-123 ",
 			},
 		},
 	}
@@ -678,6 +679,9 @@ func TestNormalizeCredentialsTrimsAccountDeviceID(t *testing.T) {
 
 	if got := cfg.Accounts[0].DeviceID; got != "device-123" {
 		t.Fatalf("DeviceID=%q want device-123", got)
+	}
+	if got := cfg.Accounts[0].LoginDeviceID; got != "login-device-123" {
+		t.Fatalf("LoginDeviceID=%q want login-device-123", got)
 	}
 }
 

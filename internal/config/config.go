@@ -43,14 +43,15 @@ type QuarantinedAccount struct {
 }
 
 type Account struct {
-	Name     string `json:"name,omitempty"`
-	Remark   string `json:"remark,omitempty"`
-	Email    string `json:"email,omitempty"`
-	Mobile   string `json:"mobile,omitempty"`
-	Password string `json:"password,omitempty"`
-	DeviceID string `json:"device_id,omitempty"`
-	Token    string `json:"token,omitempty"`
-	ProxyID  string `json:"proxy_id,omitempty"`
+	Name          string `json:"name,omitempty"`
+	Remark        string `json:"remark,omitempty"`
+	Email         string `json:"email,omitempty"`
+	Mobile        string `json:"mobile,omitempty"`
+	Password      string `json:"password,omitempty"`
+	DeviceID      string `json:"device_id,omitempty"`
+	LoginDeviceID string `json:"login_device_id,omitempty"`
+	Token         string `json:"token,omitempty"`
+	ProxyID       string `json:"proxy_id,omitempty"`
 }
 
 type APIKey struct {
@@ -127,6 +128,7 @@ func (c *Config) NormalizeCredentials() {
 		c.Accounts[i].Name = strings.TrimSpace(c.Accounts[i].Name)
 		c.Accounts[i].Remark = strings.TrimSpace(c.Accounts[i].Remark)
 		c.Accounts[i].DeviceID = strings.TrimSpace(c.Accounts[i].DeviceID)
+		c.Accounts[i].LoginDeviceID = strings.TrimSpace(c.Accounts[i].LoginDeviceID)
 	}
 
 	c.normalizeModelAliases()

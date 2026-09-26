@@ -23,11 +23,12 @@ docker compose up --build
 `docker-compose.yml` mounts `config.json` into the container and exposes
 `${DS2API_HOST_PORT:-6011}` on the host.
 
-DeepSeek accounts can set an optional `device_id`. If it is omitted, DS2API
-derives a stable account-level device id from email/mobile. This avoids sharing
-one fingerprint across deployments; if DeepSeek returns `RISK_DEVICE_DETECTED`,
-capture the account's device id from a real DeepSeek client login request and
-pin it for that account in `config.json`.
+DeepSeek accounts can set optional `device_id` and `login_device_id` values.
+`device_id` is sent as the `x-device-id` header; `login_device_id` is used only
+in the `/users/login` JSON body. If omitted, DS2API derives a stable
+account-level device id from email/mobile. This avoids sharing one fingerprint
+across deployments; if DeepSeek returns `RISK_DEVICE_DETECTED`, capture both
+values from a real DeepSeek client login request and pin them in `config.json`.
 
 ## Environment Variables
 
